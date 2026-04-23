@@ -99,3 +99,4 @@ Costo aproximado: $0–10 USD/mes.
 
 Cada módulo se migra copiando el procesador del .exe actual a `core/procesadores/`
 y creando una página en `app/pages/` que sigue el patrón de Caja Menor.
+"# plataforma-contable"  
