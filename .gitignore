@@ -1,35 +1,4 @@
-# Secrets - NUNCA subir
 .streamlit/secrets.toml
 .env
-*.env
-
-# Python
 __pycache__/
-*.py[cod]
-*.pyo
-venv/
-env/
-.venv/
-*.egg-info/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-
-# Archivos del SO
-.DS_Store
-Thumbs.db
-
-# Archivos temporales de usuario
-tmp/
-temp/
-uploads_temp/
-downloads_temp/
-
-# Backups
-*.bak
-*.backup
-
-# Logs
-*.log
+*.pyc
