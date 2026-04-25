@@ -24,6 +24,7 @@ from auth.empresas import (
 )
 from auth.superadmin import es_superadmin
 from auth import admin_usuarios as adm
+from auth import modulos as mod_sys
 from core.utils import conocimiento_balance as cb
 
 
@@ -35,11 +36,12 @@ sidebar_user_info()
 st.title("⚙️ Configuración")
 st.markdown("---")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🏢 Empresas",
     "📂 Archivos de configuración",
     "📚 Balance de prueba",
     "👥 Usuarios",
+    "🧩 Módulos",
 ])
 
 
@@ -604,3 +606,129 @@ with tab4:
                 if st.button("Listo, ya la copié", type="primary"):
                     st.session_state.pop("pwd_nuevo_usuario", None)
                     st.rerun()
+
+
+# ============================================================
+# TAB 5: 🧩 Módulos por empresa (solo superadmin)
+# ============================================================
+with tab5:
+    st.markdown("### 🧩 Módulos habilitados por empresa")
+
+    if not es_superadmin():
+        st.warning(
+            "🔒 Esta sección está disponible solo para el **superadmin** del "
+            "sistema. Si necesitas habilitar o deshabilitar módulos para "
+            "alguna empresa, pídele al superadmin que lo haga."
+        )
+    else:
+        st.caption(
+            "Activa o desactiva módulos para cada empresa. Los módulos "
+            "deshabilitados **no aparecen en el menú lateral** de los usuarios "
+            "de esa empresa, así que la pantalla queda más limpia. La pestaña "
+            "Configuración siempre está disponible."
+        )
+
+        # Selector de empresa: el superadmin puede elegir cualquiera
+        from auth.empresas import empresas_del_usuario as _mis_empresas
+        from db.supabase_client import get_supabase as _gsb
+
+        @st.cache_data(ttl=60, show_spinner=False)
+        def _todas_empresas():
+            sb = _gsb()
+            try:
+                resp = sb.rpc("admin_listar_empresas").execute()
+                return list(resp.data or [])
+            except Exception:
+                # Fallback: usar la tabla directa (puede fallar por RLS, pero
+                # el superadmin la puede leer)
+                try:
+                    resp = sb.table("empresas").select("id, nit, razon_social, activa").execute()
+                    return list(resp.data or [])
+                except Exception as e:
+                    st.error(f"Error listando empresas: {e}")
+                    return []
+
+        empresas_todas = _todas_empresas()
+        if not empresas_todas:
+            st.warning(
+                "No se pudieron listar las empresas. Verifica que la RPC "
+                "`admin_listar_empresas` exista o que tengas permisos."
+            )
+        else:
+            opc = {
+                f"{e['razon_social']} ({e.get('nit', '')})": e["id"]
+                for e in empresas_todas
+            }
+            label_emp = st.selectbox(
+                "Empresa",
+                options=list(opc.keys()),
+                key="sel_emp_modulos",
+            )
+            empresa_id_modulos = opc[label_emp]
+
+            st.markdown("---")
+
+            # Listar módulos del sistema con su estado actual para esta empresa
+            modulos_actuales = mod_sys.modulos_de_empresa(empresa_id_modulos)
+
+            if not modulos_actuales:
+                st.warning(
+                    "No se pudieron cargar los módulos. Verifica que el "
+                    "script `setup_modulos.sql` se haya ejecutado en Supabase."
+                )
+            else:
+                st.markdown(f"#### Módulos para **{label_emp}**")
+
+                # Form con un checkbox por módulo
+                with st.form(f"form_modulos_{empresa_id_modulos}"):
+                    cambios = {}
+                    for m in modulos_actuales:
+                        emoji = m.get("emoji", "") or ""
+                        nombre = m.get("nombre", m["codigo"])
+                        descripcion = m.get("descripcion", "") or ""
+                        habilitado_actual = bool(m.get("habilitado", False))
+
+                        col_cb, col_desc = st.columns([2, 5])
+                        with col_cb:
+                            nuevo = st.checkbox(
+                                f"{emoji} **{nombre}**",
+                                value=habilitado_actual,
+                                key=f"cb_mod_{empresa_id_modulos}_{m['codigo']}",
+                            )
+                        with col_desc:
+                            st.caption(descripcion)
+
+                        cambios[m["codigo"]] = nuevo
+
+                    submit = st.form_submit_button(
+                        "💾 Guardar cambios",
+                        type="primary",
+                    )
+
+                    if submit:
+                        # Construir el array para la RPC
+                        payload = [
+                            {"codigo": cod, "habilitado": val}
+                            for cod, val in cambios.items()
+                        ]
+                        with st.spinner("Guardando..."):
+                            res = mod_sys.actualizar_modulos_empresa(
+                                empresa_id_modulos, payload,
+                            )
+                        if res["success"]:
+                            n_activos = sum(1 for v in cambios.values() if v)
+                            n_total = len(cambios)
+                            st.success(
+                                f"✅ Módulos actualizados para **{label_emp}**: "
+                                f"{n_activos} de {n_total} habilitados."
+                            )
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error guardando: {res['error']}")
+
+                # Resumen visual
+                n_activos = sum(1 for m in modulos_actuales if m.get("habilitado"))
+                st.caption(
+                    f"📊 **{n_activos}** de **{len(modulos_actuales)}** módulos "
+                    f"habilitados para esta empresa."
+                )
