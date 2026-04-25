@@ -816,13 +816,10 @@ def combinar_archivos_pos(
 ) -> bytes:
     """Combina archivos individuales en un único Excel listo para procesar.
 
-    Esta función permite que el usuario suba los reportes POS por separado
-    (cada empresa POS exporta su reporte en un archivo distinto) en lugar
-    de tener que copiar-pegar todo en un solo Excel multi-hoja.
-
     Args:
-        archivo_datos_punto: file-like o bytes del Excel con la hoja DATOS PUNTO.
-            Debe contener una hoja llamada 'DATOS PUNTO'.
+        archivo_datos_punto: file-like o bytes del Excel con la hoja DATOS PUNTO,
+            O bien bytes generados a partir del JSON embebido por
+            datos_punto_embebido_a_xlsx().
         reportes: dict con los reportes individuales:
             {
                 'REPORTE CHILI': file-like|bytes (opcional),
@@ -830,11 +827,6 @@ def combinar_archivos_pos(
                 'HENKO MILAGROS': file-like|bytes (opcional),
                 'HENKO REMEDIOS': file-like|bytes (opcional),
             }
-            Para cada clave presente, se toma la PRIMERA hoja del archivo
-            y se renombra al nombre de la clave.
-
-    Returns:
-        bytes del Excel combinado (xlsx). Listo para pasar a procesar_pos().
     """
     # Cargar DATOS PUNTO
     if hasattr(archivo_datos_punto, "read"):
@@ -856,25 +848,18 @@ def combinar_archivos_pos(
             "exactamente 'DATOS PUNTO'."
         )
 
-    # Construir el workbook combinado: copio las hojas que necesito
     from openpyxl import Workbook
-    from copy import copy
-
     wb_out = Workbook()
-    # Eliminar la hoja por defecto
     default = wb_out.active
     wb_out.remove(default)
 
     def _copiar_hoja(ws_orig, nombre_destino):
-        """Copia los valores de una hoja a otra dándole un nombre nuevo."""
         ws_new = wb_out.create_sheet(title=nombre_destino[:31])
         for row in ws_orig.iter_rows(values_only=True):
             ws_new.append(row)
 
-    # Copiar DATOS PUNTO primero (será requisito de procesar_pos)
     _copiar_hoja(wb_dp["DATOS PUNTO"], "DATOS PUNTO")
 
-    # Copiar cada reporte
     for nombre_destino, archivo in reportes.items():
         if archivo is None:
             continue
@@ -892,10 +877,8 @@ def combinar_archivos_pos(
         except Exception as e:
             raise ValueError(f"No se pudo leer el archivo de '{nombre_destino}': {e}")
 
-        # Tomar la primera hoja con datos
         ws_rep = wb_rep.active
         if ws_rep is None or ws_rep.max_row <= 1:
-            # Buscar otra hoja con datos
             for nh in wb_rep.sheetnames:
                 if wb_rep[nh].max_row > 1:
                     ws_rep = wb_rep[nh]
@@ -908,7 +891,6 @@ def combinar_archivos_pos(
 
         _copiar_hoja(ws_rep, nombre_destino)
 
-    # Guardar a bytes
     bio_out = io.BytesIO()
     wb_out.save(bio_out)
     bio_out.seek(0)
@@ -916,100 +898,122 @@ def combinar_archivos_pos(
 
 
 # ============================================================
-# Persistencia de DATOS PUNTO en Supabase Storage
+# DATOS PUNTO embebido (JSON dentro del repo)
 # ============================================================
 
-NOMBRE_DATOS_PUNTO = "datos_punto.xlsx"
-BUCKET_CONFIG = "empresas-config"
+import json
+from pathlib import Path
+
+# Ubicación del archivo JSON embebido (relativa al módulo)
+_RUTA_DATOS_PUNTO_JSON = (
+    Path(__file__).resolve().parent.parent / "data" / "datos_punto.json"
+)
 
 
-def cargar_datos_punto_desde_storage(empresa_id: str) -> Optional[bytes]:
-    """Descarga el archivo de DATOS PUNTO guardado para la empresa.
+def cargar_datos_punto_embebido() -> List[Sucursal]:
+    """Carga el maestro de sucursales desde el JSON embebido en el repo.
 
-    Retorna None si la empresa todavía no ha guardado un archivo.
+    Esta es la fuente única y por defecto del DATOS PUNTO. Si quieres
+    cambiar las sucursales, edita el archivo:
+        core/data/datos_punto.json
+
+    Returns:
+        Lista de objetos Sucursal listos para usar.
     """
-    from db.supabase_client import get_supabase
-
-    sb = get_supabase()
-    ruta = f"{empresa_id}/{NOMBRE_DATOS_PUNTO}"
-    try:
-        resp = sb.storage.from_(BUCKET_CONFIG).download(ruta)
-    except Exception:
-        return None
-    if not resp:
-        return None
-    if isinstance(resp, (bytes, bytearray)):
-        return bytes(resp)
-    contenido = getattr(resp, "content", None)
-    return contenido if isinstance(contenido, (bytes, bytearray)) else None
-
-
-def guardar_datos_punto_en_storage(empresa_id: str, contenido: bytes) -> bool:
-    """Sube el archivo de DATOS PUNTO al bucket de la empresa."""
-    from db.supabase_client import get_supabase_admin, get_supabase
-
-    sb = get_supabase_admin() or get_supabase()
-    ruta = f"{empresa_id}/{NOMBRE_DATOS_PUNTO}"
-    try:
-        sb.storage.from_(BUCKET_CONFIG).upload(
-            path=ruta,
-            file=contenido,
-            file_options={
-                "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "upsert": "true",
-            },
+    if not _RUTA_DATOS_PUNTO_JSON.exists():
+        raise FileNotFoundError(
+            f"No se encontró el maestro embebido: {_RUTA_DATOS_PUNTO_JSON}. "
+            "Verifica que el archivo core/data/datos_punto.json esté en el repo."
         )
-        return True
-    except Exception:
-        try:
-            sb.storage.from_(BUCKET_CONFIG).update(
-                path=ruta,
-                file=contenido,
-                file_options={
-                    "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                },
-            )
-            return True
-        except Exception:
-            raise
 
-
-def eliminar_datos_punto_de_storage(empresa_id: str) -> bool:
-    """Elimina el archivo de DATOS PUNTO del Storage."""
-    from db.supabase_client import get_supabase_admin, get_supabase
-
-    sb = get_supabase_admin() or get_supabase()
-    ruta = f"{empresa_id}/{NOMBRE_DATOS_PUNTO}"
     try:
-        sb.storage.from_(BUCKET_CONFIG).remove([ruta])
-        return True
-    except Exception:
-        return False
+        with open(_RUTA_DATOS_PUNTO_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise ValueError(
+            f"No se pudo leer datos_punto.json: {e}"
+        )
+
+    items = data.get("sucursales", [])
+    sucursales: List[Sucursal] = []
+    for item in items:
+        if not item.get("nombre_reporte"):
+            continue
+        sucursales.append(Sucursal(
+            comprobante=str(item.get("comprobante", "")).strip(),
+            nombre_reporte=str(item["nombre_reporte"]).strip(),
+            sede=str(item.get("sede", "")).strip(),
+            cc=_formato_cc(item.get("cc", "")),
+            cuenta_caja=_formato_cuenta(item.get("cuenta_caja", "")),
+            cta_base_v=_formato_cuenta(item.get("cta_base_v", "")),
+            cta_ico=_formato_cuenta(item.get("cta_ico", "")),
+            clase=str(item.get("clase", "")).strip(),
+        ))
+
+    if not sucursales:
+        raise ValueError(
+            "El archivo datos_punto.json no contiene sucursales válidas."
+        )
+
+    return sucursales
 
 
-def info_datos_punto(contenido_xlsx: bytes) -> dict:
-    """Lee el archivo y devuelve estadísticas básicas."""
-    bio = io.BytesIO(contenido_xlsx)
-    wb = load_workbook(bio, data_only=True, read_only=True)
-    if "DATOS PUNTO" not in wb.sheetnames:
-        raise ValueError("El archivo no contiene la hoja 'DATOS PUNTO'.")
-    sucursales = _leer_datos_punto(wb)
+def datos_punto_embebido_a_xlsx() -> bytes:
+    """Convierte el JSON embebido a bytes XLSX con la hoja 'DATOS PUNTO',
+    para alimentar combinar_archivos_pos() o procesar_pos() directamente.
+    """
+    from openpyxl import Workbook
 
-    # Contar por clase
+    sucursales = cargar_datos_punto_embebido()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "DATOS PUNTO"
+
+    # Encabezado (mismo orden que el Excel original)
+    ws.append([
+        "COMPROBANTE", "NOMBRE EN REPORTE", "SEDE", "CC",
+        "CUENTA DE CAJA", "CTA BASE V", "CTA ICO", "CLASE DE SEDE",
+    ])
+
+    for s in sucursales:
+        ws.append([
+            s.comprobante,
+            s.nombre_reporte,
+            s.sede,
+            s.cc,
+            s.cuenta_caja,
+            s.cta_base_v,
+            s.cta_ico,
+            s.clase,
+        ])
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio.getvalue()
+
+
+def info_datos_punto_embebido() -> dict:
+    """Retorna estadísticas del maestro embebido (para mostrar en UI)."""
+    sucursales = cargar_datos_punto_embebido()
     por_clase = {}
     for s in sucursales:
-        por_clase[s.clase or "(sin clase)"] = por_clase.get(s.clase or "(sin clase)", 0) + 1
-
+        clave = s.clase or "(sin clase)"
+        por_clase[clave] = por_clase.get(clave, 0) + 1
     return {
         "total": len(sucursales),
         "por_clase": por_clase,
         "sucursales": [
             {
-                "nombre": s.nombre_reporte,
+                "nombre_reporte": s.nombre_reporte,
                 "sede": s.sede,
                 "cc": s.cc,
                 "clase": s.clase,
                 "cuenta_caja": s.cuenta_caja,
+                "cta_base_v": s.cta_base_v,
+                "cta_ico": s.cta_ico,
+                "comprobante": s.comprobante,
             }
             for s in sucursales
         ],
