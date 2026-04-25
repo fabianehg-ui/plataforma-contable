@@ -71,7 +71,7 @@ else:
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric("Módulos disponibles", "2 activos + 4 próximos")
+        st.metric("Módulos disponibles", "4 activos + 2 próximos")
     with col3:
         st.metric("Sesión", "Activa")
 
@@ -84,10 +84,10 @@ else:
         |---|---|---|
         | 💵 **Caja Menor** | ✅ Disponible | Genera asientos de egresos de caja menor |
         | 📎 **PILA** | ✅ Disponible | Lee PDF de planilla y extrae empleados/totales |
-        | 🛒 **Compras DIAN** | 🚧 En desarrollo | Procesa facturas de proveedores DIAN |
+        | 🛒 **Compras DIAN** | ✅ Disponible | Procesa facturas de proveedores DIAN con regla histórica del balance |
+        | ⚙️ **Configuración** | ✅ Disponible | Empresas, balance histórico, gestión de usuarios |
         | 💼 **Nómina** | 🚧 En desarrollo | Genera asiento mensual de nómina |
         | 📝 **Provisiones** | 🚧 En desarrollo | Provisión de prestaciones sociales |
-        | ⚙️ **Configuración** | 🚧 En desarrollo | Cuentas, NITs, reglas de mapeo |
         """
     )
 
