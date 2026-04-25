@@ -654,7 +654,12 @@ def _procesar_hoja(
 
             fecha_str = _formato_fecha_plano(f)
             documento = str(f.day)
-            detalle = f"{DETALLE_PREFIJO}{suc.nombre_reporte}".upper()
+            # DETALLE: usa el campo SEDE (no nombre_reporte) para evitar ambigüedad
+            # cuando hay nombres repetidos entre empresas (ej: 'Tesoro' existe en
+            # Santa Leña y en Milagros Remedios). El campo SEDE es único por sucursal.
+            # Si la sucursal no tiene sede definida, cae back a nombre_reporte.
+            nombre_para_detalle = suc.sede.strip() if suc.sede.strip() else suc.nombre_reporte
+            detalle = f"{DETALLE_PREFIJO}{nombre_para_detalle}".upper()
             comp = suc.comprobante
 
             filas_plano.append({
