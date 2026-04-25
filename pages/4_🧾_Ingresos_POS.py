@@ -1,11 +1,12 @@
 """
-Módulo Ingresos POS — Plataforma Web (versión final).
+Módulo Ingresos POS — Plataforma Web (versión 2: DATOS PUNTO embebido).
 
-Permite:
-    1. Configurar el maestro DATOS PUNTO (sucursales, cuentas, CC, clase de sede).
-    2. Subir reportes POS por separado (CHILI, L3AF, HENKO MILAGROS, HENKO REMEDIOS).
-    3. Subir un Excel todo-en-uno con DATOS PUNTO + reportes (modo legacy).
-    4. Generar plano contable con un asiento por día por sucursal.
+DATOS PUNTO viene incluido en el código (core/data/datos_punto.json) — el
+operador NO tiene que subirlo. Solo sube los 4 reportes mensuales.
+
+Pestañas:
+    1️⃣ Procesar (subir reportes por separado)  ← modo principal
+    2️⃣ Procesar (Excel todo en uno)             ← modo legacy
 
 Asiento generado:
     Db CUENTA DE CAJA   = Total Final
@@ -33,14 +34,14 @@ from auth.empresas import (
     seleccionar_empresa_sidebar,
     require_rol,
 )
+from auth.modulos import require_modulo
 from core.procesadores.procesador_pos import (
     procesar_pos,
     dataframe_a_plano_tsv,
     combinar_archivos_pos,
-    cargar_datos_punto_desde_storage,
-    guardar_datos_punto_en_storage,
-    eliminar_datos_punto_de_storage,
-    info_datos_punto,
+    cargar_datos_punto_embebido,
+    datos_punto_embebido_a_xlsx,
+    info_datos_punto_embebido,
 )
 
 
@@ -57,6 +58,7 @@ st.set_page_config(
 require_auth()
 seleccionar_empresa_sidebar()
 sidebar_user_info()
+require_modulo("ingresos_pos")
 emp = require_rol(["admin", "operador"])
 
 
@@ -103,134 +105,91 @@ with st.sidebar:
 
 
 # ============================================================
-# Cargar datos punto desde Storage
+# Cargar info del DATOS PUNTO embebido
 # ============================================================
 
-@st.cache_data(ttl=120, show_spinner=False)
-def _cargar_datos_punto(empresa_id: str):
-    return cargar_datos_punto_desde_storage(empresa_id)
+@st.cache_data(ttl=600, show_spinner=False)
+def _info_dp():
+    try:
+        return info_datos_punto_embebido()
+    except Exception as e:
+        return {"error": str(e)}
 
 
-datos_punto_actual = _cargar_datos_punto(emp["id"])
+@st.cache_data(ttl=600, show_spinner=False)
+def _xlsx_dp():
+    return datos_punto_embebido_a_xlsx()
+
+
+info_dp = _info_dp()
+if "error" in info_dp:
+    st.error(
+        f"❌ No se pudo cargar el maestro de sucursales embebido: "
+        f"{info_dp['error']}\n\n"
+        "Verifica que el archivo `core/data/datos_punto.json` esté presente "
+        "en el repositorio."
+    )
+    st.stop()
+
+
+# ============================================================
+# Banner del DATOS PUNTO embebido (informativo, no editable)
+# ============================================================
+
+n_sl = info_dp["por_clase"].get("SANTA LEÑA", 0)
+n_rm = info_dp["por_clase"].get("RESTAURANTE MILAGROS", 0)
+
+col_a, col_b, col_c = st.columns(3)
+col_a.metric("📋 Sucursales registradas", info_dp["total"])
+col_b.metric("🥩 SANTA LEÑA", n_sl)
+col_c.metric("🍝 RESTAURANTE MILAGROS", n_rm)
+
+with st.expander(
+    f"👁️ Ver las {info_dp['total']} sucursales registradas (modo lectura)",
+    expanded=False,
+):
+    st.caption(
+        "Estas son las sucursales registradas en el sistema. **El maestro "
+        "DATOS PUNTO viene incluido en el código** — no es editable desde "
+        "la web. Si abren un punto nuevo o cambia una cuenta, contacta al "
+        "desarrollador para actualizar el archivo."
+    )
+    df_suc = pd.DataFrame(info_dp["sucursales"])
+    st.dataframe(
+        df_suc,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "nombre_reporte": "Nombre en reporte",
+            "sede": "Sede",
+            "cc": "Centro de costo",
+            "clase": "Clase de sede",
+            "cuenta_caja": "Cuenta de caja",
+            "cta_base_v": "Cta venta",
+            "cta_ico": "Cta IC",
+            "comprobante": "Comprob.",
+        },
+    )
+
+st.markdown("---")
 
 
 # ============================================================
 # Tabs principales
 # ============================================================
 
-tab_config, tab_separado, tab_unico = st.tabs([
-    "1️⃣ Configurar DATOS PUNTO",
-    "2️⃣ Procesar (subir reportes por separado)",
-    "3️⃣ Procesar (Excel todo en uno)",
+tab_separado, tab_unico = st.tabs([
+    "1️⃣ Procesar (subir reportes por separado)",
+    "2️⃣ Procesar (Excel todo en uno)",
 ])
 
 
 # ============================================================
-# TAB 1: Configurar DATOS PUNTO
-# ============================================================
-
-with tab_config:
-    st.markdown("### 📋 Maestro de sucursales (DATOS PUNTO)")
-    st.caption(
-        "El archivo `DATOS PUNTO` define todas las sucursales con sus "
-        "cuentas contables, centro de costo, clase de sede y comprobante. "
-        "Súbelo una vez y queda guardado en la nube. Cuando cambien "
-        "sucursales (apertura de un nuevo punto, cambio de cuentas) actualízalo aquí."
-    )
-
-    st.markdown("#### Estado actual")
-
-    if datos_punto_actual:
-        try:
-            info = info_datos_punto(datos_punto_actual)
-            col_a, col_b, col_c = st.columns(3)
-            col_a.metric("Total sucursales", info["total"])
-
-            santa = info["por_clase"].get("SANTA LEÑA", 0)
-            milagros = info["por_clase"].get("RESTAURANTE MILAGROS", 0)
-            col_b.metric("SANTA LEÑA", santa)
-            col_c.metric("RESTAURANTE MILAGROS", milagros)
-
-            with st.expander(f"Ver las {info['total']} sucursales registradas"):
-                df_suc = pd.DataFrame(info["sucursales"])
-                st.dataframe(
-                    df_suc,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "nombre": "Nombre en reporte",
-                        "sede": "Sede",
-                        "cc": "Centro de costo",
-                        "clase": "Clase de sede",
-                        "cuenta_caja": "Cuenta de caja",
-                    },
-                )
-
-            if st.button("🗑️ Eliminar DATOS PUNTO", key="del_dp"):
-                if eliminar_datos_punto_de_storage(emp["id"]):
-                    st.success("DATOS PUNTO eliminado.")
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.error("No se pudo eliminar.")
-        except Exception as e:
-            st.error(f"El archivo guardado tiene un problema: {e}")
-            st.caption("Sube uno nuevo para reemplazarlo.")
-    else:
-        st.warning(
-            "📭 Esta empresa todavía no tiene DATOS PUNTO cargado. "
-            "Súbelo abajo para empezar."
-        )
-
-    st.markdown("---")
-    st.markdown("#### Cargar / actualizar DATOS PUNTO")
-    st.caption(
-        "Sube un Excel con una hoja llamada **`DATOS PUNTO`** que contenga "
-        "estas columnas: COMPROBANTE, NOMBRE EN REPORTE, SEDE, CC, CUENTA DE "
-        "CAJA, CTA BASE V, CTA ICO, CLASE DE SEDE."
-    )
-
-    archivo_dp = st.file_uploader(
-        "Archivo DATOS PUNTO (.xlsx)",
-        type=["xlsx"],
-        key="file_dp",
-    )
-
-    if archivo_dp:
-        if st.button("💾 Guardar DATOS PUNTO", type="primary", key="save_dp"):
-            with st.spinner("Validando y guardando..."):
-                contenido = archivo_dp.read()
-                try:
-                    info = info_datos_punto(contenido)
-                except Exception as e:
-                    st.error(f"❌ El archivo no tiene el formato esperado: {e}")
-                    st.stop()
-
-                try:
-                    guardar_datos_punto_en_storage(emp["id"], contenido)
-                except Exception as e:
-                    st.error(
-                        "❌ No se pudo guardar en Supabase Storage. "
-                        "Revisa que el bucket `empresas-config` exista y "
-                        "que tengas permisos.\n\n"
-                        f"Detalle: {e}"
-                    )
-                    st.exception(e)
-                    st.stop()
-
-            st.success(
-                f"✅ DATOS PUNTO guardado: {info['total']} sucursales."
-            )
-            st.cache_data.clear()
-            st.rerun()
-
-
-# ============================================================
-# Helper compartido por los 2 modos: mostrar resultado
+# Helper compartido: mostrar resultado
 # ============================================================
 
 def _mostrar_resultado(df, log, sucs_no_enc, nombre_entrada):
-    """Muestra el resultado del procesamiento (común a los 2 modos)."""
+    """Muestra el resultado del procesamiento."""
     st.markdown("### 📊 Resultado")
 
     col1, col2, col3, col4 = st.columns(4)
@@ -270,7 +229,8 @@ def _mostrar_resultado(df, log, sucs_no_enc, nombre_entrada):
         ):
             st.caption(
                 "Estas sucursales aparecieron en los reportes pero NO se "
-                "incluyeron en el plano. Revisa el motivo de cada una."
+                "incluyeron en el plano. Si es una sucursal nueva, el "
+                "desarrollador debe agregarla a `core/data/datos_punto.json`."
             )
             df_no_enc = pd.DataFrame([
                 {
@@ -334,27 +294,21 @@ def _mostrar_resultado(df, log, sucs_no_enc, nombre_entrada):
 
 
 # ============================================================
-# TAB 2: Subir reportes por separado (modo recomendado)
+# TAB 1: Subir reportes por separado (modo principal)
 # ============================================================
 
 with tab_separado:
     st.markdown("### 📂 Subir cada reporte como archivo aparte")
     st.caption(
-        "Este es el modo más cómodo: cada sistema POS exporta su propio "
-        "archivo Excel y tú los subes uno por uno aquí. El sistema los "
-        "combina automáticamente con el `DATOS PUNTO` que tienes guardado "
-        "en la nube."
+        "Sube los 4 reportes que recibes cada mes de los sistemas POS. "
+        "El sistema los combina automáticamente con el maestro de "
+        "sucursales y genera el plano contable."
     )
 
-    if not datos_punto_actual:
-        st.warning(
-            "⚠️ Primero configura DATOS PUNTO en la pestaña **1️⃣ Configurar "
-            "DATOS PUNTO**. Sin ese maestro no se puede procesar nada."
-        )
-        st.stop()
-
-    st.success("✅ DATOS PUNTO está cargado y listo.")
-    st.markdown("---")
+    st.info(
+        "💡 **No necesitas subir DATOS PUNTO** — viene incluido en el sistema "
+        f"({info_dp['total']} sucursales registradas)."
+    )
 
     st.markdown("#### Sube los reportes (puedes dejar los que no apliquen vacíos)")
 
@@ -419,10 +373,11 @@ with tab_separado:
     )
 
     if procesar_sep:
-        with st.spinner("Combinando reportes con DATOS PUNTO..."):
+        with st.spinner("Combinando reportes con DATOS PUNTO embebido..."):
             try:
+                xlsx_dp = _xlsx_dp()
                 excel_combinado = combinar_archivos_pos(
-                    archivo_datos_punto=datos_punto_actual,
+                    archivo_datos_punto=xlsx_dp,
                     reportes=archivos_validos,
                 )
             except Exception as e:
@@ -456,7 +411,7 @@ with tab_separado:
 
 
 # ============================================================
-# TAB 3: Excel todo en uno (modo legacy)
+# TAB 2: Excel todo en uno (modo legacy)
 # ============================================================
 
 with tab_unico:
