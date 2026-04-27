@@ -63,7 +63,9 @@ emp = require_rol(["admin", "operador"])
 # Encabezado
 # ============================================================
 
-st.title("💼 Nómina")
+# Usamos st.markdown con HTML para asegurar el render correcto del título
+# (st.title a veces interpreta mal los emojis seguidos de texto en la URL del slug).
+st.markdown("# 💼 NÓMINA CASA 13")
 st.caption(
     f"Empresa activa: **{emp['razon_social']}** · "
     f"Procesa el Excel mensual de nómina y genera el plano contable"
@@ -115,7 +117,7 @@ with st.sidebar:
 
 tab_procesar, tab_empleados = st.tabs([
     "📤 Procesar nómina",
-    "👥 Empleados registrados",
+    "👤 Empleadas registradas",
 ])
 
 
@@ -205,7 +207,7 @@ with tab_procesar:
                 )
 
             # Resumen por empleado
-            st.markdown("#### 👥 Resumen por empleada")
+            st.markdown("#### 👤 Resumen por empleada")
             detalle = resumen.get("detalle_empleados", [])
             if detalle:
                 df_resumen = pd.DataFrame(detalle)
@@ -304,7 +306,7 @@ with tab_procesar:
 # ------------------------------------------------------------
 
 with tab_empleados:
-    st.markdown("### 👥 Maestro embebido de empleadas")
+    st.markdown("### 👤 Maestro embebido de empleadas")
     st.caption(
         "Este maestro vive en `core/data/empleados.json` y se carga al iniciar "
         "el módulo. Para añadir, modificar o retirar empleadas, edita el JSON "
