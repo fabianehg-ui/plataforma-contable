@@ -131,8 +131,9 @@ with st.sidebar:
     st.markdown("---")
     st.info(
         "💡 **Consecutivo numérico:**\n\n"
-        "Los Comp 3 y Comp 7 usan numeración global "
-        "**YYYYMMNNN** ordenada por fecha+folio. "
+        "Comp 3 (Facturas) y Comp 7 (NC) tienen "
+        "**numeración independiente** desde v3.2. "
+        "Cada uno usa **YYYYMMNNN** ordenado por fecha+folio dentro de su grupo. "
         "Comp 13 y Comp 18 mantienen su propio consecutivo del archivo."
     )
 
@@ -178,7 +179,7 @@ with tab_procesar:
         pass
 
     # Selector de periodo
-    col_p1, col_p2, col_p3 = st.columns([1, 1, 1])
+    col_p1, col_p2 = st.columns([1, 2])
     with col_p1:
         hoy = date.today()
         anio = st.number_input(
@@ -197,12 +198,24 @@ with tab_procesar:
             format_func=lambda i: f"{i:02d} — {meses[i - 1]}",
             index=mes_default - 1,
         )
-    with col_p3:
-        consec_inicial = st.number_input(
-            "Consecutivo inicial Comp 3+7",
+
+    # Consecutivos independientes Comp 3 y Comp 7
+    col_c3, col_c7 = st.columns(2)
+    with col_c3:
+        consec_c3 = st.number_input(
+            "Consecutivo inicial Comp 3 (Facturas)",
             min_value=1, max_value=999,
             value=1,
-            help="Número desde el cual empezar la numeración mensual NNN.",
+            help="Numeración independiente para Compras DIAN. "
+                 "Formato resultante: AAAAMMNNN (ej: 202604001).",
+        )
+    with col_c7:
+        consec_c7 = st.number_input(
+            "Consecutivo inicial Comp 7 (NC Proveedores)",
+            min_value=1, max_value=999,
+            value=1,
+            help="Numeración independiente para Notas Crédito de proveedores. "
+                 "Formato resultante: AAAAMMNNN (ej: 202604001).",
         )
 
     st.markdown("##### Archivos del periodo")
@@ -242,7 +255,8 @@ with tab_procesar:
                     archivo_egresos=archivo_egresos,
                     anio=int(anio),
                     mes=int(mes_idx),
-                    consecutivo_token_inicial=int(consec_inicial),
+                    consecutivo_inicial_c3=int(consec_c3),
+                    consecutivo_inicial_c7=int(consec_c7),
                 )
             except Exception as e:
                 st.error(f"❌ Error procesando los archivos:\n\n```\n{e}\n```")
