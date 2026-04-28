@@ -926,11 +926,15 @@ def _generar_asientos_token(
     tipo_retencion_default: str,
     uvt: int,
     aplicar_calculo_retenciones: bool = True,
-    consecutivo_inicial: int = 1,
+    consecutivo_inicial_c3: int = 1,
+    consecutivo_inicial_c7: int = 1,
 ) -> Tuple[List[dict], List[str], List[dict]]:
     """Genera asientos para Compras (Comp 3) y NC Proveedores (Comp 7).
 
-    Numeración global YYYYMMNNN ordenando por (fecha, folio).
+    Numeración INDEPENDIENTE por comprobante (v3.2):
+      - Comp 3 (facturas): YYYYMMNNN empezando en consecutivo_inicial_c3
+      - Comp 7 (NC):       YYYYMMNNN empezando en consecutivo_inicial_c7
+      - Cada uno ordenado por (fecha, folio).
 
     Aplica retenciones automáticas (FASE 2):
       - Si TOKEN trae rete_renta/rete_iva/rete_ica > 0 → se respeta.
@@ -945,11 +949,24 @@ def _generar_asientos_token(
     advertencias: List[str] = []
     log_retenciones: List[dict] = []
 
-    # Ordenar por fecha y folio
-    docs_sorted = sorted(docs, key=lambda d: (d.fecha, d.folio))
+    # Separar facturas y NC y ordenarlas por separado
+    facturas = sorted(
+        [d for d in docs if d.es_factura],
+        key=lambda d: (d.fecha, d.folio),
+    )
+    notas_credito = sorted(
+        [d for d in docs if d.es_nota_credito],
+        key=lambda d: (d.fecha, d.folio),
+    )
 
-    for i, doc in enumerate(docs_sorted):
-        consecutivo_n = consecutivo_inicial + i
+    # Concatenar con sus respectivos consecutivos iniciales
+    docs_con_idx: List[Tuple[DocumentoToken, int]] = []
+    for i, doc in enumerate(facturas):
+        docs_con_idx.append((doc, consecutivo_inicial_c3 + i))
+    for i, doc in enumerate(notas_credito):
+        docs_con_idx.append((doc, consecutivo_inicial_c7 + i))
+
+    for doc, consecutivo_n in docs_con_idx:
         documento = f"{anio:04d}{mes:02d}{consecutivo_n:03d}"
         folio_completo = doc.folio_completo
         nit = doc.nit_emisor or NIT_GENERICO
@@ -1358,7 +1375,9 @@ def procesar_compras_y_egresos(
     archivo_egresos=None,
     anio: int = 2026,
     mes: int = 3,
-    consecutivo_token_inicial: int = 1,
+    consecutivo_inicial_c3: int = 1,
+    consecutivo_inicial_c7: int = 1,
+    consecutivo_token_inicial: Optional[int] = None,  # alias retrocompat
 ) -> Tuple[pd.DataFrame, List[str], dict]:
     """Procesa los 3 archivos y genera el plano contable unificado.
 
@@ -1367,11 +1386,19 @@ def procesar_compras_y_egresos(
         archivo_ds: DOCUMENTO_SOPORTE (.xlsx) — genera Comp 18
         archivo_egresos: EGRESOS_CAJA_MENOR (.xls/.html) — genera Comp 13
         anio, mes: para construir el consecutivo YYYYMMNNN del Comp 3 y Comp 7
-        consecutivo_token_inicial: número desde el cual empezar (default 1)
+        consecutivo_inicial_c3: número desde el cual empezar Comp 3 (default 1)
+        consecutivo_inicial_c7: número desde el cual empezar Comp 7 (default 1)
+        consecutivo_token_inicial: ALIAS retrocompatible — si se pasa, se usa
+            como inicial para AMBOS comp 3 y 7.
 
     Returns:
         (df_plano, log, resumen)
     """
+    # Retrocompat: si pasaron el parámetro viejo, lo respetamos
+    if consecutivo_token_inicial is not None:
+        consecutivo_inicial_c3 = consecutivo_token_inicial
+        consecutivo_inicial_c7 = consecutivo_token_inicial
+
     log: List[str] = []
     todas_filas: List[dict] = []
     log_retenciones: List[dict] = []
@@ -1426,14 +1453,15 @@ def procesar_compras_y_egresos(
                 cat["tipo_retencion_default"],
                 cat["uvt"],
                 cat["aplicar_calculo_retenciones"],
-                consecutivo_token_inicial,
+                consecutivo_inicial_c3=consecutivo_inicial_c3,
+                consecutivo_inicial_c7=consecutivo_inicial_c7,
             )
             todas_filas.extend(filas_token)
             log.extend(adv_token)
             n_c3 = sum(1 for f in filas_token if f["COMPROBANTE"] == COMPROBANTE_COMPRAS)
             n_c7 = sum(1 for f in filas_token if f["COMPROBANTE"] == COMPROBANTE_NC_PROVEEDORES)
-            log.append(f"   Líneas plano C3: {n_c3}")
-            log.append(f"   Líneas plano C7: {n_c7}")
+            log.append(f"   Líneas plano C3: {n_c3} (desde consecutivo {consecutivo_inicial_c3:03d})")
+            log.append(f"   Líneas plano C7: {n_c7} (desde consecutivo {consecutivo_inicial_c7:03d})")
 
             # Resumen de retenciones aplicadas
             if log_retenciones:
