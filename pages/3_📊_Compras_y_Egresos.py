@@ -1,5 +1,5 @@
 """
-Módulo Compras y Egresos — Plataforma Web.
+Módulo Compras y Egresos — Plataforma Web (v3.0 con FASE 2 retenciones).
 
 Procesa 3 archivos relacionados y genera 4 comprobantes contables:
 
@@ -11,6 +11,12 @@ Los 3 archivos son OPCIONALES — puedes subir solo los que necesites.
 
 REGLA IMPORTANTE: Todos los valores en el plano son POSITIVOS.
 El signo lo determina el TR (1=Débito, 2=Crédito).
+
+NOVEDAD v3.0 — FASE 2:
+  Retenciones automáticas en Compras DIAN. El sistema respeta lo que venga
+  en el TOKEN (TOKEN manda) y, si no, calcula desde catálogo según el tipo
+  de proveedor. Activable con el flag `aplicar_calculo_retenciones` del
+  catálogo.
 """
 import sys
 from pathlib import Path
@@ -84,8 +90,8 @@ with st.sidebar:
         f"""
         | Comp | Origen | Asiento típico |
         |---|---|---|
-        | **{COMPROBANTE_COMPRAS}** | TOKEN (FE) | Db Compra+IVA · Cr Proveedor |
-        | **{COMPROBANTE_NC_PROVEEDORES}** | TOKEN (NC) | Db Proveedor · Cr Devolución+IVA |
+        | **{COMPROBANTE_COMPRAS}** | TOKEN (FE) | Db Compra+IVA · Cr Proveedor (neto) · Cr Retenciones |
+        | **{COMPROBANTE_NC_PROVEEDORES}** | TOKEN (NC) | Db Proveedor · Db Reversos · Cr Devolución+IVA |
         | **{COMPROBANTE_CEG}** | EGRESOS | Db Acreedor · Cr Caja |
         | **{COMPROBANTE_DS}** | DS | Db Gasto · Cr Proveedor |
         """
@@ -96,23 +102,29 @@ with st.sidebar:
     st.caption(
         """
         ✅ **Todos los valores son POSITIVOS** — el signo lo da el TR
-        
+
         ✅ **Comp 3 (Compras):**
         - 620505 si la factura tiene IVA
         - 620510 si NO tiene IVA
         - INC para restaurantes (511575)
-        
+        - **🆕 Retefuente y ReteIVA automáticos**
+        - **🆕 IVA por tipo:**
+            - 24080201 → bienes (jurídica/natural)
+            - 24080308 → servicios (honorarios, arrendamiento, etc.)
+
         ✅ **Comp 7 (NC):** 622505 (devolución en compra)
-        
+        - Reverso IVA siempre a 24080204
+        - Reversos de retenciones cuando aplica
+
         ✅ **Comp 13 (CEG):**
         - Cancela DS → cuenta del proveedor del DS
         - Banco Caja Social → 11100501
         - Resto → 23359501
-        
+
         ✅ **Comp 18 (DS):** según producto (catálogo)
-        
-        ⚠️ Las cuentas `2365xxxx` solo se usan para
-        cálculo de retefuente, NO como pasivo en pagos.
+
+        ⚠️ Las cuentas `2365xxxx` solo se usan como Cr
+        en cálculo de retefuente sobre bases legales.
         """
     )
 
@@ -129,9 +141,10 @@ with st.sidebar:
 # Pestañas
 # ============================================================
 
-tab_procesar, tab_catalogo = st.tabs([
+tab_procesar, tab_catalogo, tab_retenciones = st.tabs([
     "📤 Procesar archivos",
     "📋 Catálogo",
+    "💰 Retenciones (FASE 2)",
 ])
 
 
@@ -144,6 +157,25 @@ with tab_procesar:
     st.info(
         "📋 **Los 3 archivos son OPCIONALES.** Sube solo los que necesites procesar."
     )
+
+    # Mostrar el modo actual de retenciones
+    try:
+        _info_quick = info_catalogo()
+        _flag_calc = _info_quick.get("aplicar_calculo_retenciones", False)
+        if _flag_calc:
+            st.warning(
+                "💰 **Cálculo automático de retenciones ACTIVO.** "
+                "El sistema calculará retefuente/reteIVA desde catálogo "
+                "cuando el TOKEN no las traiga."
+            )
+        else:
+            st.caption(
+                "ℹ️ Cálculo automático de retenciones **DESACTIVADO** (modo seguro). "
+                "Solo se respetarán retenciones que vengan en el TOKEN. "
+                "Para activar, edita `aplicar_calculo_retenciones: true` en el catálogo."
+            )
+    except Exception:
+        pass
 
     # Selector de periodo
     col_p1, col_p2, col_p3 = st.columns([1, 1, 1])
@@ -250,6 +282,43 @@ with tab_procesar:
             else:
                 st.info("✅ Todos los valores son positivos. El signo lo define el TR (1=Db, 2=Cr).")
 
+            # === Resumen de retenciones (FASE 2) ===
+            total_rete = (
+                resumen.get("total_retefuente", 0)
+                + resumen.get("total_reteiva", 0)
+                + resumen.get("total_reteica", 0)
+            )
+            if total_rete > 0:
+                st.markdown("#### 💰 Retenciones aplicadas")
+                col_r1, col_r2, col_r3 = st.columns(3)
+                with col_r1:
+                    st.metric(
+                        "Retefuente",
+                        f"$ {resumen.get('total_retefuente', 0):,}".replace(",", "."),
+                    )
+                with col_r2:
+                    st.metric(
+                        "ReteIVA",
+                        f"$ {resumen.get('total_reteiva', 0):,}".replace(",", "."),
+                    )
+                with col_r3:
+                    st.metric(
+                        "ReteICA",
+                        f"$ {resumen.get('total_reteica', 0):,}".replace(",", "."),
+                    )
+
+                detalle_ret = resumen.get("retenciones_detalle", [])
+                if detalle_ret:
+                    with st.expander(f"📋 Ver detalle por documento ({len(detalle_ret)} docs)"):
+                        df_ret = pd.DataFrame(detalle_ret)
+                        # Formatear columnas de monto
+                        for col in ["subtotal", "iva", "rete_renta", "rete_iva", "rete_ica"]:
+                            if col in df_ret.columns:
+                                df_ret[col] = df_ret[col].apply(
+                                    lambda v: f"$ {int(v):,}".replace(",", ".") if v else "—"
+                                )
+                        st.dataframe(df_ret, use_container_width=True, hide_index=True)
+
             # Resumen por comprobante
             st.markdown("#### 📒 Asientos por comprobante")
             asientos = []
@@ -321,13 +390,15 @@ with tab_catalogo:
         info = None
 
     if info:
-        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.metric("Productos DS", info["total_productos"])
         with col_m2:
             st.metric("Bancos", info["total_bancos"])
         with col_m3:
             st.metric("Prov. consumo", info.get("total_proveedores_consumo", 0))
+        with col_m4:
+            st.metric("Prov. retención", info.get("total_proveedores_retencion", 0))
 
         st.caption(f"UVT 2026: ${info['uvt_2026']:,} · Base mínima retefuente servicios: "
                    f"${info['base_minima_retefuente']:,}".replace(",", "."))
@@ -350,4 +421,140 @@ with tab_catalogo:
             "- `24080201` → IVA descontable por compras\n"
             "- `24080204` → IVA descontable reverso (NC)\n"
             "- `2365xxxx` → SOLO para cálculo de retefuente sobre bases legales"
+        )
+
+
+# ------------------------------------------------------------
+# Pestaña: Retenciones (FASE 2)
+# ------------------------------------------------------------
+
+with tab_retenciones:
+    st.markdown("### 💰 Retenciones automáticas (FASE 2)")
+
+    try:
+        info = info_catalogo()
+    except Exception as e:
+        st.error(f"❌ No se pudo cargar el catálogo: {e}")
+        info = None
+
+    if info:
+        flag = info.get("aplicar_calculo_retenciones", False)
+        tipo_default = info.get("tipo_retencion_default", "juridica")
+        n_provs = info.get("total_proveedores_retencion", 0)
+
+        # Estado del modo
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            if flag:
+                st.success("✅ Cálculo automático\n**ACTIVADO**")
+            else:
+                st.info("⏸️ Cálculo automático\n**DESACTIVADO** (modo seguro)")
+        with col_s2:
+            st.metric("Tipo default", tipo_default)
+        with col_s3:
+            st.metric("Proveedores catalogados", n_provs)
+
+        st.markdown("---")
+
+        # Explicación del flujo
+        st.markdown("#### 🔄 Cómo funciona")
+        st.markdown(
+            """
+            **Regla 1 — TOKEN manda.** Si el TOKEN DIAN ya trae valores en
+            `rete_renta`, `rete_iva` o `rete_ica`, esos valores se respetan
+            sin modificación (la DIAN es la fuente de verdad).
+
+            **Regla 2 — Catálogo es el fallback.** Cuando el TOKEN no trae
+            retención y el flag `aplicar_calculo_retenciones` está activo,
+            el sistema busca el NIT del proveedor en el catálogo, identifica
+            su tipo (jurídica, natural, honorarios, etc.) y aplica la tasa
+            correspondiente — siempre que la base supere el mínimo legal.
+
+            **Regla 3 — Default seguro.** Si un proveedor no aparece en el
+            catálogo, se aplica el tipo default (`juridica` 2.5%) y se
+            muestra una advertencia para que se catalogue.
+
+            **Regla 4 — ICA del TOKEN.** El ReteICA siempre viene del
+            TOKEN porque depende del municipio, no del tipo de proveedor.
+
+            **Regla 5 — NC reversa.** Las notas crédito reversan
+            correctamente las retenciones que se le aplicaron a la factura
+            original (Db a 2365xxxx en lugar de Cr).
+
+            **Regla 6 — Cuenta de IVA según tipo (v3.1).** El IVA descontable
+            de la factura va a:
+            - `24080201` para **bienes** (jurídica, natural, no catalogado)
+            - `24080308` para **servicios** (honorarios, comisiones,
+              arrendamiento, servicios_natural)
+
+            En NC el reverso del IVA siempre va a `24080204`.
+            """
+        )
+
+        st.markdown("---")
+        st.markdown("#### 📋 Tipos de retención disponibles")
+
+        tipos = info.get("tipos_retencion", [])
+        if tipos:
+            df_tipos = pd.DataFrame(tipos)
+            df_tipos["base_min_pesos"] = df_tipos["base_min_pesos"].apply(
+                lambda v: f"$ {int(v):,}".replace(",", ".") if v else "Sin mínimo"
+            )
+            st.dataframe(df_tipos, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("#### 🏢 Proveedores catalogados")
+
+        provs = info.get("proveedores_retencion", [])
+        if provs:
+            df_provs = pd.DataFrame(provs)
+            st.dataframe(df_provs, use_container_width=True, hide_index=True)
+        else:
+            st.warning(
+                "⚠️ **El catálogo de proveedores está vacío.** "
+                "Para que el cálculo automático funcione bien, edita "
+                "`catalogo_compras.json` y agrega los NITs de tus proveedores "
+                "principales en la sección `proveedores_retencion`. "
+                "Los no catalogados recibirán el tipo default."
+            )
+
+        st.markdown("---")
+        st.markdown("#### 📝 Cómo activar el cálculo automático")
+        st.code(
+            """// En core/data/catalogo_compras.json:
+
+{
+  "aplicar_calculo_retenciones": true,   // ← cambia a true
+  "tipo_retencion_default": "juridica",
+  "proveedores_retencion": [
+    {
+      "nit": "900123456",
+      "nombre": "PROVEEDOR EJEMPLO SAS",
+      "tipo": "juridica"
+    },
+    {
+      "nit": "12345678",
+      "nombre": "JUAN PEREZ",
+      "tipo": "natural"
+    },
+    {
+      "nit": "900987654",
+      "nombre": "CONTADORA SAS",
+      "tipo": "honorarios"
+    }
+    // ... agrega los proveedores principales
+  ]
+}""",
+            language="json",
+        )
+
+        st.info(
+            "💡 **Estrategia recomendada de migración:**\n\n"
+            "1. **Mes 1:** Mantén `aplicar_calculo_retenciones: false`. Procesa el TOKEN normalmente. "
+            "Identifica los NITs que aparecen recurrentemente en tus retes manuales.\n"
+            "2. **Mes 2:** Catalógalos en `proveedores_retencion`. Sigue con flag en `false`.\n"
+            "3. **Mes 3:** Activa `aplicar_calculo_retenciones: true`. Verifica que el plano "
+            "resultante coincida con tus retenciones manuales habituales.\n"
+            "4. **Mes 4 en adelante:** Sistema 100% automatizado. Solo agrega proveedores "
+            "nuevos cuando aparezcan."
         )
