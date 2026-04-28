@@ -1,6 +1,6 @@
 {
   "_doc": {
-    "descripcion": "Catálogo unificado para el módulo Compras y Egresos. Incluye productos para Documento Soporte (DS), bancos para CEG, y configuración general.",
+    "descripcion": "Catálogo unificado para el módulo Compras y Egresos. Incluye productos para Documento Soporte (DS), bancos para CEG, proveedores con tipo de retención, y configuración general.",
     "uvt_2026": 49799,
     "base_servicios_uvt": 4,
     "_cuentas_referencia": {
@@ -8,7 +8,13 @@
       "11100501": "Banco Caja Social",
       "22050501": "Proveedores nacionales",
       "23359501": "Acreedores costos y gastos",
+      "23651501": "Retefuente honorarios (11%)",
+      "23652001": "Retefuente comisiones (11%)",
+      "23653000": "Retefuente arrendamientos (3.5%)",
+      "23653525": "ReteIVA (15% del IVA)",
       "23654003": "Retefuente servicios persona natural (3.5%)",
+      "23654005": "Retefuente compras a personas jurídicas (2.5%)",
+      "23654025": "Retefuente compras a personas naturales (3.5%)",
       "24080201": "IVA descontable 19% por compras",
       "24080204": "IVA descontable reverso (NC)",
       "24080308": "IVA descontable",
@@ -17,8 +23,79 @@
       "620505": "Compras gravadas con IVA",
       "620510": "Compras NO gravadas con IVA",
       "622505": "Devoluciones en compra (NC) — según normatividad"
+    },
+    "_doc_retenciones": "Reglas tributarias 2026 estándar. Cada tipo define cuenta de retefuente, tasa, base mínima en UVT (0 = sin mínimo), si aplica ReteIVA, y cuenta de IVA descontable a usar. La base es subtotal antes de IVA. ReteIVA es 15% del IVA si aplica. cuenta_iva_descontable: 24080201 para compras de bienes, 24080308 para servicios/honorarios/comisiones/arrendamientos."
+  },
+  "tipos_retencion": {
+    "juridica": {
+      "descripcion": "Compras a personas jurídicas declarantes (default)",
+      "cuenta_renta": "23654005",
+      "tasa_renta": 0.025,
+      "base_min_uvt": 27,
+      "aplica_reteiva": false,
+      "tasa_reteiva": 0.0,
+      "cuenta_iva_descontable": "24080201"
+    },
+    "natural": {
+      "descripcion": "Compras a personas naturales",
+      "cuenta_renta": "23654025",
+      "tasa_renta": 0.035,
+      "base_min_uvt": 27,
+      "aplica_reteiva": true,
+      "tasa_reteiva": 0.15,
+      "cuenta_iva_descontable": "24080201"
+    },
+    "honorarios": {
+      "descripcion": "Honorarios profesionales",
+      "cuenta_renta": "23651501",
+      "tasa_renta": 0.11,
+      "base_min_uvt": 0,
+      "aplica_reteiva": true,
+      "tasa_reteiva": 0.15,
+      "cuenta_iva_descontable": "24080308"
+    },
+    "comisiones": {
+      "descripcion": "Comisiones",
+      "cuenta_renta": "23652001",
+      "tasa_renta": 0.11,
+      "base_min_uvt": 4,
+      "aplica_reteiva": true,
+      "tasa_reteiva": 0.15,
+      "cuenta_iva_descontable": "24080308"
+    },
+    "arrendamiento": {
+      "descripcion": "Arrendamiento de bienes muebles o inmuebles",
+      "cuenta_renta": "23653000",
+      "tasa_renta": 0.035,
+      "base_min_uvt": 27,
+      "aplica_reteiva": true,
+      "tasa_reteiva": 0.15,
+      "cuenta_iva_descontable": "24080308"
+    },
+    "servicios_natural": {
+      "descripcion": "Servicios prestados por persona natural",
+      "cuenta_renta": "23654003",
+      "tasa_renta": 0.035,
+      "base_min_uvt": 4,
+      "aplica_reteiva": true,
+      "tasa_reteiva": 0.15,
+      "cuenta_iva_descontable": "24080308"
+    },
+    "no_retiene": {
+      "descripcion": "Proveedor exento, régimen simple, no responsable, etc.",
+      "cuenta_renta": "",
+      "tasa_renta": 0.0,
+      "base_min_uvt": 0,
+      "aplica_reteiva": false,
+      "tasa_reteiva": 0.0,
+      "cuenta_iva_descontable": "24080201"
     }
   },
+  "_doc_proveedores_retencion": "Mapeo NIT → tipo de retención. Si un NIT no aparece aquí, se aplica el default 'juridica' (2.5%) con advertencia. Para no retener a un proveedor específico, se cataloga como 'no_retiene'.",
+  "_doc_calculo_retenciones": "Si aplicar_calculo_retenciones=false, el sistema SOLO respeta retenciones que vengan en el TOKEN DIAN (comportamiento legacy, idéntico a v2.0). Si =true, calcula automáticamente desde catálogo cuando el TOKEN no trae retención. Recomendado: empezar en false, catalogar proveedores principales, luego activar.",
+  "aplicar_calculo_retenciones": false,
+  "tipo_retencion_default": "juridica",
+  "proveedores_retencion": [],
   "productos_ds": [
     {
       "codigo": "SERV018",
