@@ -59,7 +59,14 @@ CUENTA_BANCO_DEFAULT = "11100501"
 CUENTA_PROVEEDORES = "22050501"
 CUENTA_ACREEDORES = "23359501"
 CUENTA_RETEFUENTE_SERVICIOS = "23654003"
+CUENTA_RETEFUENTE_JURIDICA = "23654005"
+CUENTA_RETEFUENTE_NATURAL = "23654025"
+CUENTA_RETEFUENTE_HONORARIOS = "23651501"
+CUENTA_RETEFUENTE_COMISIONES = "23652001"
+CUENTA_RETEFUENTE_ARRIENDO = "23653000"
+CUENTA_RETEIVA = "23653525"
 CUENTA_IVA_COMPRAS = "24080201"
+CUENTA_IVA_SERVICIOS = "24080308"
 CUENTA_IVA_NC = "24080204"
 CUENTA_IMPUESTO_CONSUMO = "511575"
 CUENTA_COMPRAS_GRAVADAS = "620505"
@@ -117,6 +124,32 @@ class ProveedorConsumo:
     nit: str
     nombre: str
     tasa: float
+
+
+@dataclass
+class TipoRetencion:
+    """Configuración tributaria para un tipo de proveedor.
+
+    base_min_uvt = 0 significa "sin mínimo legal" (ej: honorarios).
+    cuenta_iva_descontable: 24080201 para compras de bienes,
+                           24080308 para servicios/honorarios/comisiones/arrendamientos.
+    """
+    codigo: str               # 'juridica', 'natural', 'honorarios', etc.
+    descripcion: str
+    cuenta_renta: str         # vacía si no_retiene
+    tasa_renta: float
+    base_min_uvt: int
+    aplica_reteiva: bool
+    tasa_reteiva: float
+    cuenta_iva_descontable: str  # 24080201 o 24080308 según tipo de operación
+
+
+@dataclass
+class ProveedorRetencion:
+    """Mapeo NIT → tipo de retención."""
+    nit: str
+    nombre: str
+    tipo: str
 
 
 @dataclass
@@ -311,6 +344,35 @@ def cargar_catalogo() -> dict:
                 tasa=float(item.get("tasa", 0.08)),
             )
 
+    # Tipos de retención
+    tipos_retencion: Dict[str, TipoRetencion] = {}
+    for codigo, conf in data.get("tipos_retencion", {}).items():
+        tipos_retencion[codigo] = TipoRetencion(
+            codigo=codigo,
+            descripcion=str(conf.get("descripcion", "")).strip(),
+            cuenta_renta=str(conf.get("cuenta_renta", "")).strip(),
+            tasa_renta=float(conf.get("tasa_renta", 0.0)),
+            base_min_uvt=int(conf.get("base_min_uvt", 0)),
+            aplica_reteiva=bool(conf.get("aplica_reteiva", False)),
+            tasa_reteiva=float(conf.get("tasa_reteiva", 0.0)),
+            cuenta_iva_descontable=str(conf.get("cuenta_iva_descontable", CUENTA_IVA_COMPRAS)).strip(),
+        )
+
+    # Proveedores con tipo de retención
+    proveedores_retencion: Dict[str, ProveedorRetencion] = {}
+    for item in data.get("proveedores_retencion", []):
+        nit = _formato_cc(item.get("nit", ""))
+        tipo = str(item.get("tipo", "")).strip().lower()
+        if nit and tipo:
+            proveedores_retencion[nit] = ProveedorRetencion(
+                nit=nit,
+                nombre=str(item.get("nombre", "")).strip(),
+                tipo=tipo,
+            )
+
+    tipo_retencion_default = str(data.get("tipo_retencion_default", "juridica")).strip().lower()
+    aplicar_calculo_retenciones = bool(data.get("aplicar_calculo_retenciones", False))
+
     doc = data.get("_doc", {})
     uvt = int(doc.get("uvt_2026", UVT_DEFAULT))
     base_uvt = int(doc.get("base_servicios_uvt", 4))
@@ -319,6 +381,10 @@ def cargar_catalogo() -> dict:
         "productos": productos,
         "bancos": bancos,
         "proveedores_consumo": proveedores_consumo,
+        "tipos_retencion": tipos_retencion,
+        "proveedores_retencion": proveedores_retencion,
+        "tipo_retencion_default": tipo_retencion_default,
+        "aplicar_calculo_retenciones": aplicar_calculo_retenciones,
         "uvt": uvt,
         "base_servicios_uvt": base_uvt,
     }
@@ -330,6 +396,10 @@ def info_catalogo() -> dict:
         "total_productos": len(cat["productos"]),
         "total_bancos": len(cat["bancos"]),
         "total_proveedores_consumo": len(cat["proveedores_consumo"]),
+        "total_proveedores_retencion": len(cat["proveedores_retencion"]),
+        "total_tipos_retencion": len(cat["tipos_retencion"]),
+        "tipo_retencion_default": cat["tipo_retencion_default"],
+        "aplicar_calculo_retenciones": cat["aplicar_calculo_retenciones"],
         "uvt_2026": cat["uvt"],
         "base_minima_retefuente": cat["uvt"] * cat["base_servicios_uvt"],
         "productos": [
@@ -343,6 +413,23 @@ def info_catalogo() -> dict:
         "bancos": [
             {"nit": b.nit, "nombre": b.nombre, "cuenta": b.cuenta}
             for b in cat["bancos"]
+        ],
+        "tipos_retencion": [
+            {
+                "codigo": t.codigo,
+                "descripcion": t.descripcion,
+                "cuenta_renta": t.cuenta_renta,
+                "tasa_renta": f"{t.tasa_renta*100:.1f}%",
+                "base_min_uvt": t.base_min_uvt,
+                "base_min_pesos": t.base_min_uvt * cat["uvt"],
+                "reteiva": f"{t.tasa_reteiva*100:.0f}%" if t.aplica_reteiva else "No",
+                "cuenta_iva": t.cuenta_iva_descontable,
+            }
+            for t in cat["tipos_retencion"].values()
+        ],
+        "proveedores_retencion": [
+            {"nit": p.nit, "nombre": p.nombre, "tipo": p.tipo}
+            for p in cat["proveedores_retencion"].values()
         ],
     }
 
@@ -692,6 +779,140 @@ def _leer_egresos_caja_menor(archivo) -> List[EgresoCajaMenor]:
 
 
 # ============================================================
+# Cálculo de retenciones (FASE 2)
+# ============================================================
+
+@dataclass
+class RetencionesCalculadas:
+    """Resultado del cálculo de retenciones para un documento."""
+    rete_renta: float
+    cuenta_renta: str
+    base_renta: float
+    rete_iva: float
+    base_reteiva: float
+    rete_ica: float
+    cuenta_iva_descontable: str  # cuenta IVA Db a usar en factura (24080201 o 24080308)
+    fuente: str           # 'token', 'catalogo', 'token+catalogo', 'sin_retencion'
+    tipo_aplicado: str    # código del tipo de retención usado
+    advertencia: Optional[str] = None
+
+
+def _calcular_retenciones(
+    doc: DocumentoToken,
+    valor_subtotal: float,
+    valor_iva: float,
+    tipos_retencion: Dict[str, TipoRetencion],
+    proveedores_retencion: Dict[str, ProveedorRetencion],
+    tipo_default: str,
+    uvt: int,
+    aplicar_calculo: bool = True,
+) -> RetencionesCalculadas:
+    """Calcula retenciones aplicando regla: TOKEN manda, catálogo es fallback.
+
+    Lógica:
+      1. Si TOKEN trae rete_renta > 0 → se respeta (fuente de verdad).
+         Si no Y aplicar_calculo=True → se calcula desde catálogo (si supera base mínima).
+         Si no Y aplicar_calculo=False → no retiene (modo legacy v2.0).
+      2. Si TOKEN trae rete_iva > 0 → se respeta.
+         Si no Y aplicar_calculo=True → se calcula 15% del IVA si el tipo lo aplica.
+      3. ICA SIEMPRE viene del TOKEN (depende del municipio, no del tipo).
+      4. Para cuenta de renta: se determina por NIT en catálogo.
+         Si no está → default con advertencia.
+
+    Importante: cuando TOKEN trae el valor, NO se valida base mínima
+    (asumimos que quien generó el TOKEN ya validó eso).
+    """
+    nit = doc.nit_emisor or NIT_GENERICO
+    advertencia = None
+    fuente_partes: List[str] = []
+
+    # ----- Determinar tipo de retención -----
+    proveedor = proveedores_retencion.get(nit)
+    if proveedor is not None:
+        tipo_codigo = proveedor.tipo
+        if tipo_codigo not in tipos_retencion:
+            advertencia = (
+                f"⚠️ Proveedor {nit} ({doc.nombre_emisor}) tiene tipo '{tipo_codigo}' "
+                f"que no existe en tipos_retencion. Usando default '{tipo_default}'."
+            )
+            tipo_codigo = tipo_default
+    else:
+        tipo_codigo = tipo_default
+        # Solo advertir si el TOKEN no trae retenciones Y el cálculo está activo
+        if aplicar_calculo and doc.rete_renta == 0 and doc.rete_iva == 0:
+            tipo_default_obj = tipos_retencion.get(tipo_default)
+            tasa_str = f"{tipo_default_obj.tasa_renta*100:.1f}%" if tipo_default_obj else "?"
+            advertencia = (
+                f"⚠️ Proveedor {nit} ({doc.nombre_emisor}) no está en catálogo. "
+                f"Aplicando default '{tipo_default}' ({tasa_str})."
+            )
+
+    tipo = tipos_retencion.get(tipo_codigo) or tipos_retencion.get(tipo_default)
+    if tipo is None:
+        # Caso extremo: ni el default existe — devolver sin retención
+        return RetencionesCalculadas(
+            rete_renta=0.0, cuenta_renta="", base_renta=0.0,
+            rete_iva=0.0, base_reteiva=0.0, rete_ica=_redondear(doc.rete_ica),
+            cuenta_iva_descontable=CUENTA_IVA_COMPRAS,
+            fuente="sin_retencion", tipo_aplicado="", advertencia=advertencia,
+        )
+
+    # ----- RETEFUENTE -----
+    rete_renta = 0.0
+    base_renta = 0.0
+    cuenta_renta = ""
+    if doc.rete_renta > 0:
+        # TOKEN manda
+        rete_renta = _redondear(doc.rete_renta)
+        base_renta = _redondear(valor_subtotal)
+        cuenta_renta = tipo.cuenta_renta or CUENTA_RETEFUENTE_JURIDICA
+        fuente_partes.append("token_renta")
+    elif aplicar_calculo and tipo.tasa_renta > 0 and tipo.cuenta_renta:
+        # Calcular desde catálogo si supera la base mínima
+        base_min = tipo.base_min_uvt * uvt
+        if valor_subtotal > base_min:
+            rete_renta = _redondear(valor_subtotal * tipo.tasa_renta)
+            base_renta = _redondear(valor_subtotal)
+            cuenta_renta = tipo.cuenta_renta
+            fuente_partes.append("calc_renta")
+
+    # ----- RETEIVA -----
+    rete_iva = 0.0
+    base_reteiva = 0.0
+    if doc.rete_iva > 0:
+        # TOKEN manda
+        rete_iva = _redondear(doc.rete_iva)
+        base_reteiva = _redondear(valor_iva)
+        fuente_partes.append("token_iva")
+    elif aplicar_calculo and tipo.aplica_reteiva and tipo.tasa_reteiva > 0 and valor_iva > 0:
+        # Calcular desde catálogo
+        rete_iva = _redondear(valor_iva * tipo.tasa_reteiva)
+        base_reteiva = _redondear(valor_iva)
+        fuente_partes.append("calc_iva")
+
+    # ----- RETEICA -----
+    # Siempre del TOKEN — depende del municipio, no del tipo de proveedor
+    rete_ica = _redondear(doc.rete_ica)
+    if rete_ica > 0:
+        fuente_partes.append("token_ica")
+
+    fuente = "+".join(fuente_partes) if fuente_partes else "sin_retencion"
+
+    return RetencionesCalculadas(
+        rete_renta=rete_renta,
+        cuenta_renta=cuenta_renta,
+        base_renta=base_renta,
+        rete_iva=rete_iva,
+        base_reteiva=base_reteiva,
+        rete_ica=rete_ica,
+        cuenta_iva_descontable=tipo.cuenta_iva_descontable or CUENTA_IVA_COMPRAS,
+        fuente=fuente,
+        tipo_aplicado=tipo.codigo,
+        advertencia=advertencia,
+    )
+
+
+# ============================================================
 # Generación: Comprobante 3 (Compras DIAN) y 7 (NC)
 # ============================================================
 
@@ -700,13 +921,29 @@ def _generar_asientos_token(
     anio: int,
     mes: int,
     proveedores_consumo: Dict[str, ProveedorConsumo],
+    tipos_retencion: Dict[str, TipoRetencion],
+    proveedores_retencion: Dict[str, ProveedorRetencion],
+    tipo_retencion_default: str,
+    uvt: int,
+    aplicar_calculo_retenciones: bool = True,
     consecutivo_inicial: int = 1,
-) -> List[dict]:
+) -> Tuple[List[dict], List[str], List[dict]]:
     """Genera asientos para Compras (Comp 3) y NC Proveedores (Comp 7).
 
     Numeración global YYYYMMNNN ordenando por (fecha, folio).
+
+    Aplica retenciones automáticas (FASE 2):
+      - Si TOKEN trae rete_renta/rete_iva/rete_ica > 0 → se respeta.
+      - Si no → se calcula desde catálogo según tipo del proveedor.
+      - Default 'juridica' (2.5%) si NIT no está catalogado.
+
+    Returns:
+        (filas, advertencias, log_retenciones)
+        log_retenciones: lista de dicts con detalle por documento para auditoría.
     """
     filas: List[dict] = []
+    advertencias: List[str] = []
+    log_retenciones: List[dict] = []
 
     # Ordenar por fecha y folio
     docs_sorted = sorted(docs, key=lambda d: (d.fecha, d.folio))
@@ -723,23 +960,51 @@ def _generar_asientos_token(
         valor_inc = _redondear(doc.inc)
         valor_subtotal = valor_total - valor_iva - valor_inc
 
-        # Verificar si es proveedor de impuesto al consumo
-        # (en TOKEN el INC no viene desglosado en general, pero algunos sí)
-        # Si el proveedor está en proveedores_consumo, calcular INC = total - subtotal_estimado
+        # Inferir impuesto al consumo si proveedor está en lista
         if doc.es_factura and nit in proveedores_consumo and valor_inc == 0 and valor_iva == 0:
             tasa = proveedores_consumo[nit].tasa
-            # INC = total / (1 + tasa) * tasa
             valor_subtotal = _redondear(doc.total / (1 + tasa))
             valor_inc = valor_total - valor_subtotal
 
+        # Calcular retenciones (TOKEN manda, catálogo es fallback si flag activo)
+        retenciones = _calcular_retenciones(
+            doc=doc,
+            valor_subtotal=valor_subtotal,
+            valor_iva=valor_iva,
+            tipos_retencion=tipos_retencion,
+            proveedores_retencion=proveedores_retencion,
+            tipo_default=tipo_retencion_default,
+            uvt=uvt,
+            aplicar_calculo=aplicar_calculo_retenciones,
+        )
+        if retenciones.advertencia:
+            advertencias.append(retenciones.advertencia)
+
+        total_retenciones = (
+            retenciones.rete_renta + retenciones.rete_iva + retenciones.rete_ica
+        )
+
+        # Log de auditoría por documento
+        if doc.es_factura and (total_retenciones > 0 or retenciones.fuente != "sin_retencion"):
+            log_retenciones.append({
+                "documento": documento,
+                "folio": folio_completo,
+                "nit": nit,
+                "nombre": nombre,
+                "subtotal": int(valor_subtotal),
+                "iva": int(valor_iva),
+                "rete_renta": int(retenciones.rete_renta),
+                "cuenta_renta": retenciones.cuenta_renta,
+                "rete_iva": int(retenciones.rete_iva),
+                "rete_ica": int(retenciones.rete_ica),
+                "tipo": retenciones.tipo_aplicado,
+                "fuente": retenciones.fuente,
+            })
+
         if doc.es_factura:
-            # FACTURA — Comp 3
+            # === FACTURA — Comp 3 ===
             # Db cuenta de gasto/costo (subtotal)
             cuenta_compra = CUENTA_COMPRAS_GRAVADAS if valor_iva > 0 else CUENTA_COMPRAS_NO_GRAVADAS
-            # Si es proveedor de Cromatex y similar (mercancía), usar 620510 incluso con IVA
-            # El plano REF muestra que CROMATEX con IVA usa 620510 a veces
-            # Por simplicidad, usar la regla principal: 620505 si IVA, 620510 si no IVA
-            # Se podría refinar con un catálogo de proveedores
 
             filas.append(_crear_linea_plano(
                 cuenta=cuenta_compra,
@@ -753,10 +1018,12 @@ def _generar_asientos_token(
                 valor=valor_subtotal,
             ))
 
-            # Db IVA si aplica
+            # Db IVA si aplica — cuenta según tipo de operación:
+            # 24080201 para bienes (juridica/natural)
+            # 24080308 para servicios (honorarios/comisiones/arrendamiento/servicios_natural)
             if valor_iva > 0:
                 filas.append(_crear_linea_plano(
-                    cuenta=CUENTA_IVA_COMPRAS,
+                    cuenta=retenciones.cuenta_iva_descontable,
                     comprobante=COMPROBANTE_COMPRAS,
                     fecha=doc.fecha,
                     documento=documento,
@@ -782,7 +1049,51 @@ def _generar_asientos_token(
                     valor=valor_inc,
                 ))
 
-            # Cr proveedor por el total
+            # Cr Retefuente (si aplica)
+            if retenciones.rete_renta > 0 and retenciones.cuenta_renta:
+                filas.append(_crear_linea_plano(
+                    cuenta=retenciones.cuenta_renta,
+                    comprobante=COMPROBANTE_COMPRAS,
+                    fecha=doc.fecha,
+                    documento=documento,
+                    doc_referencia=folio_completo,
+                    nit=nit,
+                    detalle=f"RETEFUENTE {retenciones.tipo_aplicado.upper()} FE {folio_completo}",
+                    tr=TR_CREDITO,
+                    valor=retenciones.rete_renta,
+                    base=retenciones.base_renta,
+                ))
+
+            # Cr ReteIVA (si aplica)
+            if retenciones.rete_iva > 0:
+                filas.append(_crear_linea_plano(
+                    cuenta=CUENTA_RETEIVA,
+                    comprobante=COMPROBANTE_COMPRAS,
+                    fecha=doc.fecha,
+                    documento=documento,
+                    doc_referencia=folio_completo,
+                    nit=nit,
+                    detalle=f"RETEIVA FE {folio_completo} - {nombre}",
+                    tr=TR_CREDITO,
+                    valor=retenciones.rete_iva,
+                    base=retenciones.base_reteiva,
+                ))
+
+            # Cr ICA (si TOKEN lo trae)
+            # Nota: la cuenta de ICA depende del municipio y no la inferimos.
+            # Si llegase ICA del TOKEN sin cuenta definida, NO se asienta y NO se descuenta del proveedor.
+            ica_asentado = 0.0
+            if retenciones.rete_ica > 0:
+                advertencias.append(
+                    f"⚠️ Doc {folio_completo} trae ReteICA ${int(retenciones.rete_ica):,}. "
+                    f"Cuenta de ICA no está definida en catálogo — NO se asienta. "
+                    f"Revisar manualmente."
+                    .replace(",", ".")
+                )
+
+            # Cr proveedor por el total NETO (total - retenciones efectivamente asentadas)
+            retenciones_asentadas = retenciones.rete_renta + retenciones.rete_iva + ica_asentado
+            valor_proveedor = valor_total - retenciones_asentadas
             filas.append(_crear_linea_plano(
                 cuenta=CUENTA_PROVEEDORES,
                 comprobante=COMPROBANTE_COMPRAS,
@@ -792,12 +1103,16 @@ def _generar_asientos_token(
                 nit=nit,
                 detalle=f"PROVEEDOR FE {folio_completo} - {nombre}",
                 tr=TR_CREDITO,
-                valor=valor_total,
+                valor=valor_proveedor,
             ))
 
         elif doc.es_nota_credito:
-            # NOTA CRÉDITO — Comp 7
-            # Db proveedor por el total
+            # === NOTA CRÉDITO — Comp 7 ===
+            # Si la NC tiene retenciones, hay que reversarlas también.
+            # Importante: solo reversamos las que efectivamente se asentaron como Cr en su día.
+            # El ICA no se asienta (no hay cuenta), así que tampoco se reversa.
+            retenciones_asentadas_nc = retenciones.rete_renta + retenciones.rete_iva
+            valor_proveedor_nc = valor_total - retenciones_asentadas_nc
             filas.append(_crear_linea_plano(
                 cuenta=CUENTA_PROVEEDORES,
                 comprobante=COMPROBANTE_NC_PROVEEDORES,
@@ -807,8 +1122,46 @@ def _generar_asientos_token(
                 nit=nit,
                 detalle=f"NC {folio_completo} PROVEEDOR - {nombre}",
                 tr=TR_DEBITO,
-                valor=valor_total,
+                valor=valor_proveedor_nc,
             ))
+
+            # Db reverso de retefuente (si aplica)
+            if retenciones.rete_renta > 0 and retenciones.cuenta_renta:
+                filas.append(_crear_linea_plano(
+                    cuenta=retenciones.cuenta_renta,
+                    comprobante=COMPROBANTE_NC_PROVEEDORES,
+                    fecha=doc.fecha,
+                    documento=documento,
+                    doc_referencia=folio_completo,
+                    nit=nit,
+                    detalle=f"NC {folio_completo} REVERSO RETEFUENTE",
+                    tr=TR_DEBITO,
+                    valor=retenciones.rete_renta,
+                    base=retenciones.base_renta,
+                ))
+
+            # Db reverso de ReteIVA (si aplica)
+            if retenciones.rete_iva > 0:
+                filas.append(_crear_linea_plano(
+                    cuenta=CUENTA_RETEIVA,
+                    comprobante=COMPROBANTE_NC_PROVEEDORES,
+                    fecha=doc.fecha,
+                    documento=documento,
+                    doc_referencia=folio_completo,
+                    nit=nit,
+                    detalle=f"NC {folio_completo} REVERSO RETEIVA",
+                    tr=TR_DEBITO,
+                    valor=retenciones.rete_iva,
+                    base=retenciones.base_reteiva,
+                ))
+
+            # ICA en NC: igual que en factura, no se reversa si no hay cuenta
+            if retenciones.rete_ica > 0:
+                advertencias.append(
+                    f"⚠️ NC {folio_completo} trae ReteICA ${int(retenciones.rete_ica):,}. "
+                    f"Cuenta de ICA no está definida — NO se reversa. Revisar manualmente."
+                    .replace(",", ".")
+                )
 
             # Cr 622505 (devolución en compras) por subtotal
             if valor_subtotal > 0:
@@ -839,7 +1192,7 @@ def _generar_asientos_token(
                     base=valor_subtotal,
                 ))
 
-    return filas
+    return filas, advertencias, log_retenciones
 
 
 # ============================================================
@@ -1021,12 +1374,17 @@ def procesar_compras_y_egresos(
     """
     log: List[str] = []
     todas_filas: List[dict] = []
+    log_retenciones: List[dict] = []
 
     # Cargar catálogo
     cat = cargar_catalogo()
     base_minima_retefuente = cat["uvt"] * cat["base_servicios_uvt"]
-    log.append(f"📋 Catálogo: {len(cat['productos'])} productos DS, {len(cat['bancos'])} bancos.")
-    log.append(f"   UVT 2026: ${cat['uvt']:,} | Base mínima retefuente: ${base_minima_retefuente:,}".replace(",","."))
+    log.append(f"📋 Catálogo: {len(cat['productos'])} productos DS, {len(cat['bancos'])} bancos, "
+               f"{len(cat['proveedores_retencion'])} proveedores con tipo retención.")
+    log.append(f"   UVT 2026: ${cat['uvt']:,} | Base mínima retefuente servicios: ${base_minima_retefuente:,}".replace(",","."))
+    log.append(f"   Tipo de retención default: '{cat['tipo_retencion_default']}'")
+    modo_calc = "ACTIVADO (calcula desde catálogo)" if cat["aplicar_calculo_retenciones"] else "DESACTIVADO (solo respeta TOKEN)"
+    log.append(f"   Cálculo automático de retenciones: {modo_calc}")
 
     mapa_ds_a_cr: Dict[str, str] = {}
 
@@ -1058,15 +1416,43 @@ def procesar_compras_y_egresos(
         log.append(f"   Notas crédito leídas: {n_nc}")
 
         if token_docs:
-            filas_token = _generar_asientos_token(
-                token_docs, anio, mes, cat["proveedores_consumo"],
+            filas_token, adv_token, log_retenciones = _generar_asientos_token(
+                token_docs,
+                anio,
+                mes,
+                cat["proveedores_consumo"],
+                cat["tipos_retencion"],
+                cat["proveedores_retencion"],
+                cat["tipo_retencion_default"],
+                cat["uvt"],
+                cat["aplicar_calculo_retenciones"],
                 consecutivo_token_inicial,
             )
             todas_filas.extend(filas_token)
+            log.extend(adv_token)
             n_c3 = sum(1 for f in filas_token if f["COMPROBANTE"] == COMPROBANTE_COMPRAS)
             n_c7 = sum(1 for f in filas_token if f["COMPROBANTE"] == COMPROBANTE_NC_PROVEEDORES)
             log.append(f"   Líneas plano C3: {n_c3}")
             log.append(f"   Líneas plano C7: {n_c7}")
+
+            # Resumen de retenciones aplicadas
+            if log_retenciones:
+                total_renta = sum(r["rete_renta"] for r in log_retenciones)
+                total_riva = sum(r["rete_iva"] for r in log_retenciones)
+                total_rica = sum(r["rete_ica"] for r in log_retenciones)
+                docs_con_rete = sum(
+                    1 for r in log_retenciones
+                    if r["rete_renta"] > 0 or r["rete_iva"] > 0 or r["rete_ica"] > 0
+                )
+                docs_token = sum(1 for r in log_retenciones if "token" in r["fuente"])
+                docs_calc = sum(1 for r in log_retenciones if "calc" in r["fuente"])
+                log.append(
+                    f"   💰 Retenciones: {docs_con_rete} docs | "
+                    f"Rte=${total_renta:,} | RIVA=${total_riva:,} | RICA=${total_rica:,}".replace(",", ".")
+                )
+                log.append(
+                    f"      Fuente: {docs_token} desde TOKEN, {docs_calc} calculadas desde catálogo"
+                )
 
     # 3) Egresos Caja Menor (Comp 13)
     n_ceg = 0
@@ -1125,6 +1511,10 @@ def procesar_compras_y_egresos(
         "n_ds": n_ds,
         "n_egresos": n_ceg,
         "comprobantes": sorted(df_plano["COMPROBANTE"].unique().tolist()) if len(df_plano) > 0 else [],
+        "retenciones_detalle": log_retenciones,
+        "total_retefuente": sum(r["rete_renta"] for r in log_retenciones),
+        "total_reteiva": sum(r["rete_iva"] for r in log_retenciones),
+        "total_reteica": sum(r["rete_ica"] for r in log_retenciones),
     }
     return df_plano, log, resumen
 
