@@ -1,0 +1,95 @@
+{
+  "_doc": {
+    "descripcion": "Catálogo unificado para el módulo Compras y Egresos. Incluye productos para Documento Soporte (DS), bancos para CEG, y configuración general.",
+    "uvt_2026": 49799,
+    "base_servicios_uvt": 4,
+    "_cuentas_referencia": {
+      "11050500": "Caja",
+      "11100501": "Banco Caja Social",
+      "22050501": "Proveedores nacionales",
+      "23359501": "Acreedores costos y gastos",
+      "23654003": "Retefuente servicios persona natural (3.5%)",
+      "24080201": "IVA descontable 19% por compras",
+      "24080204": "IVA descontable reverso (NC)",
+      "24080308": "IVA descontable",
+      "511575": "Impuesto al consumo (gasto)",
+      "519530": "Diversos",
+      "620505": "Compras gravadas con IVA",
+      "620510": "Compras NO gravadas con IVA",
+      "622505": "Devoluciones en compra (NC) — según normatividad"
+    }
+  },
+  "productos_ds": [
+    {
+      "codigo": "SERV018",
+      "nombre": "SERVICIO DE MENSAJERIA",
+      "cuenta_db": "523540",
+      "cuenta_cr_proveedor": "23359501",
+      "retiene_servicios": false
+    },
+    {
+      "codigo": "SERV019",
+      "nombre": "MANTENIMIENTO EQUIPOS",
+      "cuenta_db": "51452501",
+      "cuenta_cr_proveedor": "23359501",
+      "retiene_servicios": true
+    },
+    {
+      "codigo": "SERV020",
+      "nombre": "REPARACIONES LOCATIVAS Y PINTURA",
+      "cuenta_db": "515015",
+      "cuenta_cr_proveedor": "23359501",
+      "retiene_servicios": false
+    },
+    {
+      "codigo": "SERV021",
+      "nombre": "ADMINISTRACION DE REDES SOCIALES",
+      "cuenta_db": "523560",
+      "cuenta_cr_proveedor": "23359501",
+      "retiene_servicios": true
+    },
+    {
+      "codigo": "SERV024",
+      "nombre": "LIBROS PAPELERIA EN GENERAL",
+      "cuenta_db": "620510",
+      "cuenta_cr_proveedor": "22050501",
+      "retiene_servicios": false
+    },
+    {
+      "codigo": "SERV025",
+      "nombre": "INSUMOS DE PAPELERIA EN GENERAL",
+      "cuenta_db": "519530",
+      "cuenta_cr_proveedor": "23359501",
+      "retiene_servicios": false
+    },
+    {
+      "codigo": "SERV026",
+      "nombre": "SUVENIR Y REGALOS",
+      "cuenta_db": "620510",
+      "cuenta_cr_proveedor": "22050501",
+      "retiene_servicios": true
+    },
+    {
+      "codigo": "EVA001",
+      "nombre": "PRODUCTOS EN CUERO CINTURONES",
+      "cuenta_db": "620510",
+      "cuenta_cr_proveedor": "22050501",
+      "retiene_servicios": false
+    }
+  ],
+  "bancos": [
+    {
+      "nit": "860007335",
+      "nombre": "BANCO CAJA SOCIAL SA",
+      "cuenta": "11100501"
+    }
+  ],
+  "_doc_proveedores_consumo": "Proveedores que generan Impuesto al Consumo (8% restaurantes, etc.) — el TOKEN no lo desglosa, pero se infiere por cálculo si IVA == 0 y aparece como restaurante.",
+  "proveedores_impuesto_consumo": [
+    {
+      "nit": "901140415",
+      "nombre": "La Migueria SAS",
+      "tasa": 0.08
+    }
+  ]
+}
