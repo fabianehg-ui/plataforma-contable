@@ -1,21 +1,17 @@
 """
-Módulo Nómina — Plataforma Web.
+Módulo Nómina — Plataforma Web (con PILA integrada como insumo opcional).
 
-Procesa el Excel mensual de nómina (1 hoja por empleada, 2 desprendibles
-quincenales por hoja) y genera el plano contable con:
+Procesa un Excel mensual de nómina (1 hoja por empleada, 2 quincenas
+apiladas) y genera el plano contable con:
+    - Comp 11: causación quincenal de nómina (2 asientos)
+    - Comp 9:  provisión mensual de aportes y prestaciones
 
-    - 2 asientos de causación (comprobante 11, documentos 1 y 2)
-    - 1 asiento de provisión mensual (comprobante 9, documento = mes)
+Adicionalmente acepta opcionalmente la prefactura PILA del periodo
+(Enlace Operativo / SuAporte) en PDF para mostrar la comparación
+provisión vs aporte real pagado.
 
-El maestro de empleados está embebido en el código
-(core/data/empleados.json) — el operador NO lo sube.
-
-Reglas contables (Casa UnoTres SAS):
-    - IBC = Devengado − Aux Transporte − Incapacidad
-    - Base prestaciones = Total Devengado
-    - Base vacaciones   = Devengado − Aux Transporte
-    - Solo aplican: Pensión 12%, ARL (variable), Caja 4%
-    - Empresa exonerada de Salud patronal 8.5%, SENA y ICBF
+NOTA v3.x: en esta versión la PILA es solo INFORMATIVA (no genera líneas
+de ajuste contable). Esa fase se hace en una iteración posterior.
 """
 import sys
 from pathlib import Path
@@ -32,18 +28,26 @@ import pandas as pd
 from auth.login import require_auth, sidebar_user_info
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from auth.modulos import require_modulo
+
 from core.procesadores.procesador_nomina import (
     procesar_nomina,
-    dataframe_a_plano_tsv,
-    cargar_empleados_embebido,
     info_empleados_embebido,
+    cargar_empleados_embebido,
     COMPROBANTE_NOMINA,
     COMPROBANTE_PROVISION,
+    dataframe_a_plano_tsv,
 )
+
+# Lectura de PILA (opcional — solo se importa si está disponible)
+try:
+    from core.procesadores.procesador_pila import leer_planilla_pila
+    PILA_DISPONIBLE = True
+except ImportError:
+    PILA_DISPONIBLE = False
 
 
 # ============================================================
-# Configuración de la página
+# Configuración
 # ============================================================
 
 st.set_page_config(
@@ -63,12 +67,12 @@ emp = require_rol(["admin", "operador"])
 # Encabezado
 # ============================================================
 
-# Usamos st.markdown con HTML para asegurar el render correcto del título
-# (st.title a veces interpreta mal los emojis seguidos de texto en la URL del slug).
-st.markdown("# 💼 NÓMINA CASA 13")
+st.markdown("# 💼 NÓMINA")
 st.caption(
     f"Empresa activa: **{emp['razon_social']}** · "
-    f"Procesa el Excel mensual de nómina y genera el plano contable"
+    f"Procesa nómina mensual con causación quincenal (Comp 11) "
+    f"y provisión de aportes (Comp 9). "
+    f"Acepta planilla PILA pagada como insumo opcional."
 )
 st.markdown("---")
 
@@ -82,42 +86,59 @@ with st.sidebar:
     incluir_enc_excel = st.checkbox(
         "Incluir 'sep=\\t' (compatible Excel)",
         value=True,
-        help="Agrega la directiva de separador para que Excel abra el TSV "
-             "con las columnas alineadas.",
     )
 
     st.markdown("---")
-    st.markdown("### 📐 Reglas contables")
+    st.markdown("### 📐 Comprobantes generados")
     st.caption(
         f"""
-        **Causación nómina** (comprobante {COMPROBANTE_NOMINA}):
-        - Doc 1 = quincena del 15
-        - Doc 2 = quincena del 30
-
-        **Provisión mensual** (comprobante {COMPROBANTE_PROVISION}):
-        - Documento = número del mes
-
-        **Bases de cálculo:**
-        - IBC = Devengado − Aux Tpte − Incapacidad
-        - Prestaciones = Devengado total
-        - Vacaciones = Devengado − Aux Tpte
-
-        **Aportes patronales:**
-        - Pensión 12% del IBC
-        - ARL (tarifa por empleada)
-        - Caja Compensación 4% del IBC
-        - ❌ NO Salud 8.5%, NO SENA, NO ICBF (exonerada)
+        | Comp | Tipo | Frecuencia |
+        |---|---|---|
+        | **{COMPROBANTE_NOMINA}** | Causación nómina | Quincenal (día 15 y último) |
+        | **{COMPROBANTE_PROVISION}** | Provisión aportes y prestaciones | Mensual (último día) |
         """
     )
+
+    st.markdown("---")
+    st.markdown("### 🔧 Reglas clave")
+    st.caption(
+        """
+        ✅ **Empresa exonerada Art. 114-1 ET:**
+        - NO Salud patronal 8.5%
+        - NO SENA 2%
+        - NO ICBF 3%
+        - SÍ Pensión 12%, ARL, Caja 4%
+
+        ✅ **Bases contables:**
+        - IBC seguridad social = Devengado − AuxTpte − Incapacidad
+        - Base prestaciones = Total Devengado
+        - Base vacaciones = Devengado − AuxTpte
+
+        ✅ **Cuentas por área:**
+        - ADMIN → 510xxx
+        - OPERACIÓN → 520xxx
+
+        ⚠️ Las DEDUCCIONES del empleado se LEEN
+        del Excel (no se recalculan).
+        """
+    )
+
+    if PILA_DISPONIBLE:
+        st.markdown("---")
+        st.success("📎 Lector PILA activo")
+    else:
+        st.markdown("---")
+        st.warning("📎 Lector PILA no instalado")
 
 
 # ============================================================
 # Pestañas
 # ============================================================
 
-tab_procesar, tab_empleados = st.tabs([
+tab_procesar, tab_empleados, tab_pila = st.tabs([
     "📤 Procesar nómina",
-    "👤 Empleadas registradas",
+    "👥 Empleados",
+    "📎 Acerca de PILA",
 ])
 
 
@@ -126,243 +147,394 @@ tab_procesar, tab_empleados = st.tabs([
 # ------------------------------------------------------------
 
 with tab_procesar:
-    st.markdown("### 📤 Subir Excel mensual de nómina")
+    st.markdown("### 📤 Subir archivos del periodo")
+
     st.info(
-        "📋 **Formato esperado:** un archivo Excel con UNA hoja por empleada. "
-        "Cada hoja debe tener DOS desprendibles apilados verticalmente "
-        "(quincena 1 y quincena 2)."
+        "📋 **Cómo funciona:**\n\n"
+        "- La **planilla de nómina** (obligatoria) genera Comp 11 (causación quincenal) y "
+        "Comp 9 (provisión del último día del mes).\n"
+        "- La **prefactura PILA** (opcional) se usa para **comparar visualmente** lo "
+        "provisionado vs lo realmente pagado en aportes.\n"
+        "- Si no subes PILA, el sistema procesa solo la nómina y genera el plano normalmente."
     )
 
-    col_periodo1, col_periodo2 = st.columns(2)
-    with col_periodo1:
+    # Selector de periodo
+    col_p1, col_p2 = st.columns([1, 2])
+    with col_p1:
         hoy = date.today()
-        # Por defecto, el mes ANTERIOR al actual
-        mes_default = hoy.month - 1 if hoy.month > 1 else 12
-        anio_default = hoy.year if hoy.month > 1 else hoy.year - 1
         anio = st.number_input(
             "Año del periodo",
             min_value=2020, max_value=2100,
-            value=anio_default, step=1,
+            value=hoy.year if hoy.month > 1 else hoy.year - 1,
+            step=1,
         )
-    with col_periodo2:
-        meses_nombres = [
-            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-        ]
+    with col_p2:
+        meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                 "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        mes_default = hoy.month - 1 if hoy.month > 1 else 12
         mes_idx = st.selectbox(
             "Mes del periodo",
             options=list(range(1, 13)),
-            format_func=lambda i: f"{i:02d} — {meses_nombres[i - 1]}",
+            format_func=lambda i: f"{i:02d} — {meses[i - 1]}",
             index=mes_default - 1,
         )
 
-    archivo = st.file_uploader(
-        "📎 Subir Excel de nómina (.xls o .xlsx)",
-        type=["xls", "xlsx"],
-        help="Excel con una hoja por empleada y dos desprendibles por hoja.",
-        key="archivo_nomina",
-    )
+    # Uploaders en dos columnas
+    col_n, col_pl = st.columns(2)
+    with col_n:
+        st.markdown("**📋 Planilla de Nómina** _(obligatorio)_")
+        archivo_nomina = st.file_uploader(
+            "NOMINA_CASATRECE_<MES>.xls",
+            type=["xls", "xlsx"],
+            help="Excel mensual con 1 hoja por empleada y 2 quincenas apiladas.",
+            key="archivo_nomina",
+        )
+    with col_pl:
+        st.markdown("**📎 Prefactura PILA pagada** _(opcional)_")
+        archivo_pila = st.file_uploader(
+            "Prefactura_<numero>.pdf",
+            type=["pdf", "xlsx", "xls"],
+            help="Prefactura SuAporte / Enlace Operativo del periodo. "
+                 "Sirve para comparar lo provisionado vs lo pagado en aportes. "
+                 "Por ahora solo se muestra; no genera líneas contables.",
+            key="archivo_pila",
+            disabled=not PILA_DISPONIBLE,
+        )
+        if not PILA_DISPONIBLE:
+            st.caption("⚠️ El lector de PILA no está instalado en el servidor.")
 
-    if archivo is not None:
+    # === Procesar nómina ===
+    if archivo_nomina is not None:
         st.markdown("---")
-        with st.spinner("Procesando nómina..."):
+        with st.spinner("Procesando planilla de nómina..."):
             try:
                 df_plano, log, resumen = procesar_nomina(
-                    archivo, anio=int(anio), mes=int(mes_idx)
+                    archivo=archivo_nomina,
+                    anio=int(anio),
+                    mes=int(mes_idx),
                 )
             except Exception as e:
-                st.error(f"❌ Error procesando el archivo:\n\n```\n{e}\n```")
+                st.error(f"❌ Error procesando la nómina:\n\n```\n{e}\n```")
                 df_plano = None
                 log = []
                 resumen = {}
 
         if df_plano is not None and len(df_plano) > 0:
-            # Métricas principales
             total_db = int(df_plano[df_plano["TR"] == "1"]["VALOR"].astype(int).sum())
             total_cr = int(df_plano[df_plano["TR"] == "2"]["VALOR"].astype(int).sum())
             cuadra = total_db == total_cr
 
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Empleados", resumen.get("empleados_procesados", 0))
+                st.metric("Empleadas", resumen.get("n_empleados", 0))
             with col2:
                 st.metric("Líneas plano", len(df_plano))
             with col3:
+                st.metric("Comprobantes", len(df_plano["COMPROBANTE"].unique()))
+            with col4:
                 st.metric(
                     "Total Db",
                     f"$ {total_db:,}".replace(",", "."),
                 )
-            with col4:
-                st.metric(
-                    "Total Cr",
-                    f"$ {total_cr:,}".replace(",", "."),
-                )
 
             if cuadra:
-                st.success("✅ **Cuadre perfecto Db = Cr** en todos los asientos.")
+                st.success(f"✅ **Cuadre perfecto Db = Cr = ${total_db:,}**".replace(",", "."))
             else:
+                st.error(f"❌ **Descuadre:** ${total_db - total_cr:,}".replace(",", "."))
+
+            # Verificar valores negativos
+            n_negs = (df_plano["VALOR"].astype(int) < 0).sum()
+            if n_negs > 0:
                 st.error(
-                    f"❌ **Descuadre:** Db − Cr = "
-                    f"${total_db - total_cr:,}".replace(",", ".")
+                    f"❌ **{n_negs} líneas con valor negativo!** "
+                    "El TR debería definir el signo."
                 )
 
-            # Resumen por empleado
-            st.markdown("#### 👤 Resumen por empleada")
-            detalle = resumen.get("detalle_empleados", [])
-            if detalle:
-                df_resumen = pd.DataFrame(detalle)
-                df_resumen_formato = df_resumen.copy()
-                for col in ("devengado_total", "aux_transporte", "incapacidad",
-                            "ibc", "base_prestaciones", "base_vacaciones"):
-                    if col in df_resumen_formato.columns:
-                        df_resumen_formato[col] = df_resumen_formato[col].apply(
-                            lambda v: f"$ {int(v):,}".replace(",", ".")
-                        )
-                st.dataframe(
-                    df_resumen_formato.rename(columns={
-                        "cc": "C.C.",
-                        "nombre": "Nombre",
-                        "tipo": "Tipo",
-                        "tasa_arl_pct": "Tasa ARL",
-                        "devengado_total": "Devengado total",
-                        "aux_transporte": "Aux. Tpte.",
-                        "incapacidad": "Incapacidad",
-                        "ibc": "IBC",
-                        "base_prestaciones": "Base prestac.",
-                        "base_vacaciones": "Base vac.",
-                    }),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-            # Resumen por asiento
-            st.markdown("#### 📒 Asientos generados")
-            asientos_resumen = []
-            for (comp, doc), grupo in df_plano.groupby(["COMPROBANTE", "DOCUMENTO"]):
-                db = int(grupo[grupo["TR"] == "1"]["VALOR"].astype(int).sum())
-                cr = int(grupo[grupo["TR"] == "2"]["VALOR"].astype(int).sum())
-                tipo = "Causación nómina" if comp == COMPROBANTE_NOMINA else "Provisión mensual"
-                fecha_asiento = grupo.iloc[0]["FECHA"]
-                asientos_resumen.append({
-                    "Comprobante": comp,
-                    "Documento": doc,
-                    "Tipo": tipo,
-                    "Fecha": fecha_asiento,
-                    "Líneas": len(grupo),
+            # === Resumen por comprobante ===
+            st.markdown("#### 📒 Asientos por comprobante")
+            asientos = []
+            tipos = {
+                COMPROBANTE_NOMINA:    "Causación quincenal de nómina",
+                COMPROBANTE_PROVISION: "Provisión mensual de aportes",
+            }
+            for comp in sorted(df_plano["COMPROBANTE"].unique()):
+                sub = df_plano[df_plano["COMPROBANTE"] == comp]
+                db = int(sub[sub["TR"] == "1"]["VALOR"].astype(int).sum())
+                cr = int(sub[sub["TR"] == "2"]["VALOR"].astype(int).sum())
+                asientos.append({
+                    "Comp": comp,
+                    "Tipo": tipos.get(comp, "—"),
+                    "Documentos": sub["DOCUMENTO"].nunique(),
+                    "Líneas": len(sub),
                     "Total Db": f"$ {db:,}".replace(",", "."),
                     "Total Cr": f"$ {cr:,}".replace(",", "."),
                     "Cuadra": "✅" if db == cr else "❌",
                 })
             st.dataframe(
-                pd.DataFrame(asientos_resumen),
+                pd.DataFrame(asientos),
                 use_container_width=True,
                 hide_index=True,
             )
 
-            # Plano detallado
+            # === Resumen PILA si se subió ===
+            if archivo_pila is not None and PILA_DISPONIBLE:
+                st.markdown("---")
+                st.markdown("#### 📎 Comparación con PILA pagada")
+                try:
+                    # Construir catálogo {cedula: nombre_correcto} para limpiar nombres
+                    empleados_dict = cargar_empleados_embebido()
+                    catalogo_nombres = {
+                        cc: emp_obj.nombre
+                        for cc, emp_obj in empleados_dict.items()
+                    }
+                    pila = leer_planilla_pila(
+                        archivo_pila,
+                        catalogo_empleados=catalogo_nombres,
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error leyendo PILA:\n\n```\n{e}\n```")
+                    pila = None
+
+                if pila is not None:
+                    # Métricas globales
+                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                    with col_m1:
+                        st.metric(
+                            "Planilla",
+                            f"#{pila.numero_planilla}" if pila.numero_planilla else "—",
+                        )
+                    with col_m2:
+                        st.metric(
+                            "Empleados PILA",
+                            len(pila.por_empleado),
+                        )
+                    with col_m3:
+                        st.metric(
+                            "Total pagado",
+                            f"$ {int(pila.totales.total_final):,}".replace(",", "."),
+                        )
+                    with col_m4:
+                        # Validación exonerada
+                        no_exon = int(pila.totales.aportes_sena + pila.totales.aportes_icbf)
+                        if no_exon == 0:
+                            st.metric("Exoneración Art.114-1", "✅ OK")
+                        else:
+                            st.metric(
+                                "⚠️ SENA+ICBF",
+                                f"$ {no_exon:,}".replace(",", "."),
+                            )
+
+                    # Detalle de aportes pagados por concepto
+                    st.markdown("**Aportes pagados (sección III del PDF)**")
+                    df_aportes = pd.DataFrame([
+                        {
+                            "Concepto": "Pensión",
+                            "IBC":      f"$ {int(pila.totales.ibc_pension):,}".replace(",", "."),
+                            "Aportes":  f"$ {int(pila.totales.aportes_pension):,}".replace(",", "."),
+                        },
+                        {
+                            "Concepto": "Salud (4% empleado)",
+                            "IBC":      f"$ {int(pila.totales.ibc_salud):,}".replace(",", "."),
+                            "Aportes":  f"$ {int(pila.totales.aportes_salud):,}".replace(",", "."),
+                        },
+                        {
+                            "Concepto": "ARL",
+                            "IBC":      f"$ {int(pila.totales.ibc_riesgos):,}".replace(",", "."),
+                            "Aportes":  f"$ {int(pila.totales.aportes_riesgos):,}".replace(",", "."),
+                        },
+                        {
+                            "Concepto": "Caja Compensación",
+                            "IBC":      f"$ {int(pila.totales.ibc_cajas):,}".replace(",", "."),
+                            "Aportes":  f"$ {int(pila.totales.aportes_cajas):,}".replace(",", "."),
+                        },
+                        {
+                            "Concepto": "FSP / FSS",
+                            "IBC":      "—",
+                            "Aportes":  f"$ {int(pila.totales.aportes_fsp + pila.totales.aportes_fss):,}".replace(",", "."),
+                        },
+                    ])
+                    st.dataframe(
+                        df_aportes,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # Detalle por empleado
+                    if pila.por_empleado:
+                        st.markdown("**Aportes por empleado**")
+                        filas_emp = []
+                        for ced, e in pila.por_empleado.items():
+                            filas_emp.append({
+                                "Cédula": ced,
+                                "Nombre": e.nombre,
+                                "Días pens.": e.dias_pension,
+                                "IBC":     f"$ {int(e.ibc_pension):,}".replace(",", "."),
+                                "Pensión": f"$ {int(e.aporte_pension):,}".replace(",", "."),
+                                "Salud":   f"$ {int(e.aporte_salud):,}".replace(",", "."),
+                                "ARL":     f"$ {int(e.aporte_arl):,}".replace(",", "."),
+                                "Caja":    f"$ {int(e.aporte_caja):,}".replace(",", "."),
+                                "Pensión Adm.":  e.administradora_pension,
+                                "EPS":           e.administradora_salud,
+                                "ARL Adm.":      e.administradora_arl,
+                            })
+                        st.dataframe(
+                            pd.DataFrame(filas_emp),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+                    # Validación cruzada empleado-vs-empleado entre PILA y Nómina
+                    cedulas_pila = set(pila.por_empleado.keys())
+                    cedulas_nomina = set()
+                    if "empleados_procesados" in resumen:
+                        cedulas_nomina = set(
+                            str(c) for c in resumen["empleados_procesados"]
+                        )
+                    elif "n_empleados" in resumen:
+                        # Fallback: usar el catálogo embebido
+                        cedulas_nomina = set(empleados_dict.keys())
+
+                    solo_pila = cedulas_pila - cedulas_nomina
+                    solo_nomina = cedulas_nomina - cedulas_pila
+
+                    if solo_pila:
+                        st.warning(
+                            "⚠️ Empleados en **PILA pero no en nómina**: " +
+                            ", ".join(solo_pila)
+                        )
+                    if solo_nomina:
+                        st.warning(
+                            "⚠️ Empleados en **nómina pero no en PILA**: " +
+                            ", ".join(solo_nomina)
+                        )
+                    if not solo_pila and not solo_nomina and cedulas_pila:
+                        st.success(
+                            "✅ Todos los empleados de nómina aparecen en PILA y viceversa."
+                        )
+
+                    # Log del lector PILA
+                    with st.expander("📜 Ver log de lectura PILA"):
+                        st.code("\n".join(pila.log), language="text")
+
+                    st.info(
+                        "ℹ️ En esta versión la PILA se muestra solo como **referencia visual**. "
+                        "Las líneas de ajuste automático en Comp 9 (provisión vs pagado) "
+                        "se implementarán en la próxima iteración."
+                    )
+
+            # === Plano completo ===
             with st.expander("📄 Ver plano completo"):
                 st.dataframe(df_plano, use_container_width=True, hide_index=True)
 
-            # Log
             with st.expander("📜 Ver log de procesamiento"):
                 st.code("\n".join(log), language="text")
 
-            # Descargas
+            # === Descargas ===
             st.markdown("#### ⬇️ Descargas")
-
             col_d1, col_d2 = st.columns(2)
             with col_d1:
                 tsv_bytes = dataframe_a_plano_tsv(
-                    df_plano, incluir_encabezado_excel=incluir_enc_excel
+                    df_plano,
+                    incluir_encabezado_excel=incluir_enc_excel,
                 )
                 st.download_button(
-                    label="📥 Descargar plano (.txt)",
+                    label="📥 Plano (.txt)",
                     data=tsv_bytes,
                     file_name=f"plano_nomina_{int(anio)}_{int(mes_idx):02d}.txt",
                     mime="text/tab-separated-values",
                     use_container_width=True,
                 )
             with col_d2:
-                # Excel
                 bio = io.BytesIO()
                 with pd.ExcelWriter(bio, engine="openpyxl") as writer:
                     df_plano.to_excel(writer, sheet_name="PLANO", index=False)
                 st.download_button(
-                    label="📥 Descargar plano (.xlsx)",
+                    label="📥 Plano (.xlsx)",
                     data=bio.getvalue(),
                     file_name=f"plano_nomina_{int(anio)}_{int(mes_idx):02d}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
 
-        elif df_plano is not None:
-            st.warning("⚠️ El procesamiento no generó líneas en el plano.")
-            with st.expander("📜 Ver log"):
-                st.code("\n".join(log), language="text")
-
 
 # ------------------------------------------------------------
-# Pestaña: Empleados registrados
+# Pestaña: Empleados
 # ------------------------------------------------------------
 
 with tab_empleados:
-    st.markdown("### 👤 Maestro embebido de empleadas")
+    st.markdown("### 👥 Maestro de empleados")
     st.caption(
-        "Este maestro vive en `core/data/empleados.json` y se carga al iniciar "
-        "el módulo. Para añadir, modificar o retirar empleadas, edita el JSON "
-        "en GitHub y haz commit. Railway desplegará automáticamente."
+        "Editable en `core/data/empleados.json` — commit y Railway redespliega."
     )
-
     try:
         info = info_empleados_embebido()
     except Exception as e:
-        st.error(f"❌ No se pudo cargar el maestro de empleadas: {e}")
+        st.error(f"❌ No se pudo cargar el maestro de empleados: {e}")
         info = None
 
     if info:
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            st.metric("Total empleadas", info["total"])
-        with col_m2:
-            por_tipo_str = " · ".join(
-                f"{tipo}: {cnt}" for tipo, cnt in info["por_tipo"].items()
+        col_e1, col_e2 = st.columns(2)
+        with col_e1:
+            st.metric("Total empleados", info.get("total", 0))
+        with col_e2:
+            st.metric(
+                "Áreas",
+                ", ".join(info.get("por_area", {}).keys()) or "—",
             )
-            st.metric("Por tipo", por_tipo_str or "—")
+        if "empleados" in info:
+            st.dataframe(
+                pd.DataFrame(info["empleados"]),
+                use_container_width=True,
+                hide_index=True,
+            )
 
-        df_emp = pd.DataFrame(info["empleados"])
 
-        # Re-ordenar columnas para mostrar las relevantes primero
-        cols_orden = [
-            "cc", "nombre", "tipo", "tasa_arl_pct",
-            "fondo_pension", "eps", "arl", "caja",
-        ]
-        cols_disponibles = [c for c in cols_orden if c in df_emp.columns]
-        df_emp = df_emp[cols_disponibles]
+# ------------------------------------------------------------
+# Pestaña: Acerca de PILA
+# ------------------------------------------------------------
 
-        st.dataframe(
-            df_emp.rename(columns={
-                "cc": "C.C.",
-                "nombre": "Nombre",
-                "tipo": "Tipo",
-                "tasa_arl_pct": "Tasa ARL",
-                "fondo_pension": "Fondo Pensión",
-                "eps": "EPS",
-                "arl": "ARL",
-                "caja": "Caja",
-            }),
-            use_container_width=True,
-            hide_index=True,
-        )
+with tab_pila:
+    st.markdown("### 📎 Sobre la planilla PILA")
+    st.markdown(
+        """
+        La **planilla PILA** (Planilla Integrada de Liquidación de Aportes) es
+        el reporte mensual de aportes a seguridad social y parafiscales. Para
+        Casa UnoTres SAS se genera en la plataforma **SuAporte / Enlace
+        Operativo**, con formato típico de **PDF** (también acepta XLSX).
 
-        st.markdown("---")
-        st.info(
-            "💡 **Cómo agregar una empleada nueva:**\n\n"
-            "1. Abre el archivo `core/data/empleados.json` en GitHub.\n"
-            "2. Agrega un nuevo objeto al arreglo `empleados` con: "
-            "`cc`, `nombre`, `tipo` (`ADMIN` o `OPERACION`), `tasa_arl`, "
-            "`fondo_pension`, `eps`, `arl`, `caja`.\n"
-            "3. Commit → Railway despliega automáticamente.\n\n"
-            "**Tip:** la tarifa ARL exacta se calcula como "
-            "`Aporte Riesgos / IBC Riesgos` de la planilla PILA del mes "
-            "correspondiente."
+        **¿Qué hace este módulo con la PILA?**
+
+        - La lee y extrae automáticamente:
+          - Datos del aportante (NIT, razón social, periodo, # planilla)
+          - Detalle por empleado: IBC, aporte pensión, salud, ARL, caja,
+            administradoras, días cotizados
+          - Totales globales (sección III del PDF)
+        - Muestra la información en pantalla para que puedas validar
+          visualmente que coincide con tu provisión.
+
+        **Validaciones automáticas:**
+        - Suma de aportes por empleado ≈ totales reportados
+        - SENA + ICBF deben ser **$0** (Casa UnoTres SAS está exonerada Art. 114-1 ET)
+        - Empleados de PILA aparecen en nómina y viceversa
+
+        **¿Y si hay diferencias entre lo provisionado y lo pagado?**
+
+        En esta versión solo se **muestran** las cifras. La generación de
+        líneas de ajuste contable automático en Comp 9 (con detalle
+        `AJUSTE PILA <CONCEPTO>`) está planeada para una próxima iteración.
+
+        **¿Qué archivo subir?**
+
+        - El PDF original que descargas de SuAporte (ej: `Prefactura_84919326.pdf`)
+        - O un Excel exportado de la misma planilla
+        """
+    )
+
+    if PILA_DISPONIBLE:
+        st.success("✅ El lector de PILA está activo en este servidor.")
+    else:
+        st.error(
+            "❌ El lector de PILA NO está disponible. "
+            "Verifica que `core/procesadores/procesador_pila.py` exista y que "
+            "`pdfplumber` esté en `requirements.txt`."
         )
