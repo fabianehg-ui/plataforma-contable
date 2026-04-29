@@ -185,6 +185,56 @@ def _limpiar_nombre_pdf(nombre_raw: str, catalogo_empleados: Optional[Dict[str, 
     return re.sub(r"\s+", " ", nombre_raw).strip()
 
 
+def _parsear_dias(bloque: str) -> tuple:
+    """Parsea el bloque de días de la sección II del PDF PILA.
+
+    El bloque puede venir en 3 formas (siempre 5 valores: 0 + d_pens + d_ccf + d_afp + d_arp):
+      - Pegado:        '030303030'    → 0,30,30,30,30 → (30,30,30,30)
+      - Separado:      '0 30 30 30 30' → (30,30,30,30)
+      - Mixto bajo:    '0 1 1 1 1'    → (1,1,1,1)
+      - Pegado bajo:   '027272727'    → 0,27,27,27,27 → (27,27,27,27)
+
+    Retorna: (dias_pension, dias_caja, dias_salud, dias_arl)
+    """
+    if not bloque:
+        return (0, 0, 0, 0)
+
+    # Si tiene espacios, parsear directamente
+    if " " in bloque:
+        partes = [int(p) for p in bloque.split() if p.strip().isdigit()]
+        if len(partes) == 5:
+            return (partes[1], partes[2], partes[3], partes[4])
+        elif len(partes) == 4:
+            return (partes[0], partes[1], partes[2], partes[3])
+        else:
+            return (0, 0, 0, 0)
+
+    # Está pegado. Es '0' + 4 grupos iguales de 1-2 dígitos.
+    if not bloque.startswith("0"):
+        return (0, 0, 0, 0)
+
+    resto = bloque[1:]
+    n = len(resto)
+    if n % 4 == 0 and n > 0:
+        ancho = n // 4
+        try:
+            d1 = int(resto[0:ancho])
+            d2 = int(resto[ancho:ancho*2])
+            d3 = int(resto[ancho*2:ancho*3])
+            d4 = int(resto[ancho*3:ancho*4])
+            if all(0 <= d <= 31 for d in (d1, d2, d3, d4)):
+                return (d1, d2, d3, d4)
+        except ValueError:
+            pass
+
+    # Fallback: tomar grupos de hasta 2 dígitos
+    grupos = re.findall(r"\d{1,2}", resto)
+    grupos_int = [int(g) for g in grupos[:4]]
+    while len(grupos_int) < 4:
+        grupos_int.append(0)
+    return tuple(grupos_int[:4])
+
+
 # ============================================================
 # Lectura de PDF (formato Enlace Operativo / SuAporte)
 # ============================================================
@@ -249,25 +299,26 @@ def _parsear_texto_pila(texto: str, pila: PilaLeida) -> PilaLeida:
     # Línea típica:
     # CC 39177488 <NOMBRE_DESORDENADO> 01 00 X 0 30 30 30 30 PROTECCION $ 3.680.679 $ 589.000 EPS SURA $ ...
     #
-    # Patrón: CC <ced> <texto> <tipo cot 2 dígitos> <subtipo 2 dígitos> X 0 <d1> <d2> <d3> <d4> <ADMIN> $ <IBC> $ <APORTE> ...
+    # ⚠️ Días pueden venir PEGADOS (030303030) o SEPARADOS (0 30 30 30 30 / 0 1 1 1 1).
+    # Por eso capturamos la zona de días como bloque opaco y la parseamos aparte.
     patron = re.compile(
         r"CC\s+(\d{6,15})\s+"                          # 1: cédula
         r"(.+?)\s+"                                    # 2: nombre (no greedy)
         r"(\d{2})\s+(\d{2})\s+"                        # 3,4: tipo cotizante, subtipo
-        r"X\s+\d+\s*"                                  # novedades + 0 inicial
-        r"(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*"            # 5,6,7,8: días pens, ccf, afp, arp
-        r"([A-ZÁÉÍÓÚÑ]+)\s*"                            # 9: admin pensión
-        r"\$\s*([\d\.,]+)\s*"                          # 10: IBC pensión
-        r"\$\s*([\d\.,]+)\s*"                          # 11: aporte pensión
-        r"([A-Z][A-Z\s]+?)\s+"                          # 12: admin salud
-        r"\$\s*([\d\.,]+)\s*"                          # 13: IBC salud
-        r"\$\s*([\d\.,]+)\s*"                          # 14: aporte salud
-        r"([A-Z][A-Z\s]+?)\s+"                          # 15: admin ARL
-        r"\$\s*([\d\.,]+)\s*"                          # 16: IBC riesgos
-        r"\$\s*([\d\.,]+)\s*"                          # 17: aporte riesgos
-        r"([A-Z]+)\s*"                                  # 18: admin caja
-        r"\$\s*([\d\.,]+)\s*"                          # 19: IBC caja
-        r"\$\s*([\d\.,]+)",                             # 20: aporte caja
+        r"X\s+"                                        # marca novedad
+        r"([\d\s]+?)\s*"                               # 5: bloque de días (opaco)
+        r"([A-ZÁÉÍÓÚÑ]+)\s*"                            # 6: admin pensión
+        r"\$\s*([\d\.,]+)\s*"                          # 7: IBC pensión
+        r"\$\s*([\d\.,]+)\s*"                          # 8: aporte pensión
+        r"([A-Z][A-Z\s]+?)\s+"                          # 9: admin salud
+        r"\$\s*([\d\.,]+)\s*"                          # 10: IBC salud
+        r"\$\s*([\d\.,]+)\s*"                          # 11: aporte salud
+        r"([A-Z][A-Z\s]+?)\s+"                          # 12: admin ARL
+        r"\$\s*([\d\.,]+)\s*"                          # 13: IBC riesgos
+        r"\$\s*([\d\.,]+)\s*"                          # 14: aporte riesgos
+        r"([A-Z]+)\s*"                                  # 15: admin caja
+        r"\$\s*([\d\.,]+)\s*"                          # 16: IBC caja
+        r"\$\s*([\d\.,]+)",                             # 17: aporte caja
         re.IGNORECASE,
     )
 
@@ -278,30 +329,30 @@ def _parsear_texto_pila(texto: str, pila: PilaLeida) -> PilaLeida:
         if emp is None:
             emp = AporteEmpleado(cedula=cedula, nombre=nombre)
             pila.por_empleado[cedula] = emp
-        else:
-            # Empleada con varios renglones (ej. cambios de IBC) → SUMAR aportes
-            pass
 
-        emp.dias_pension += int(m.group(5))
-        emp.dias_caja += int(m.group(6))
-        emp.dias_salud += int(m.group(7))
-        emp.dias_arl += int(m.group(8))
+        # Parsear bloque de días: puede venir pegado o separado
+        bloque_dias = m.group(5).strip()
+        d_pens, d_ccf, d_afp, d_arp = _parsear_dias(bloque_dias)
+        emp.dias_pension += d_pens
+        emp.dias_caja += d_ccf
+        emp.dias_salud += d_afp
+        emp.dias_arl += d_arp
 
-        emp.administradora_pension = m.group(9).strip()
-        emp.ibc_pension += _to_float(m.group(10))
-        emp.aporte_pension += _to_float(m.group(11))
+        emp.administradora_pension = m.group(6).strip()
+        emp.ibc_pension += _to_float(m.group(7))
+        emp.aporte_pension += _to_float(m.group(8))
 
-        emp.administradora_salud = m.group(12).strip()
-        emp.ibc_salud += _to_float(m.group(13))
-        emp.aporte_salud += _to_float(m.group(14))
+        emp.administradora_salud = m.group(9).strip()
+        emp.ibc_salud += _to_float(m.group(10))
+        emp.aporte_salud += _to_float(m.group(11))
 
-        emp.administradora_arl = m.group(15).strip()
-        emp.ibc_arl += _to_float(m.group(16))
-        emp.aporte_arl += _to_float(m.group(17))
+        emp.administradora_arl = m.group(12).strip()
+        emp.ibc_arl += _to_float(m.group(13))
+        emp.aporte_arl += _to_float(m.group(14))
 
-        emp.administradora_caja = m.group(18).strip()
-        emp.ibc_caja += _to_float(m.group(19))
-        emp.aporte_caja += _to_float(m.group(20))
+        emp.administradora_caja = m.group(15).strip()
+        emp.ibc_caja += _to_float(m.group(16))
+        emp.aporte_caja += _to_float(m.group(17))
 
     pila.log.append(f"   👥 Empleados detectados: {len(pila.por_empleado)}")
 
