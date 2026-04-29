@@ -226,7 +226,7 @@ with tab_procesar:
 
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Empleadas", resumen.get("n_empleados", 0))
+                st.metric("Empleadas", resumen.get("empleados_procesados", 0))
             with col2:
                 st.metric("Líneas plano", len(df_plano))
             with col3:
@@ -384,15 +384,17 @@ with tab_procesar:
                         )
 
                     # Validación cruzada empleado-vs-empleado entre PILA y Nómina
-                    cedulas_pila = set(pila.por_empleado.keys())
+                    cedulas_pila = set(str(c) for c in pila.por_empleado.keys())
                     cedulas_nomina = set()
-                    if "empleados_procesados" in resumen:
+                    detalle_emp = resumen.get("detalle_empleados", [])
+                    if isinstance(detalle_emp, list) and detalle_emp:
                         cedulas_nomina = set(
-                            str(c) for c in resumen["empleados_procesados"]
+                            str(item.get("cc", "")) for item in detalle_emp
+                            if item.get("cc")
                         )
-                    elif "n_empleados" in resumen:
+                    else:
                         # Fallback: usar el catálogo embebido
-                        cedulas_nomina = set(empleados_dict.keys())
+                        cedulas_nomina = set(str(k) for k in empleados_dict.keys())
 
                     solo_pila = cedulas_pila - cedulas_nomina
                     solo_nomina = cedulas_nomina - cedulas_pila
@@ -400,12 +402,12 @@ with tab_procesar:
                     if solo_pila:
                         st.warning(
                             "⚠️ Empleados en **PILA pero no en nómina**: " +
-                            ", ".join(solo_pila)
+                            ", ".join(sorted(solo_pila))
                         )
                     if solo_nomina:
                         st.warning(
                             "⚠️ Empleados en **nómina pero no en PILA**: " +
-                            ", ".join(solo_nomina)
+                            ", ".join(sorted(solo_nomina))
                         )
                     if not solo_pila and not solo_nomina and cedulas_pila:
                         st.success(
@@ -478,8 +480,11 @@ with tab_empleados:
             st.metric("Total empleados", info.get("total", 0))
         with col_e2:
             st.metric(
-                "Áreas",
-                ", ".join(info.get("por_area", {}).keys()) or "—",
+                "Por tipo",
+                ", ".join(
+                    f"{tipo}: {cant}"
+                    for tipo, cant in info.get("por_tipo", {}).items()
+                ) or "—",
             )
         if "empleados" in info:
             st.dataframe(
