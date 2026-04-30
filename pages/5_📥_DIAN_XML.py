@@ -104,11 +104,25 @@ with tab_proc:
         anio_mes = f"{anio}{mes:02d}"
 
     with c2:
-        usar_filtro_fecha = st.checkbox("Filtrar por rango de fechas", value=True,
-                                        help="Descartar XMLs cuya fecha de emisión esté fuera del rango")
+        modo_filtro = st.radio(
+            "Filtrar por fecha",
+            ["No filtrar (procesar todo)", "Por fecha de emisión", "Por fecha de recepción DIAN"],
+            index=0,
+            help=(
+                "📌 Recomendado: 'No filtrar' la primera vez para ver todo lo que descargaste.\n\n"
+                "**Emisión** = fecha en que el proveedor creó el documento.\n\n"
+                "**Recepción DIAN** = fecha en que DIAN recibió el documento "
+                "(se extrae del nombre del archivo descargado por el bookmarklet)."
+            ),
+        )
+        modo_filtro_codigo = {
+            "No filtrar (procesar todo)": "ninguno",
+            "Por fecha de emisión": "emision",
+            "Por fecha de recepción DIAN": "recepcion",
+        }[modo_filtro]
         fecha_desde = ""
         fecha_hasta = ""
-        if usar_filtro_fecha:
+        if modo_filtro_codigo != "ninguno":
             ultimo_dia = (date(anio + (1 if mes == 12 else 0), (mes % 12) + 1, 1)
                           - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
             fecha_desde = st.date_input("Desde", value=date(anio, mes, 1)).strftime("%Y-%m-%d")
@@ -146,6 +160,7 @@ with tab_proc:
                     zips_input, registry, anio_mes,
                     fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
                     empresa_id_forzada=emp_forzada,
+                    modo_filtro_fecha=modo_filtro_codigo,
                 )
             except Exception as ex:
                 st.error(f"Error procesando: {ex}")
@@ -195,6 +210,38 @@ with tab_proc:
                 df_inc = pd.DataFrame(resumen.inconsistencias_tipo)
                 st.dataframe(df_inc, use_container_width=True, hide_index=True)
                 st.caption("Esto suele ocurrir si el ZIP descargado tenía 'Todos' como filtro. El sistema procesa los XMLs según su tipo real.")
+
+        # Detalle de descartados (NUEVO en v0.2.1)
+        if resumen.descartados_detalle:
+            with st.expander(
+                f"🔍 Ver detalle de los {len(resumen.descartados_detalle)} documento(s) descartado(s)",
+                expanded=False,
+            ):
+                st.caption(
+                    "Aquí puedes ver exactamente qué documentos NO entraron al plano y por qué. "
+                    "Usa esta información para ajustar el filtro de fechas o detectar duplicados inesperados."
+                )
+                df_desc = pd.DataFrame(resumen.descartados_detalle)
+                # Ordenar columnas para que sean legibles
+                cols_orden = [c for c in [
+                    "razon", "documento", "tipo", "fecha_emision", "fecha_recepcion",
+                    "valor", "nit_emisor", "nombre_emisor", "modo_filtro", "cufe", "zip", "archivo", "error"
+                ] if c in df_desc.columns]
+                df_desc = df_desc[cols_orden]
+                st.dataframe(df_desc, use_container_width=True, hide_index=True,
+                             column_config={
+                                 "valor": st.column_config.NumberColumn(format="$%d"),
+                             })
+
+                # Botón para descargar el detalle
+                buf_desc = io.BytesIO()
+                df_desc.to_excel(buf_desc, index=False)
+                st.download_button(
+                    "⬇️ Descargar detalle de descartados (.xlsx)",
+                    data=buf_desc.getvalue(),
+                    file_name=f"descartados_{st.session_state.get('anio_mes', 'XXXXXX')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
 
         # ----------------------------------------------------------- POR EMPRESA
         st.markdown("---")
