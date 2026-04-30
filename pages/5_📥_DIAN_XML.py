@@ -1,31 +1,45 @@
 """
-📥 DIAN XML — Procesamiento masivo multi-empresa, multi-zip
-Página Streamlit v0.2
+📥 DIAN XML — Procesamiento masivo multi-empresa
+Página Streamlit v0.3 (30-04-2026)
 
-Flujo soportado:
-1. Usuario sube N ZIPs descargados del bookmarklet (típicamente uno por tipo: FE, NC, ND, DS)
-2. Sistema deduplica por CUFE, filtra por rango de fechas, detecta empresa por NIT receptor
-3. Aplica mapeo NIT + reglas ítem (con auto-detección de servicios públicos)
-4. Genera plano contable (consolidado o separado por comprobante)
-5. Reporte ejecutivo con KPIs
+Cambios vs v0.2:
+- UN SOLO uploader para "Recibidos" (el ZIP unificado del bookmarklet v0.3)
+  reemplaza las 4 cajas anteriores (FE/NC/ND/SP).
+- NUEVO uploader para "Emitidos" (XMLs emitidos por la empresa, opcional).
+- El procesador detecta automáticamente el tipo de cada documento desde
+  el prefijo del nombre (FE_, NC_, ND_, DS_, ??_) o desde el contenido del XML.
+- Mapeo automático a comprobantes contables (3, 7, 12) según tipo.
 """
 import io
 import json
 import zipfile
 from datetime import date
-from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
+# Imports nuevos del motor v0.3
+from core.procesadores.motor_mapeo_v03 import (
+    CatalogoEmpresa,
+    resolver_mapeo,
+    calcular_retencion_renta,
+    calcular_reteiva,
+    calcular_reteica,
+    formato_cc_salida,
+)
+from core.procesadores.detector_tipo_doc import (
+    detectar_tipo_documento,
+    mapear_a_comprobante,
+)
+
+# Imports legacy del v0.2 (parser UBL, generador de plano)
 from core.procesadores.procesador_dian_xml import (
     RegistryEmpresas,
     procesar_multiples_zips,
     separar_lineas_por_comprobante,
     generar_reporte_ejecutivo,
     exportar_plano_txt,
-    es_servicio_publico,
     ZipInput,
 )
 
@@ -35,8 +49,9 @@ st.set_page_config(page_title="DIAN XML", page_icon="📥", layout="wide")
 
 st.title("📥 DIAN XML — Procesamiento masivo multi-empresa")
 st.caption(
-    "Sube los ZIPs descargados del bookmarklet (uno por tipo: FE, NC, ND, DS). "
-    "El sistema los junta, deduplica, aplica mapeo NIT + reglas de ítem y genera el plano contable."
+    "Sube el ZIP descargado del bookmarklet (contiene FE + NC + ND + DS unificados). "
+    "El sistema detecta el tipo de cada documento, aplica mapeo NIT, "
+    "asigna CC desde dirección/notas y genera el plano contable."
 )
 
 # ----------------------------------------------------------- Registry
@@ -58,541 +73,413 @@ tab_proc, tab_mapeo, tab_empresas = st.tabs(
 )
 
 # ============================================================================
-# TAB 1: PROCESAR — UPLOADER MÚLTIPLE
+# TAB 1: PROCESAR — DOS UPLOADERS (RECIBIDOS + EMITIDOS)
 # ============================================================================
 with tab_proc:
-    st.subheader("1️⃣ Sube los ZIPs (uno por tipo de documento)")
+    st.subheader("1️⃣ Sube los ZIPs descargados")
 
-    col_fe, col_nc, col_nd, col_ds = st.columns(4)
-    with col_fe:
-        st.markdown("**📄 Facturas Electrónicas**")
-        zip_fe = st.file_uploader("FE", type=["zip"], key="zip_fe", label_visibility="collapsed",
-                                   accept_multiple_files=True, help="ZIP descargado del bookmarklet con tipo='Factura electrónica'")
-    with col_nc:
-        st.markdown("**🔻 Notas Crédito**")
-        zip_nc = st.file_uploader("NC", type=["zip"], key="zip_nc", label_visibility="collapsed",
-                                   accept_multiple_files=True, help="ZIP con notas crédito recibidas")
-    with col_nd:
-        st.markdown("**🔺 Notas Débito**")
-        zip_nd = st.file_uploader("ND", type=["zip"], key="zip_nd", label_visibility="collapsed",
-                                   accept_multiple_files=True, help="ZIP con notas débito recibidas")
-    with col_ds:
-        st.markdown("**🏛️ Servicios Públicos**")
-        zip_ds = st.file_uploader("DS", type=["zip"], key="zip_ds", label_visibility="collapsed",
-                                   accept_multiple_files=True,
-                                   help="ZIP con FE de empresas de servicios públicos (EPM, Codensa, EAAB, Claro, etc.)")
+    col_recibidos, col_emitidos = st.columns(2)
 
-    archivos_subidos = (
-        [(f, "FE") for f in (zip_fe or [])] +
-        [(f, "NC") for f in (zip_nc or [])] +
-        [(f, "ND") for f in (zip_nd or [])] +
-        [(f, "DS") for f in (zip_ds or [])]
-    )
+    # ── RECIBIDOS ──────────────────────────────────────────
+    with col_recibidos:
+        st.markdown("### 📥 Documentos recibidos")
+        st.caption(
+            "ZIP único del bookmarklet con TODO: facturas, notas crédito, "
+            "notas débito y documentos soporte recibidos. El sistema detecta "
+            "automáticamente el tipo de cada uno."
+        )
+        zips_recibidos = st.file_uploader(
+            "Subir ZIP de recibidos",
+            type=["zip"],
+            accept_multiple_files=True,
+            key="zips_recibidos",
+            help="Generado con el bookmarklet DIAN v0.3 (un solo ZIP con todo)"
+        )
+        if zips_recibidos:
+            st.success(f"✅ {len(zips_recibidos)} archivo(s) cargado(s)")
+            for z in zips_recibidos:
+                size_mb = z.size / (1024 * 1024)
+                st.caption(f"  • {z.name} ({size_mb:.1f} MB)")
 
-    if archivos_subidos:
-        total_mb = sum(f.size for f, _ in archivos_subidos) / (1024 * 1024)
-        st.success(f"📦 {len(archivos_subidos)} archivo(s) cargado(s) · {total_mb:.2f} MB total")
+    # ── EMITIDOS ───────────────────────────────────────────
+    with col_emitidos:
+        st.markdown("### 📤 Documentos emitidos")
+        st.caption(
+            "ZIP con los XMLs emitidos por la empresa a sus clientes "
+            "(facturas de venta, NC, ND emitidas). **Opcional.**"
+        )
+        zips_emitidos = st.file_uploader(
+            "Subir ZIP de emitidos",
+            type=["zip"],
+            accept_multiple_files=True,
+            key="zips_emitidos",
+            help="Por ahora solo se muestra resumen; el procesamiento contable de ventas viene en próxima versión"
+        )
+        if zips_emitidos:
+            st.info(
+                f"📊 {len(zips_emitidos)} archivo(s) cargado(s). "
+                "**Función de ventas en construcción** — se mostrará un resumen por ahora."
+            )
+            for z in zips_emitidos:
+                size_mb = z.size / (1024 * 1024)
+                st.caption(f"  • {z.name} ({size_mb:.1f} MB)")
 
-    # ----------------------------------------------------------- Configuración
-    st.markdown("---")
+    st.divider()
+
+    # ── CONFIGURACIÓN ─────────────────────────────────────
     st.subheader("2️⃣ Configuración del procesamiento")
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        anio = st.number_input("Año contable", min_value=2020, max_value=2030, value=date.today().year)
-        mes = st.number_input("Mes contable", min_value=1, max_value=12, value=date.today().month)
-        anio_mes = f"{anio}{mes:02d}"
-
-    with c2:
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        anio = st.number_input("Año contable", min_value=2020, max_value=2030,
+                                value=date.today().year, step=1, key="anio_proc")
+        mes = st.number_input("Mes contable", min_value=1, max_value=12,
+                               value=max(date.today().month - 1, 1), step=1, key="mes_proc")
+    with col_b:
+        st.markdown("**Filtrar por fecha**")
         modo_filtro = st.radio(
-            "Filtrar por fecha",
-            ["No filtrar (procesar todo)", "Por fecha de emisión", "Por fecha de recepción DIAN"],
+            "Filtro de fechas",
+            options=["No filtrar (procesar todo)", "Por fecha de emisión", "Por fecha de recepción DIAN"],
             index=0,
-            help=(
-                "📌 Recomendado: 'No filtrar' la primera vez para ver todo lo que descargaste.\n\n"
-                "**Emisión** = fecha en que el proveedor creó el documento.\n\n"
-                "**Recepción DIAN** = fecha en que DIAN recibió el documento "
-                "(se extrae del nombre del archivo descargado por el bookmarklet)."
-            ),
+            label_visibility="collapsed",
+            key="modo_filtro_fecha"
         )
-        modo_filtro_codigo = {
-            "No filtrar (procesar todo)": "ninguno",
-            "Por fecha de emisión": "emision",
-            "Por fecha de recepción DIAN": "recepcion",
-        }[modo_filtro]
-        fecha_desde = ""
-        fecha_hasta = ""
-        if modo_filtro_codigo != "ninguno":
-            ultimo_dia = (date(anio + (1 if mes == 12 else 0), (mes % 12) + 1, 1)
-                          - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-            fecha_desde = st.date_input("Desde", value=date(anio, mes, 1)).strftime("%Y-%m-%d")
-            fecha_hasta = st.date_input("Hasta", value=date.fromisoformat(ultimo_dia)).strftime("%Y-%m-%d")
-
-    with c3:
-        forzar_empresa = st.selectbox(
+    with col_c:
+        empresa_forzada = st.selectbox(
             "Empresa",
-            ["(detectar por NIT receptor)"] + [f"{e['razon_social']} (NIT {e['nit']})" for e in empresas],
-            help="Por defecto se detecta por NIT receptor de cada XML."
+            options=["(detector por receptor NIT)"] + [
+                f"{e['nit']} — {e['razon_social']}" for e in empresas
+            ],
+            index=0,
+            key="empresa_forzada",
+            help="Por defecto detecta la empresa según el NIT receptor de cada XML"
         )
         modo_plano = st.radio(
             "Plano resultante",
-            ["Plano único consolidado", "Separado por comprobante"],
-            help="Algunos sistemas contables prefieren cargar un .txt por comprobante (COMP 7 separado de COMP 13, etc.)"
+            options=["Plano único consolidado", "Separado por comprobante"],
+            index=0,
+            key="modo_plano"
         )
 
-    # ----------------------------------------------------------- BOTÓN PROCESAR
-    st.markdown("---")
-    if archivos_subidos and st.button("🚀 Procesar todos los ZIPs", type="primary", use_container_width=True):
-        zips_input = []
-        for f, tipo in archivos_subidos:
-            zips_input.append(ZipInput(nombre=f.name, contenido=f.read(), tipo_declarado=tipo))
+    st.divider()
 
-        emp_forzada = None
-        if not forzar_empresa.startswith("("):
-            for e in empresas:
-                if e["razon_social"] in forzar_empresa:
-                    emp_forzada = e["id"]
-                    break
+    # ── BOTÓN PROCESAR ────────────────────────────────────
+    if not zips_recibidos and not zips_emitidos:
+        st.info("👆 Sube al menos un ZIP para continuar")
+    else:
+        if st.button("🚀 Procesar todos los ZIPs", type="primary", use_container_width=True,
+                     key="btn_procesar_zips"):
+            procesar_y_mostrar(zips_recibidos or [], zips_emitidos or [],
+                                anio, mes, modo_filtro, empresa_forzada, modo_plano)
 
-        with st.spinner(f"Procesando {len(zips_input)} ZIP(s)..."):
+
+def procesar_y_mostrar(zips_recibidos, zips_emitidos, anio, mes, modo_filtro,
+                        empresa_forzada, modo_plano):
+    """Orquesta el procesamiento completo y muestra resultados."""
+
+    # ── Procesar RECIBIDOS ────────────────────────────────
+    if zips_recibidos:
+        with st.spinner("Procesando documentos recibidos..."):
+            zip_inputs = [
+                ZipInput(
+                    nombre=z.name,
+                    contenido=z.getbuffer().tobytes(),
+                    tipo_declarado=None  # ya no se usa: el detector identifica solo
+                )
+                for z in zips_recibidos
+            ]
             try:
-                resultados, resumen = procesar_multiples_zips(
-                    zips_input, registry, anio_mes,
-                    fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
-                    empresa_id_forzada=emp_forzada,
-                    modo_filtro_fecha=modo_filtro_codigo,
+                resultado = procesar_multiples_zips(
+                    zip_inputs,
+                    registry,
+                    anio_contable=anio,
+                    mes_contable=mes,
+                    modo_filtro_fecha=modo_filtro,
+                    empresa_forzada=(
+                        empresa_forzada.split(" — ")[0]
+                        if empresa_forzada != "(detector por receptor NIT)"
+                        else None
+                    ),
                 )
-            except Exception as ex:
-                st.error(f"Error procesando: {ex}")
-                st.exception(ex)
-                st.stop()
+            except Exception as e:
+                st.error(f"⚠️ Error al procesar recibidos: {e}")
+                st.exception(e)
+                return
 
-        st.session_state["resultados"] = resultados
-        st.session_state["resumen"] = resumen
-        st.session_state["anio_mes"] = anio_mes
-        st.session_state["modo_plano"] = modo_plano
+        st.success(f"✅ {len(resultado.documentos)} documentos recibidos procesados")
+        mostrar_resultados_recibidos(resultado, modo_plano)
 
-    # ----------------------------------------------------------- RESULTADOS
-    if "resultados" in st.session_state:
-        resultados = st.session_state["resultados"]
-        resumen = st.session_state["resumen"]
-        modo_plano = st.session_state.get("modo_plano", "Plano único consolidado")
+    # ── Procesar EMITIDOS (placeholder) ───────────────────
+    if zips_emitidos:
+        st.divider()
+        st.subheader("📤 Documentos emitidos (resumen)")
+        with st.spinner("Inspeccionando emitidos..."):
+            resumen = inspeccionar_emitidos(zips_emitidos)
+        mostrar_resumen_emitidos(resumen)
 
-        st.markdown("---")
-        st.subheader("3️⃣ Resumen de ingesta")
 
-        col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
-        col_r1.metric("XMLs extraídos", resumen.total_xmls_extraidos)
-        col_r2.metric("Duplicados descartados", resumen.duplicados_descartados,
-                      delta_color="off" if resumen.duplicados_descartados == 0 else "inverse")
-        col_r3.metric("Fuera de rango", resumen.fuera_de_rango_fecha,
-                      delta_color="off" if resumen.fuera_de_rango_fecha == 0 else "inverse")
-        col_r4.metric("Errores parseo", resumen.errores_parseo,
-                      delta_color="off" if resumen.errores_parseo == 0 else "inverse")
-        col_r5.metric("Empresas detectadas", len(resumen.por_empresa))
+def inspeccionar_emitidos(zips_emitidos):
+    """
+    Lee los ZIPs de emitidos y devuelve un resumen sin generar plano contable.
+    Por ahora solo cuenta documentos por tipo y total facturado.
+    """
+    import xml.etree.ElementTree as ET
+    NS = {
+        'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
+        'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
+    }
 
-        # Distribución por tipo
-        if resumen.por_tipo:
-            st.markdown("**Distribución por tipo:**")
-            tipos_label = {
-                "factura_recibida": "📄 Facturas",
-                "nota_credito_recibida": "🔻 NC",
-                "nota_debito_recibida": "🔺 ND",
-                "documento_soporte_recibido": "📋 DS",
-            }
-            cols = st.columns(len(resumen.por_tipo))
-            for col, (tipo, n) in zip(cols, resumen.por_tipo.items()):
-                col.metric(tipos_label.get(tipo, tipo), n)
+    docs = []
+    for z_obj in zips_emitidos:
+        zf = zipfile.ZipFile(io.BytesIO(z_obj.getbuffer().tobytes()))
+        for name in zf.namelist():
+            if name.endswith('.zip'):
+                # ZIP anidado
+                with zf.open(name) as f:
+                    inner_zf = zipfile.ZipFile(io.BytesIO(f.read()))
+                    for inner_name in inner_zf.namelist():
+                        if inner_name.endswith('.xml'):
+                            with inner_zf.open(inner_name) as fx:
+                                try:
+                                    xml_content = fx.read().decode('utf-8', errors='replace')
+                                    info = _extraer_info_basica_emitido(
+                                        xml_content, name, NS
+                                    )
+                                    if info:
+                                        docs.append(info)
+                                except Exception:
+                                    pass
+            elif name.endswith('.xml'):
+                with zf.open(name) as f:
+                    try:
+                        xml_content = f.read().decode('utf-8', errors='replace')
+                        info = _extraer_info_basica_emitido(xml_content, name, NS)
+                        if info:
+                            docs.append(info)
+                    except Exception:
+                        pass
 
-        # Inconsistencias
-        if resumen.inconsistencias_tipo:
-            with st.expander(f"⚠️ {len(resumen.inconsistencias_tipo)} inconsistencia(s) tipo declarado vs real"):
-                df_inc = pd.DataFrame(resumen.inconsistencias_tipo)
-                st.dataframe(df_inc, use_container_width=True, hide_index=True)
-                st.caption("Esto suele ocurrir si el ZIP descargado tenía 'Todos' como filtro. El sistema procesa los XMLs según su tipo real.")
+    # Resumen agregado
+    df = pd.DataFrame(docs) if docs else pd.DataFrame()
+    return {
+        'docs': docs,
+        'df': df,
+        'total_docs': len(docs),
+        'total_facturado': df['total'].sum() if not df.empty and 'total' in df.columns else 0,
+        'total_iva': df['iva'].sum() if not df.empty and 'iva' in df.columns else 0,
+        'por_tipo': df['tipo'].value_counts().to_dict() if not df.empty and 'tipo' in df.columns else {},
+        'top_clientes': (
+            df.groupby(['nit_receptor', 'nombre_receptor'])['total']
+            .sum().sort_values(ascending=False).head(10).reset_index()
+            .to_dict('records')
+            if not df.empty else []
+        ),
+    }
 
-        # Detalle de descartados (NUEVO en v0.2.1)
-        if resumen.descartados_detalle:
-            with st.expander(
-                f"🔍 Ver detalle de los {len(resumen.descartados_detalle)} documento(s) descartado(s)",
-                expanded=False,
-            ):
-                st.caption(
-                    "Aquí puedes ver exactamente qué documentos NO entraron al plano y por qué. "
-                    "Usa esta información para ajustar el filtro de fechas o detectar duplicados inesperados."
-                )
-                df_desc = pd.DataFrame(resumen.descartados_detalle)
-                # Ordenar columnas para que sean legibles
-                cols_orden = [c for c in [
-                    "razon", "documento", "tipo", "fecha_emision", "fecha_recepcion",
-                    "valor", "nit_emisor", "nombre_emisor", "modo_filtro", "cufe", "zip", "archivo", "error"
-                ] if c in df_desc.columns]
-                df_desc = df_desc[cols_orden]
-                st.dataframe(df_desc, use_container_width=True, hide_index=True,
-                             column_config={
-                                 "valor": st.column_config.NumberColumn(format="$%d"),
-                             })
 
-                # Botón para descargar el detalle
-                buf_desc = io.BytesIO()
-                df_desc.to_excel(buf_desc, index=False)
-                st.download_button(
-                    "⬇️ Descargar detalle de descartados (.xlsx)",
-                    data=buf_desc.getvalue(),
-                    file_name=f"descartados_{st.session_state.get('anio_mes', 'XXXXXX')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+def _extraer_info_basica_emitido(xml_content, archivo_nombre, NS):
+    """Extrae info mínima de un XML emitido (factura/NC/ND de venta)."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(xml_content)
+    except ET.ParseError:
+        return None
 
-        # ----------------------------------------------------------- POR EMPRESA
-        st.markdown("---")
-        st.subheader(f"4️⃣ Resultados por empresa ({len(resultados)})")
+    # Detectar tipo
+    tipo, _ = detectar_tipo_documento(xml_root=root, nombre_archivo=archivo_nombre)
+    if tipo == 'ACUSE':
+        return None
 
-        for r in resultados:
-            cuadre_emoji = "✅" if r.cuadrado else "❌"
-            with st.expander(
-                f"{cuadre_emoji} {r.empresa_razon_social} — "
-                f"{len(r.documentos)} doc(s) · {len(r.lineas_plano)} líneas · "
-                f"Db ${r.cuadre_db:,.0f} = Cr ${r.cuadre_cr:,.0f}",
-                expanded=True,
-            ):
-                if r.advertencias:
-                    for adv in r.advertencias:
-                        st.warning(f"⚠️ {adv}")
+    # Lo que en RECIBIDOS es "AccountingSupplierParty" (proveedor),
+    # en EMITIDOS también lo es… pero ahora ESE proveedor SOMOS NOSOTROS.
+    # El cliente está en "AccountingCustomerParty".
+    inner = root
+    # Si es AttachedDocument extraer el inner
+    tag = root.tag.split('}')[-1]
+    if tag == 'AttachedDocument':
+        for desc in root.iter('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Description'):
+            if desc.text and ('<Invoice' in desc.text or '<CreditNote' in desc.text or '<DebitNote' in desc.text):
+                try:
+                    inner = ET.fromstring(desc.text)
+                    break
+                except ET.ParseError:
+                    pass
 
-                if r.empresa_id == "(no identificada)":
-                    st.error("Estos documentos no pueden generarse en plano hasta que se configure la empresa receptora.")
-                    df = pd.DataFrame([
-                        {
-                            "NIT receptor": d.nit_receptor,
-                            "Receptor": d.nombre_receptor,
-                            "NIT emisor": d.nit_emisor,
-                            "Emisor": d.nombre_emisor,
-                            "Fecha": d.fecha_emision,
-                            "Doc": f"{d.prefijo}{d.numero}",
-                            "Valor": float(d.valor_total),
-                        }
-                        for d in r.documentos
-                    ])
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                    continue
+    cust = inner.find('.//cac:AccountingCustomerParty', NS)
+    nit_receptor = ''
+    nombre_receptor = ''
+    if cust is not None:
+        cid = cust.find('.//cbc:CompanyID', NS)
+        if cid is not None and cid.text:
+            nit_receptor = cid.text.strip()
+        rn = cust.find('.//cbc:RegistrationName', NS)
+        if rn is not None and rn.text:
+            nombre_receptor = rn.text.strip()
 
-                t1, t2, t3, t4, t5 = st.tabs([
-                    "📊 Reporte ejecutivo",
-                    "📋 Plano contable",
-                    "📄 Documentos",
-                    "🆕 NITs pendientes",
-                    "💾 Descargar"
-                ])
+    # Total
+    total_node = inner.find('.//cac:LegalMonetaryTotal/cbc:PayableAmount', NS)
+    total = float(total_node.text) if total_node is not None and total_node.text else 0.0
 
-                # --- TAB Reporte ejecutivo
-                with t1:
-                    rep = generar_reporte_ejecutivo(r)
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Compras netas", f"${rep['total_compras_netas']:,.0f}")
-                    c2.metric("IVA descontable", f"${rep['total_iva_descontable']:,.0f}")
-                    c3.metric("Retenciones practicadas", f"${rep['total_retenciones_practicadas']:,.0f}")
-                    c4.metric("NITs sin mapear",
-                              rep['nits_pendientes_mapeo'],
-                              delta_color="off" if rep['nits_pendientes_mapeo'] == 0 else "inverse")
+    # IVA
+    iva_total = 0.0
+    for ts in inner.findall('.//cac:TaxTotal//cac:TaxSubtotal', NS):
+        cat = ts.find('.//cac:TaxCategory/cac:TaxScheme/cbc:ID', NS)
+        amt = ts.find('.//cbc:TaxAmount', NS)
+        if cat is not None and cat.text == '01' and amt is not None and amt.text:
+            try:
+                iva_total += float(amt.text)
+            except ValueError:
+                pass
 
-                    st.markdown("**Distribución por tipo de documento:**")
-                    df_tipo = pd.DataFrame([
-                        {"Tipo": k.replace("_", " ").title(),
-                         "Cantidad": v["cantidad"],
-                         "Valor neto": v["valor_total"],
-                         "IVA": v["iva"]}
-                        for k, v in rep["por_tipo"].items()
-                    ])
-                    st.dataframe(df_tipo, use_container_width=True, hide_index=True,
-                                 column_config={
-                                     "Valor neto": st.column_config.NumberColumn(format="$%d"),
-                                     "IVA": st.column_config.NumberColumn(format="$%d"),
-                                 })
+    # Fecha
+    fecha_node = inner.find('cbc:IssueDate', NS)
+    fecha = fecha_node.text if fecha_node is not None else ''
 
-                    st.markdown("**Top 10 proveedores:**")
-                    df_prov = pd.DataFrame(rep["top_proveedores"])
-                    if not df_prov.empty:
-                        st.dataframe(df_prov, use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "valor": st.column_config.NumberColumn("Valor", format="$%d"),
-                                         "cantidad": st.column_config.NumberColumn("# Docs"),
-                                     })
+    # Número
+    numero_node = inner.find('cbc:ID', NS)
+    numero = numero_node.text if numero_node is not None else ''
 
-                # --- TAB Plano
-                with t2:
-                    if r.lineas_plano:
-                        df = pd.DataFrame([
-                            {
-                                "Fecha": l.fecha,
-                                "Comp": l.comprobante,
-                                "Consec": l.consecutivo,
-                                "Cuenta": l.cuenta,
-                                "CC": l.centro_costo,
-                                "NIT": l.nit_tercero,
-                                "Descripción": l.descripcion,
-                                "Doc": l.documento_referencia,
-                                "Débito": float(l.debito),
-                                "Crédito": float(l.credito),
-                            }
-                            for l in r.lineas_plano
-                        ])
-                        st.dataframe(df, use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "Débito": st.column_config.NumberColumn(format="$%d"),
-                                         "Crédito": st.column_config.NumberColumn(format="$%d"),
-                                     })
+    return {
+        'tipo': tipo,
+        'archivo': archivo_nombre,
+        'numero': numero,
+        'fecha': fecha,
+        'nit_receptor': nit_receptor,
+        'nombre_receptor': nombre_receptor,
+        'total': total,
+        'iva': iva_total,
+        'base': total - iva_total,
+    }
 
-                # --- TAB Documentos
-                with t3:
-                    df_docs = pd.DataFrame([
-                        {
-                            "Fecha": d.fecha_emision,
-                            "Tipo": d.tipo_nombre.replace("_", " ").title(),
-                            "ZIP origen": d.zip_origen,
-                            "NIT": d.nit_emisor,
-                            "Emisor": d.nombre_emisor,
-                            "Doc": f"{d.prefijo}{d.numero}",
-                            "Valor": float(d.valor_total),
-                            "Ítems": len(d.items),
-                            "Pendiente": "⚠️ Sí" if d.pendiente_revision else "",
-                        }
-                        for d in r.documentos
-                    ])
-                    st.dataframe(df_docs, use_container_width=True, hide_index=True,
-                                 column_config={
-                                     "Valor": st.column_config.NumberColumn(format="$%d"),
-                                 })
 
-                # --- TAB NITs pendientes
-                with t4:
-                    if r.nits_pendientes:
-                        st.warning(
-                            f"⚠️ {len(r.nits_pendientes)} NIT(s) sin mapeo. "
-                            "Estos documentos van a la cuenta fallback (519095). "
-                            "Catalogalos en la pestaña '🗂️ Editor de mapeo' y vuelve a procesar."
-                        )
-                        df_pend = pd.DataFrame([
-                            {
-                                "NIT": p["nit"],
-                                "Razón social": p["nombre"],
-                                "Documentos": p["documentos"],
-                                "Valor total": float(p["valor_total"]),
-                            }
-                            for p in r.nits_pendientes
-                        ])
-                        st.dataframe(df_pend, use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "Valor total": st.column_config.NumberColumn(format="$%d"),
-                                     })
+def mostrar_resumen_emitidos(resumen):
+    """Resumen ejecutivo de los emitidos (sin plano contable por ahora)."""
+    if resumen['total_docs'] == 0:
+        st.warning("⚠️ No se encontraron XMLs emitidos válidos en los ZIPs subidos.")
+        return
 
-                        # Sugerencias automáticas para servicios públicos
-                        sugerencias_sp = []
-                        for p in r.nits_pendientes:
-                            for d in r.documentos:
-                                if d.nit_emisor == p["nit"]:
-                                    es_sp, tipo_sp = es_servicio_publico(d)
-                                    if es_sp:
-                                        sugerencias_sp.append({
-                                            "NIT": p["nit"],
-                                            "Nombre": p["nombre"],
-                                            "Tipo detectado": tipo_sp,
-                                            "Cuenta sugerida": {
-                                                "energia": "513525",
-                                                "agua": "513530",
-                                                "gas": "513540",
-                                                "telecomunicaciones": "513535",
-                                                "aseo": "513545",
-                                            }.get(tipo_sp, "513525"),
-                                        })
-                                        break
-                        if sugerencias_sp:
-                            st.info("💡 **Sugerencias automáticas** — estos NITs parecen ser servicios públicos:")
-                            df_sug = pd.DataFrame(sugerencias_sp)
-                            st.dataframe(df_sug, use_container_width=True, hide_index=True)
-                    else:
-                        st.success("✅ Todos los NITs están catalogados.")
+    st.info(
+        "ℹ️ Los documentos emitidos NO se incluyen en el plano contable "
+        "todavía — esa función está en construcción. Por ahora se muestra un "
+        "resumen ejecutivo y un Excel con el detalle."
+    )
 
-                # --- TAB Descargar
-                with t5:
-                    if not r.lineas_plano:
-                        st.info("Sin líneas de plano para descargar.")
-                    else:
-                        nombre_base = f"plano_{r.empresa_id}_{st.session_state['anio_mes']}"
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Documentos emitidos", resumen['total_docs'])
+    col2.metric("Total facturado", f"${resumen['total_facturado']:,.0f}")
+    col3.metric("IVA generado", f"${resumen['total_iva']:,.0f}")
+    col4.metric("Tipos distintos", len(resumen['por_tipo']))
 
-                        if modo_plano == "Plano único consolidado":
-                            st.markdown("##### Plano único consolidado")
-                            colA, colB = st.columns(2)
-                            with colA:
-                                st.download_button(
-                                    "⬇️ Plano contable (.txt)",
-                                    data=exportar_plano_txt(r.lineas_plano),
-                                    file_name=f"{nombre_base}.txt",
-                                    mime="text/plain",
-                                    use_container_width=True,
-                                )
-                            with colB:
-                                df_exp = pd.DataFrame([
-                                    {
-                                        "FECHA": l.fecha, "COMPROBANTE": l.comprobante,
-                                        "CONSECUTIVO": l.consecutivo, "CUENTA": l.cuenta,
-                                        "CENTRO_COSTO": l.centro_costo, "NIT_TERCERO": l.nit_tercero,
-                                        "DESCRIPCION": l.descripcion, "DOCUMENTO_REF": l.documento_referencia,
-                                        "DEBITO": float(l.debito), "CREDITO": float(l.credito),
-                                    }
-                                    for l in r.lineas_plano
-                                ])
-                                buf_xlsx = io.BytesIO()
-                                df_exp.to_excel(buf_xlsx, index=False)
-                                st.download_button(
-                                    "⬇️ Plano contable (.xlsx)",
-                                    data=buf_xlsx.getvalue(),
-                                    file_name=f"{nombre_base}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True,
-                                )
-                        else:
-                            st.markdown("##### Plano separado por comprobante")
-                            separado = separar_lineas_por_comprobante(r.lineas_plano)
-                            # ZIP con un .txt por comprobante
-                            buf = io.BytesIO()
-                            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-                                for comp, lineas in separado.items():
-                                    fname = f"{nombre_base}_{comp.replace(' ', '')}.txt"
-                                    z.writestr(fname, exportar_plano_txt(lineas))
-                            st.download_button(
-                                f"⬇️ ZIP con {len(separado)} planos (uno por comprobante)",
-                                data=buf.getvalue(),
-                                file_name=f"{nombre_base}_separados.zip",
-                                mime="application/zip",
-                                use_container_width=True,
-                            )
-                            # Mostrar resumen
-                            st.markdown("**Contenido del ZIP:**")
-                            df_sep = pd.DataFrame([
-                                {
-                                    "Comprobante": comp,
-                                    "Líneas": len(ls),
-                                    "Débito total": sum(float(l.debito) for l in ls),
-                                    "Crédito total": sum(float(l.credito) for l in ls),
-                                    "Cuadra": "✅" if sum(l.debito for l in ls) == sum(l.credito for l in ls) else "❌",
-                                }
-                                for comp, ls in separado.items()
-                            ])
-                            st.dataframe(df_sep, use_container_width=True, hide_index=True,
-                                         column_config={
-                                             "Débito total": st.column_config.NumberColumn(format="$%d"),
-                                             "Crédito total": st.column_config.NumberColumn(format="$%d"),
-                                         })
+    # Por tipo
+    if resumen['por_tipo']:
+        st.markdown("**Distribución por tipo de documento:**")
+        df_tipos = pd.DataFrame(
+            list(resumen['por_tipo'].items()),
+            columns=['Tipo', 'Cantidad']
+        )
+        df_tipos['Comprobante (sugerido)'] = df_tipos['Tipo'].map({
+            'FE': '5 - Venta',
+            'NC': '11 - NC venta',
+            'ND': '8 - ND venta',
+            'DS': 'N/A (no aplica para emisor)',
+        }).fillna('—')
+        st.dataframe(df_tipos, use_container_width=True, hide_index=True)
 
-                        # Reporte ejecutivo JSON
-                        st.markdown("##### Reporte ejecutivo")
-                        rep = generar_reporte_ejecutivo(r)
-                        st.download_button(
-                            "⬇️ Reporte ejecutivo (.json)",
-                            data=json.dumps(rep, indent=2, ensure_ascii=False, default=str),
-                            file_name=f"reporte_{r.empresa_id}_{st.session_state['anio_mes']}.json",
-                            mime="application/json",
-                            use_container_width=True,
-                        )
+    # Top clientes
+    if resumen['top_clientes']:
+        st.markdown("**Top 10 clientes por facturación:**")
+        df_top = pd.DataFrame(resumen['top_clientes'])
+        st.dataframe(df_top, use_container_width=True, hide_index=True)
+
+    # Excel descargable
+    if not resumen['df'].empty:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            resumen['df'].to_excel(writer, sheet_name='Emitidos', index=False)
+        st.download_button(
+            "📥 Descargar Excel de emitidos",
+            data=buffer.getvalue(),
+            file_name=f"emitidos_{date.today().isoformat()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_emitidos_xlsx"
+        )
+
+
+def mostrar_resultados_recibidos(resultado, modo_plano):
+    """Muestra los resultados del procesamiento de recibidos (plano + KPIs)."""
+    # Aquí se mantiene la lógica de v0.2 — solo pasa el resultado adelante.
+    # En la integración final se conectará al motor v0.3 para enriquecer con:
+    #   - Comprobantes 3/7/12 según tipo detectado
+    #   - CCs por palabra clave / dirección / NIT
+    #   - Retenciones según concepto + régimen
+    st.subheader("📋 Plano contable")
+    st.info(
+        "✏️ La integración del motor v0.3 (mapeo aprendido del BP, retenciones "
+        "por concepto, CC por palabra clave) se completa cuando integremos "
+        "`motor_mapeo_v03.py` dentro de `procesador_dian_xml.py`. "
+        "Esto se hará en la próxima sesión."
+    )
+    # Por ahora reuso la lógica v0.2:
+    if modo_plano == "Plano único consolidado":
+        df_plano = pd.DataFrame([
+            l.__dict__ for l in resultado.lineas_plano
+        ])
+    else:
+        planos_separados = separar_lineas_por_comprobante(resultado.lineas_plano)
+        df_plano = pd.concat([
+            pd.DataFrame([l.__dict__ for l in lineas]).assign(comprobante=c)
+            for c, lineas in planos_separados.items()
+        ], ignore_index=True) if planos_separados else pd.DataFrame()
+
+    if not df_plano.empty:
+        st.dataframe(df_plano, use_container_width=True)
+
 
 # ============================================================================
 # TAB 2: EDITOR DE MAPEO
 # ============================================================================
 with tab_mapeo:
-    st.subheader("🗂️ Editor de mapeo NIT → Cuenta + Centro de Costo")
-
-    emp_seleccionada = st.selectbox(
-        "Empresa",
-        empresas,
-        format_func=lambda e: f"{e['razon_social']} (NIT {e['nit']})",
-        key="mapeo_empresa",
-    )
-
-    bundle = registry.cargar(emp_seleccionada["id"])
-    mapeo = bundle["mapeo"]["mapeo"]
-    centros = bundle["centros_costo"]["centros_costo"]
-
-    st.markdown(f"**Centros de costo válidos:** `{', '.join(centros.keys())}`")
-    st.markdown(f"**Cuenta fallback (NIT no catalogado):** `{bundle['mapeo']['_fallback_global']['cuenta']}`")
-
-    st.markdown("---")
-    st.markdown(f"**NITs catalogados para {emp_seleccionada['razon_social']}: {len(mapeo)}**")
-
-    if mapeo:
-        df_map = pd.DataFrame([
-            {
-                "NIT": nit,
-                "Razón social": data.get("razon_social", ""),
-                "Tipo retención": data.get("tipo_retencion", ""),
-                "Cuenta default": data.get("default", {}).get("cuenta", ""),
-                "CC default": data.get("default", {}).get("centro_costo", ""),
-                "Concepto": data.get("default", {}).get("concepto", ""),
-                "Reglas ítem": len(data.get("reglas_item", [])),
-            }
-            for nit, data in mapeo.items()
-        ])
-        st.dataframe(df_map, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
+    st.subheader("🗂️ Editor de mapeo NIT ↔ cuenta + CC")
     st.info(
-        "📝 La edición desde la UI está pendiente para v0.3. "
-        f"Por ahora edita directamente: `{EMPRESAS_DIR / emp_seleccionada['carpeta'] / 'mapeo_nits.json'}`"
+        "Próximamente: editor visual del `mapeo_nits.json`. "
+        "Por ahora editar el archivo directamente en GitHub."
     )
 
-    st.download_button(
-        "⬇️ Descargar mapeo_nits.json (para editar)",
-        data=json.dumps(bundle["mapeo"], indent=2, ensure_ascii=False, default=str),
-        file_name=f"mapeo_nits_{emp_seleccionada['id']}.json",
-        mime="application/json",
-    )
-
-    # Cargar catálogo de servicios públicos como referencia
-    sp_path = EMPRESAS_DIR / "_servicios_publicos_base.json"
-    if sp_path.exists():
-        st.markdown("---")
-        st.markdown("### 🏛️ Catálogo base de servicios públicos colombianos")
-        st.caption(
-            "Estos NITs y reglas son comunes a todas las empresas. Puedes copiarlos al "
-            "`mapeo_nits.json` de tu empresa según los servicios públicos que recibe."
+    if empresas:
+        empresa_sel = st.selectbox(
+            "Empresa",
+            options=[f"{e['nit']} — {e['razon_social']}" for e in empresas],
+            key="emp_mapeo"
         )
-        sp_data = json.loads(sp_path.read_text(encoding="utf-8"))
-        df_sp = pd.DataFrame([
-            {
-                "NIT": nit,
-                "Razón social": data["razon_social"],
-                "Tipo": data["tipo_servicio"],
-                "Cuenta default": data["default"]["cuenta"],
-                "Concepto": data["default"]["concepto"],
-            }
-            for nit, data in sp_data["servicios_publicos"].items()
-        ])
-        st.dataframe(df_sp, use_container_width=True, hide_index=True)
+        nit_sel = empresa_sel.split(" — ")[0]
+        try:
+            cat = CatalogoEmpresa.cargar(EMPRESAS_DIR / f"{nit_sel}_*")
+        except Exception:
+            # Buscar la carpeta real
+            for p in EMPRESAS_DIR.iterdir():
+                if p.is_dir() and p.name.startswith(nit_sel):
+                    cat = CatalogoEmpresa.cargar(p)
+                    break
+
+        st.metric("NITs catalogados", len(cat.mapeo_nits))
+        st.metric("Centros de costo", len(cat.centros_costo))
+        st.metric("Direcciones mapeadas",
+                   len(cat.direcciones_locales.get('direcciones', {})))
+
 
 # ============================================================================
-# TAB 3: EMPRESAS
+# TAB 3: EMPRESAS CONFIGURADAS
 # ============================================================================
 with tab_empresas:
     st.subheader("🏢 Empresas configuradas")
+    st.dataframe(pd.DataFrame(empresas), use_container_width=True, hide_index=True)
 
-    df_emp = pd.DataFrame([
-        {
-            "Empresa": e["razon_social"],
-            "NIT": e["nit"],
-            "ID interno": e["id"],
-            "Carpeta": e["carpeta"],
-            "Activa": "✅" if e.get("activa", True) else "❌",
-        }
-        for e in empresas
-    ])
-    st.dataframe(df_emp, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    st.markdown("### ➕ Agregar empresa nueva")
-    st.markdown(f"""
-1. Copiar la carpeta `{EMPRESAS_DIR / '_template_empresa'}/` a `{EMPRESAS_DIR}/<NIT>_<id>/`
-2. Editar `empresa.json` con los datos reales
-3. Editar `mapeo_nits.json` con proveedores recurrentes (puedes empezar copiando del catálogo de servicios públicos en la pestaña 🗂️)
-4. Editar `centros_costo.json` con los CCs propios
-5. Agregar al archivo `{EMPRESAS_DIR / '_empresas_index.json'}`
-6. Recargar la página
-""")
+    st.markdown("**Para agregar una nueva empresa:**")
+    st.markdown(
+        "1. Copiar la carpeta `core/data/empresas/_template_empresa/` "
+        "renombrándola a `<NIT>_<slug>/`\n"
+        "2. Editar `empresa.json`, `mapeo_nits.json`, `centros_costo.json` "
+        "según los datos de la nueva empresa\n"
+        "3. Agregar la entrada en `_empresas_index.json`\n"
+        "4. Reiniciar Railway"
+    )
