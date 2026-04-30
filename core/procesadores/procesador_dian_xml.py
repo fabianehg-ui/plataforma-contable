@@ -113,7 +113,7 @@ class DocumentoDIAN:
     tipo_nombre: str           # "factura_recibida", "nota_credito_recibida"...
     prefijo: str
     numero: str
-    fecha_emision: str         # YYYY-MM-DD
+    fecha_emision: str         # YYYY-MM-DD — fecha de emisión del documento
     fecha_vencimiento: str
 
     # Emisor
@@ -145,6 +145,7 @@ class DocumentoDIAN:
     # Metadata del procesamiento
     archivo_origen: str = ""    # nombre del sub-ZIP del que salió
     zip_origen: str = ""        # nombre del ZIP maestro (para multi-zip)
+    fecha_recepcion: str = ""   # YYYY-MM-DD — cuándo DIAN recibió el doc (extraída del nombre del archivo del bookmarklet)
     advertencias: list[str] = field(default_factory=list)
     pendiente_revision: bool = False
     razon_pendiente: str = ""
@@ -978,6 +979,7 @@ class ResumenIngesta:
     por_zip: dict[str, int]                  # {"FE_marzo.zip": 12, "NC_marzo.zip": 2}
     por_empresa: dict[str, int]              # {"silla_tres": 14, "casa_unotres": 5}
     inconsistencias_tipo: list[dict]         # XMLs cuyo tipo real no coincide con el declarado
+    descartados_detalle: list[dict] = field(default_factory=list)  # detalle de cada descarte
 
 
 def procesar_multiples_zips(
@@ -987,6 +989,7 @@ def procesar_multiples_zips(
     fecha_desde: str = "",
     fecha_hasta: str = "",
     empresa_id_forzada: str | None = None,
+    modo_filtro_fecha: str = "emision",   # "emision" | "recepcion" | "ninguno"
 ) -> tuple[list[ResultadoProcesamiento], ResumenIngesta]:
     """Procesa múltiples ZIPs en una sola pasada.
 
@@ -994,19 +997,17 @@ def procesar_multiples_zips(
         zips: lista de ZipInput (nombre, bytes, tipo_declarado opcional)
         registry: RegistryEmpresas
         anio_mes: 'YYYYMM' para los consecutivos
-        fecha_desde: 'YYYY-MM-DD' opcional — descarta XMLs antes de esta fecha
-        fecha_hasta: 'YYYY-MM-DD' opcional — descarta XMLs después de esta fecha
+        fecha_desde: 'YYYY-MM-DD' opcional
+        fecha_hasta: 'YYYY-MM-DD' opcional
         empresa_id_forzada: si se indica, todos los XMLs van a esa empresa
+        modo_filtro_fecha:
+            - "emision": filtra por fecha_emision del XML (default, comportamiento legacy)
+            - "recepcion": filtra por fecha_recepcion (cuándo DIAN recibió el doc)
+            - "ninguno": no filtra por fecha — procesa todo
 
     Returns:
         (resultados, resumen) — resultados es una lista de ResultadoProcesamiento
         (uno por empresa detectada) y resumen es un ResumenIngesta con la trazabilidad.
-
-    Funcionalidades v0.2:
-        - Concatena XMLs de varios ZIPs
-        - Detecta duplicados por CUFE entre ZIPs (descarta el segundo)
-        - Filtra por rango de fechas si se indica
-        - Reporta inconsistencias entre tipo declarado vs tipo real del XML
     """
     cufes_vistos: set[str] = set()
     docs_unicos: list[DocumentoDIAN] = []
@@ -1019,6 +1020,7 @@ def procesar_multiples_zips(
         por_zip=defaultdict(int),
         por_empresa=defaultdict(int),
         inconsistencias_tipo=[],
+        descartados_detalle=[],
     )
 
     # Mapeo: tipo declarado por el usuario → tipo_codigo esperado
@@ -1043,8 +1045,19 @@ def procesar_multiples_zips(
             try:
                 doc = parsear_xml_dian(xml_bytes, archivo_origen=nombre_archivo)
                 doc.zip_origen = zin.nombre
+                # Intentar extraer fecha_recepcion del nombre del archivo del bookmarklet
+                # Formato esperado: YYYY-MM-DD_NIT_PREFIJO_TRACK.zip
+                m_fecha = re.match(r"^(\d{4}-\d{2}-\d{2})_", nombre_archivo)
+                if m_fecha:
+                    doc.fecha_recepcion = m_fecha.group(1)
             except Exception as e:
                 resumen.errores_parseo += 1
+                resumen.descartados_detalle.append({
+                    "razon": "error_parseo",
+                    "zip": zin.nombre,
+                    "archivo": nombre_archivo,
+                    "error": str(e),
+                })
                 continue
 
             # Inconsistencia tipo declarado vs tipo real
@@ -1057,17 +1070,50 @@ def procesar_multiples_zips(
                     "documento": f"{doc.prefijo}{doc.numero}",
                 })
 
-            # Filtrar por fecha
-            if fecha_desde and doc.fecha_emision and doc.fecha_emision < fecha_desde:
+            # Filtrar por fecha (según modo elegido)
+            fuera_rango = False
+            fecha_para_filtrar = ""
+            if modo_filtro_fecha == "emision":
+                fecha_para_filtrar = doc.fecha_emision
+            elif modo_filtro_fecha == "recepcion":
+                fecha_para_filtrar = doc.fecha_recepcion or doc.fecha_emision
+
+            if modo_filtro_fecha != "ninguno" and fecha_para_filtrar:
+                if fecha_desde and fecha_para_filtrar < fecha_desde:
+                    fuera_rango = True
+                if fecha_hasta and fecha_para_filtrar > fecha_hasta:
+                    fuera_rango = True
+
+            if fuera_rango:
                 resumen.fuera_de_rango_fecha += 1
-                continue
-            if fecha_hasta and doc.fecha_emision and doc.fecha_emision > fecha_hasta:
-                resumen.fuera_de_rango_fecha += 1
+                resumen.descartados_detalle.append({
+                    "razon": "fuera_de_rango_fecha",
+                    "zip": zin.nombre,
+                    "archivo": nombre_archivo,
+                    "documento": f"{doc.prefijo}{doc.numero}",
+                    "tipo": doc.tipo_nombre,
+                    "fecha_emision": doc.fecha_emision,
+                    "fecha_recepcion": doc.fecha_recepcion,
+                    "nit_emisor": doc.nit_emisor,
+                    "nombre_emisor": doc.nombre_emisor,
+                    "valor": float(doc.valor_total),
+                    "modo_filtro": modo_filtro_fecha,
+                })
                 continue
 
             # Deduplicación por CUFE
             if doc.cufe and doc.cufe in cufes_vistos:
                 resumen.duplicados_descartados += 1
+                resumen.descartados_detalle.append({
+                    "razon": "duplicado_cufe",
+                    "zip": zin.nombre,
+                    "archivo": nombre_archivo,
+                    "documento": f"{doc.prefijo}{doc.numero}",
+                    "tipo": doc.tipo_nombre,
+                    "cufe": doc.cufe[:16] + "...",
+                    "nit_emisor": doc.nit_emisor,
+                    "nombre_emisor": doc.nombre_emisor,
+                })
                 continue
             if doc.cufe:
                 cufes_vistos.add(doc.cufe)
