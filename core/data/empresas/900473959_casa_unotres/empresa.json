@@ -14,12 +14,28 @@
   "cuentas_iva": {
     "bienes": "24080201",
     "servicios": "24080308",
-    "reverso_iva_nc": "24080204"
+    "reverso_iva_nc": "24080204",
+    "por_tarifa": {
+      "5":  { "bienes": "24080203", "servicios": "24080306" },
+      "19": { "bienes": "24080201", "servicios": "24080308" }
+    }
+  },
+  "cuentas_impuestos_especiales": {
+    "inc": "24080530",
+    "ibua": "24080540",
+    "icui": "24080515",
+    "otros": "24089595"
   },
   "cuentas_retencion_default": {
     "rete_fuente": "23652501",
     "rete_iva": "23680505",
     "rete_ica": "23680510"
+  },
+  "auto_insumos_alimenticios": {
+    "activo": false,
+    "cuenta": "143505",
+    "centro_costo": "PROD",
+    "concepto": "Materia prima - alimentos (auto)"
   },
   "centro_costo_default": "ADMIN",
   "consecutivo_inicial": 1,
