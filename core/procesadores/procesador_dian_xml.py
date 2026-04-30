@@ -70,6 +70,25 @@ UBL_TIPO_DOC = {
     "92": "nota_debito_recibida",
 }
 
+# Códigos DIAN de tributos (TaxScheme/ID en UBL)
+# Referencia: Resolución DIAN tabla 13.2.6.2
+TAX_SCHEME_IVA = "01"
+TAX_SCHEME_IC = "04"          # Impuesto al Consumo (alias INC)
+TAX_SCHEME_INC = "04"
+TAX_SCHEME_RETE_IVA = "05"
+TAX_SCHEME_RETE_FUENTE = "06"
+TAX_SCHEME_RETE_ICA = "07"
+TAX_SCHEME_ICUI = "34"        # Impuesto al Consumo de bolsas plásticas
+TAX_SCHEME_IBUA = "35"        # Impuesto bebidas azucaradas (Ley 2277/2022)
+TAX_SCHEME_ICUI_ALT = "36"    # Impuesto productos comestibles ultra-procesados (alt)
+
+# Patrones por nombre de tributo (algunos proveedores ponen el nombre, no el código)
+PATRONES_NOMBRE_IMPUESTO = [
+    (re.compile(r"\bIBUA\b|bebid.*azucar|bebid.*ultra", re.IGNORECASE), "ibua"),
+    (re.compile(r"\bICUI\b|comestibles?\s*ultra|ultra.*procesado", re.IGNORECASE), "icui"),
+    (re.compile(r"\bINC\b|consumo\s*nacional|impto\.?\s*consumo|impuesto\s*al\s*consumo", re.IGNORECASE), "inc"),
+]
+
 # El nodo raíz del XML cambia según el tipo
 RAIZ_POR_TIPO = {
     "Invoice": "01",
@@ -96,6 +115,14 @@ class ItemFactura:
     es_servicio: bool          # heurística simple para escoger cuenta IVA
     codigo_producto: str = ""
     unidad_medida: str = ""
+
+    # Impuestos especiales (v0.2.2) — separados del IVA
+    inc_valor: Decimal = field(default_factory=lambda: Decimal(0))     # Impuesto Nacional al Consumo (8%)
+    inc_porcentaje: Decimal = field(default_factory=lambda: Decimal(0))
+    ibua_valor: Decimal = field(default_factory=lambda: Decimal(0))    # Impuesto bebidas ultra-procesadas
+    icui_valor: Decimal = field(default_factory=lambda: Decimal(0))    # Impuesto consumo ultraprocesados industrializados
+    otros_impuestos_valor: Decimal = field(default_factory=lambda: Decimal(0))
+    otros_impuestos_detalle: list = field(default_factory=list)        # [{nombre, codigo, valor}]
 
     # Resultado del mapeo (se llena después)
     cuenta: str = ""
@@ -141,6 +168,12 @@ class DocumentoDIAN:
 
     # Ítems
     items: list[ItemFactura] = field(default_factory=list)
+
+    # Totales de impuestos especiales (v0.2.2)
+    inc_total: Decimal = field(default_factory=lambda: Decimal(0))
+    ibua_total: Decimal = field(default_factory=lambda: Decimal(0))
+    icui_total: Decimal = field(default_factory=lambda: Decimal(0))
+    otros_impuestos_total: Decimal = field(default_factory=lambda: Decimal(0))
 
     # Metadata del procesamiento
     archivo_origen: str = ""    # nombre del sub-ZIP del que salió
@@ -369,18 +402,42 @@ def parsear_xml_dian(xml_bytes: bytes, archivo_origen: str = "") -> DocumentoDIA
     rete_fuente = Decimal(0)
     rete_iva = Decimal(0)
     rete_ica = Decimal(0)
+    inc_total = Decimal(0)
+    ibua_total = Decimal(0)
+    icui_total = Decimal(0)
+    otros_imp_total = Decimal(0)
     for tt in _findall(root, "cac:TaxTotal"):
         for sub in _findall(tt, "cac:TaxSubtotal"):
             scheme_id = _texto(_find(sub, "cac:TaxCategory/cac:TaxScheme/cbc:ID"))
+            scheme_name = _texto(_find(sub, "cac:TaxCategory/cac:TaxScheme/cbc:Name"))
             tax_amount = _decimal(_find(sub, "cbc:TaxAmount"))
-            if scheme_id == "01":          # IVA
+
+            if scheme_id == TAX_SCHEME_IVA:
                 iva_total += tax_amount
-            elif scheme_id == "06":        # Retención fuente
+            elif scheme_id == TAX_SCHEME_RETE_FUENTE:
                 rete_fuente += tax_amount
-            elif scheme_id == "05":        # ReteIVA
+            elif scheme_id == TAX_SCHEME_RETE_IVA:
                 rete_iva += tax_amount
-            elif scheme_id == "07":        # ReteICA
+            elif scheme_id == TAX_SCHEME_RETE_ICA:
                 rete_ica += tax_amount
+            elif scheme_id == TAX_SCHEME_IBUA:
+                ibua_total += tax_amount
+            elif scheme_id == TAX_SCHEME_ICUI or scheme_id == TAX_SCHEME_ICUI_ALT:
+                icui_total += tax_amount
+            elif scheme_id == TAX_SCHEME_INC:
+                inc_total += tax_amount
+            else:
+                # Si el código no es estándar, intentar identificar por nombre
+                tipo_detectado = _detectar_impuesto_por_nombre(scheme_name)
+                if tipo_detectado == "ibua":
+                    ibua_total += tax_amount
+                elif tipo_detectado == "icui":
+                    icui_total += tax_amount
+                elif tipo_detectado == "inc":
+                    inc_total += tax_amount
+                elif scheme_id and scheme_id not in ("00", ""):
+                    # Cualquier otro tributo no reconocido
+                    otros_imp_total += tax_amount
 
     # Ítems
     items: list[ItemFactura] = []
@@ -415,7 +472,21 @@ def parsear_xml_dian(xml_bytes: bytes, archivo_origen: str = "") -> DocumentoDIA
         rete_ica=rete_ica,
         items=items,
         archivo_origen=archivo_origen,
+        inc_total=inc_total,
+        ibua_total=ibua_total,
+        icui_total=icui_total,
+        otros_impuestos_total=otros_imp_total,
     )
+
+
+def _detectar_impuesto_por_nombre(nombre: str) -> str:
+    """Devuelve 'ibua' | 'icui' | 'inc' | '' según el nombre del tributo."""
+    if not nombre:
+        return ""
+    for regex, tipo in PATRONES_NOMBRE_IMPUESTO:
+        if regex.search(nombre):
+            return tipo
+    return ""
 
 
 def _parsear_linea(line: ET.Element, idx: int, line_tag: str) -> ItemFactura:
@@ -450,14 +521,49 @@ def _parsear_linea(line: ET.Element, idx: int, line_tag: str) -> ItemFactura:
     # IVA de línea
     iva_pct = Decimal(0)
     iva_valor = Decimal(0)
+    inc_valor = Decimal(0)
+    inc_pct = Decimal(0)
+    ibua_valor = Decimal(0)
+    icui_valor = Decimal(0)
+    otros_imp_valor = Decimal(0)
+    otros_detalle: list = []
     for tt in _findall(line, "cac:TaxTotal"):
         for sub in _findall(tt, "cac:TaxSubtotal"):
             scheme_id = _texto(_find(sub, "cac:TaxCategory/cac:TaxScheme/cbc:ID"))
-            if scheme_id == "01":
-                iva_valor += _decimal(_find(sub, "cbc:TaxAmount"))
-                pct = _decimal(_find(sub, "cac:TaxCategory/cbc:Percent"))
+            scheme_name = _texto(_find(sub, "cac:TaxCategory/cac:TaxScheme/cbc:Name"))
+            tax_amount = _decimal(_find(sub, "cbc:TaxAmount"))
+            pct = _decimal(_find(sub, "cac:TaxCategory/cbc:Percent"))
+
+            if scheme_id == TAX_SCHEME_IVA:
+                iva_valor += tax_amount
                 if pct > iva_pct:
                     iva_pct = pct
+            elif scheme_id == TAX_SCHEME_INC:
+                inc_valor += tax_amount
+                if pct > inc_pct:
+                    inc_pct = pct
+            elif scheme_id == TAX_SCHEME_IBUA:
+                ibua_valor += tax_amount
+            elif scheme_id == TAX_SCHEME_ICUI or scheme_id == TAX_SCHEME_ICUI_ALT:
+                icui_valor += tax_amount
+            elif scheme_id in (TAX_SCHEME_RETE_IVA, TAX_SCHEME_RETE_FUENTE, TAX_SCHEME_RETE_ICA):
+                # Retenciones: ya se manejan a nivel de cabecera, ignorar acá
+                pass
+            else:
+                tipo = _detectar_impuesto_por_nombre(scheme_name)
+                if tipo == "ibua":
+                    ibua_valor += tax_amount
+                elif tipo == "icui":
+                    icui_valor += tax_amount
+                elif tipo == "inc":
+                    inc_valor += tax_amount
+                elif scheme_id and scheme_id not in ("00", ""):
+                    otros_imp_valor += tax_amount
+                    otros_detalle.append({
+                        "codigo": scheme_id,
+                        "nombre": scheme_name,
+                        "valor": float(tax_amount),
+                    })
 
     # Heurística servicio vs bien:
     # - UBL StandardItemIdentification.ExtendedID con código "999" suele ser servicio en DIAN
@@ -487,6 +593,12 @@ def _parsear_linea(line: ET.Element, idx: int, line_tag: str) -> ItemFactura:
         es_servicio=es_servicio,
         codigo_producto=codigo,
         unidad_medida=unidad,
+        inc_valor=inc_valor,
+        inc_porcentaje=inc_pct,
+        ibua_valor=ibua_valor,
+        icui_valor=icui_valor,
+        otros_impuestos_valor=otros_imp_valor,
+        otros_impuestos_detalle=otros_detalle,
     )
 
 
@@ -496,6 +608,52 @@ PALABRAS_SERVICIO = re.compile(
     r"transporte|flete|comisi[oó]n|capacitaci[oó]n|hospedaje|publicidad)\b",
     re.IGNORECASE
 )
+
+
+# v0.2.2 — Detección de proveedores de insumos alimenticios
+# Tanto por nombre del emisor como por palabras clave en la descripción del ítem
+PALABRAS_INSUMO_ALIMENTICIO_EMISOR = re.compile(
+    r"\b(POSTOBON|COCA[\s\-]*COLA|BAVARIA|FEMSA|FRITO\s*LAY|NUTRESA|"
+    r"COLANTA|ALPINA|ALQUERIA|PARMALAT|"
+    r"CARNES|CARNICOS?|FRIGOR[ií]ficos?|D'?\s*CARNES|"
+    r"NUTRIENTES|CONCENTRADOS?|PURINA|SOLLA|"
+    r"ATLANTIC\s*FS|DISTRIBUIDORA\s*DE\s*ALIMENTOS|FRUVER|FRUTAS|HORTALIZAS|"
+    r"PANIFICAD|PANADER|HARIN|MOLINOS|"
+    r"COMERCIALIZADORA\s*DE\s*ALIMENTOS|TECNOLOG[IÍ]A\s*ALIMENTARIA|"
+    r"PESCADER|MARISCOS|AVES|POLLOS?|"
+    r"ABARROTES|GRANEROS|"
+    r"COOPERATIVA\s*COL(ANTA)?)\b",
+    re.IGNORECASE
+)
+
+PALABRAS_INSUMO_ALIMENTICIO_ITEM = re.compile(
+    r"\b(carne|pollo|pescado|cerdo|res|costilla|chicharr[oó]n|chorizo|"
+    r"jam[oó]n|salchich|hamburgues|"
+    r"leche|queso|yogur|crema|mantequilla|l[aá]cteo|"
+    r"huevos?\b|"
+    r"arroz|frijol|lenteja|pasta|harina|az[uú]car|sal\b|aceite|"
+    r"tomate|cebolla|zanahoria|papa|pl[aá]tano|"
+    r"fruta|verdura|hortaliza|legumbre|"
+    r"pan\b|panader|tortilla|arepa|"
+    r"refresco|gaseosa|bebida|jugo\b|agua|cerveza|"
+    r"caf[eé]\s*(en\s*grano|molido|tostado)?|"
+    r"alimento|concentrado|forraje|materia\s*prima)\b",
+    re.IGNORECASE
+)
+
+
+def _es_insumo_alimenticio(nombre_emisor: str, descripcion_items: str) -> bool:
+    """Detecta si una factura corresponde a compra de insumos alimenticios.
+
+    Aplica si:
+    - El nombre del emisor matchea palabras de proveedor de alimentos, O
+    - La descripción de algún ítem matchea palabras de alimentos
+    """
+    if PALABRAS_INSUMO_ALIMENTICIO_EMISOR.search(nombre_emisor or ""):
+        return True
+    if PALABRAS_INSUMO_ALIMENTICIO_ITEM.search(descripcion_items or ""):
+        return True
+    return False
 
 
 def _detectar_servicio(descripcion: str, line: ET.Element) -> bool:
@@ -522,6 +680,10 @@ def aplicar_mapeo(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN:
 
     Modifica `doc` in-place (asigna cuenta, centro_costo, concepto, regla_aplicada
     a cada ítem) y marca pendiente_revision si el NIT no está catalogado.
+
+    v0.2.2: Si el NIT no está catalogado pero detectamos que es proveedor de insumos
+    alimenticios (por nombre del emisor o palabras clave en ítems), asigna 143505
+    automáticamente Y NO marca como pendiente_revision (la asignación es correcta).
     """
     mapeo_full = bundle_empresa["mapeo"]
     fallback = mapeo_full.get("_fallback_global", {
@@ -530,12 +692,33 @@ def aplicar_mapeo(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN:
         "concepto": "PENDIENTE DE MAPEO",
     })
     catalogo = mapeo_full.get("mapeo", {})
+    empresa = bundle_empresa.get("empresa", {})
+    auto_insumos = empresa.get("auto_insumos_alimenticios", {})  # {"activo": true, "cuenta": "143505", "centro_costo": "PROD"}
 
     nit = re.sub(r"[^0-9]", "", doc.nit_emisor or "")
     entrada = catalogo.get(nit)
 
     if entrada is None:
-        # NIT no catalogado: marcar pendiente y aplicar fallback a todos los ítems
+        # NIT no catalogado: intentar auto-detección de insumo alimenticio
+        descripciones = " ".join((it.descripcion or "") for it in doc.items)
+        if (auto_insumos.get("activo")
+                and _es_insumo_alimenticio(doc.nombre_emisor, descripciones)):
+            cuenta_ins = auto_insumos.get("cuenta", "143505")
+            cc_ins = auto_insumos.get("centro_costo", empresa.get("centro_costo_default", "ADMIN"))
+            concepto_ins = auto_insumos.get("concepto", "Materia prima - alimentos (auto)")
+            for it in doc.items:
+                it.cuenta = cuenta_ins
+                it.centro_costo = cc_ins
+                it.concepto = concepto_ins
+                it.regla_aplicada = "AUTO_INSUMO_ALIMENTICIO"
+            # Marcar como sugerencia para que el usuario confirme y catalogue formalmente
+            doc.advertencias.append(
+                f"NIT {nit} ({doc.nombre_emisor}) detectado automáticamente como insumo "
+                f"alimenticio → cuenta {cuenta_ins}. Considerar catalogarlo formalmente."
+            )
+            return doc
+
+        # Fallback al PENDIENTE_MAPEO
         doc.pendiente_revision = True
         doc.razon_pendiente = f"NIT {nit} ({doc.nombre_emisor}) no está en el catálogo"
         doc.advertencias.append(doc.razon_pendiente)
@@ -640,49 +823,112 @@ class GeneradorPlano:
             ))
             suma_neto += valor
 
-        # 2) IVA (si aplica) — separado por bienes/servicios según naturaleza dominante de los ítems
+        # 2) IVA discriminado por tarifa (v0.2.2)
+        # El catálogo de cuentas IVA puede tener estructura simple (legacy) o por tarifa:
+        #   "cuentas_iva": {
+        #     "bienes": "24080201",                  ← legacy: aplica a todo
+        #     "servicios": "24080308",
+        #     "reverso_iva_nc": "24080204",
+        #     "por_tarifa": {                        ← nuevo: específico por %
+        #       "5":  {"bienes": "24080203", "servicios": "24080306"},
+        #       "19": {"bienes": "24080201", "servicios": "24080308"}
+        #     }
+        #   }
         iva_total = _q(doc.iva_total)
         if iva_total != 0:
-            iva_bienes, iva_servicios = self._iva_por_naturaleza(doc.items)
-            iva_bienes = _q(iva_bienes)
-            iva_servicios = _q(iva_servicios)
+            cuentas_iva_cfg = self.empresa.get("cuentas_iva", {})
+            por_tarifa_cfg = cuentas_iva_cfg.get("por_tarifa", {})
+            cuenta_iva_legacy_bienes = cuentas_iva_cfg.get("bienes", "24080201")
+            cuenta_iva_legacy_serv = cuentas_iva_cfg.get("servicios", "24080308")
+            cuenta_reverso_nc = cuentas_iva_cfg.get("reverso_iva_nc", "24080204")
 
-            # Ajuste por redondeo
-            diff = iva_total - (iva_bienes + iva_servicios)
-            if diff != 0:
-                if abs(iva_bienes) >= abs(iva_servicios):
-                    iva_bienes += diff
+            # Agrupar IVA por (porcentaje, es_servicio)
+            grupos_iva: dict[tuple[str, bool], Decimal] = defaultdict(lambda: Decimal(0))
+            for it in doc.items:
+                if it.iva_valor != 0:
+                    pct_key = str(int(it.iva_porcentaje))
+                    grupos_iva[(pct_key, it.es_servicio)] += it.iva_valor
+
+            # Ajustar redondeos para que la suma coincida con iva_total exacto
+            suma_calc = sum(grupos_iva.values(), Decimal(0))
+            diff = iva_total - _q(suma_calc)
+            if diff != 0 and grupos_iva:
+                # Asignar diferencia al grupo con mayor monto
+                key_mayor = max(grupos_iva.keys(), key=lambda k: abs(grupos_iva[k]))
+                grupos_iva[key_mayor] += diff
+
+            # Generar línea por cada (tarifa, naturaleza)
+            for (pct_key, es_serv), valor in grupos_iva.items():
+                v = _q(valor)
+                if v == 0:
+                    continue
+
+                # Determinar cuenta según tarifa + naturaleza + si es NC
+                if es_nc:
+                    cuenta_iva = cuenta_reverso_nc
                 else:
-                    iva_servicios += diff
+                    tarifa_cfg = por_tarifa_cfg.get(pct_key, {})
+                    if es_serv:
+                        cuenta_iva = tarifa_cfg.get("servicios", cuenta_iva_legacy_serv)
+                    else:
+                        cuenta_iva = tarifa_cfg.get("bienes", cuenta_iva_legacy_bienes)
 
-            cuenta_iva_bienes = self.empresa["cuentas_iva"]["bienes"]
-            cuenta_iva_serv = self.empresa["cuentas_iva"]["servicios"]
-            if es_nc:
-                cuenta_iva_bienes = self.empresa["cuentas_iva"]["reverso_iva_nc"]
-                cuenta_iva_serv = self.empresa["cuentas_iva"]["reverso_iva_nc"]
+                tipo_label = "servicios" if es_serv else "bienes"
+                desc_iva = (
+                    f"Reverso IVA NC {tipo_label} ({pct_key}%)" if es_nc
+                    else f"IVA descontable {tipo_label} {pct_key}%"
+                )
 
-            if iva_bienes != 0:
+                cc_iva = (self._cc_dominante_servicios(doc.items) if es_serv
+                          else self._cc_dominante_bienes(doc.items))
+
                 lineas.append(LineaPlano(
                     fecha=fecha_plano, comprobante=comp, consecutivo=consecutivo,
-                    cuenta=cuenta_iva_bienes,
-                    centro_costo=self._cc_dominante_bienes(doc.items),
+                    cuenta=cuenta_iva,
+                    centro_costo=cc_iva,
                     nit_tercero=doc.nit_emisor,
-                    descripcion="IVA descontable bienes" if not es_nc else "Reverso IVA NC bienes",
+                    descripcion=desc_iva,
                     documento_referencia=doc_ref,
-                    debito=iva_bienes if not es_nc else Decimal(0),
-                    credito=iva_bienes if es_nc else Decimal(0),
+                    debito=v if not es_nc else Decimal(0),
+                    credito=v if es_nc else Decimal(0),
+                    porcentaje=Decimal(pct_key) if pct_key.isdigit() else Decimal(0),
                 ))
-            if iva_servicios != 0:
-                lineas.append(LineaPlano(
-                    fecha=fecha_plano, comprobante=comp, consecutivo=consecutivo,
-                    cuenta=cuenta_iva_serv,
-                    centro_costo=self._cc_dominante_servicios(doc.items),
-                    nit_tercero=doc.nit_emisor,
-                    descripcion="IVA descontable servicios" if not es_nc else "Reverso IVA NC servicios",
-                    documento_referencia=doc_ref,
-                    debito=iva_servicios if not es_nc else Decimal(0),
-                    credito=iva_servicios if es_nc else Decimal(0),
-                ))
+
+        # 2.5) Impuestos especiales: INC, IBUA, ICUI, otros (v0.2.2)
+        cuentas_imp_esp = self.empresa.get("cuentas_impuestos_especiales", {})
+        for total_imp, key_cfg, etiqueta in [
+            (doc.inc_total, "inc", "INC (Impuesto Nacional al Consumo)"),
+            (doc.ibua_total, "ibua", "IBUA (Impuesto Bebidas Azucaradas)"),
+            (doc.icui_total, "icui", "ICUI (Impuesto Productos Ultra-procesados)"),
+            (doc.otros_impuestos_total, "otros", "Otros impuestos"),
+        ]:
+            v = _q(total_imp)
+            if v == 0:
+                continue
+            cuenta_imp = cuentas_imp_esp.get(key_cfg)
+            if not cuenta_imp:
+                # Si no está definida en la empresa, usa fallback estándar
+                fallback_cuentas_imp = {
+                    "inc": "24080530",
+                    "ibua": "24080540",
+                    "icui": "24080515",
+                    "otros": "24089595",
+                }
+                cuenta_imp = fallback_cuentas_imp.get(key_cfg, "24089595")
+                doc.advertencias.append(
+                    f"Empresa sin cuenta para {key_cfg.upper()} configurada — usando fallback {cuenta_imp}"
+                )
+
+            lineas.append(LineaPlano(
+                fecha=fecha_plano, comprobante=comp, consecutivo=consecutivo,
+                cuenta=cuenta_imp,
+                centro_costo=self._cc_dominante_bienes(doc.items),
+                nit_tercero=doc.nit_emisor,
+                descripcion=etiqueta if not es_nc else f"Reverso NC - {etiqueta}",
+                documento_referencia=doc_ref,
+                debito=v if not es_nc else Decimal(0),
+                credito=v if es_nc else Decimal(0),
+            ))
 
         # 3) Retenciones (si vienen en el XML)
         ret_cuentas = self.empresa.get("cuentas_retencion_default", {})
