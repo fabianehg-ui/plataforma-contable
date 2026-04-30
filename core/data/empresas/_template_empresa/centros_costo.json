@@ -1,0 +1,9 @@
+{
+  "_comentario": "Catálogo de centros de costo válidos para esta empresa.",
+  "centros_costo": {
+    "ADMIN": "Administración",
+    "PROD": "Producción",
+    "VENTAS": "Ventas",
+    "FINANC": "Financiero"
+  }
+}

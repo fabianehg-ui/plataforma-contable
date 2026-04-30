@@ -1,0 +1,28 @@
+{
+  "_comentario": "Plantilla para crear una empresa nueva. Copiar este archivo a empresas/<NIT>_<id>/empresa.json y editarlo.",
+  "id": "PLACEHOLDER_id_corto",
+  "nit": "PLACEHOLDER_NIT",
+  "razon_social": "PLACEHOLDER Razón Social S.A.S",
+  "regimen": "ordinario",
+  "responsabilidades_fiscales": ["O-13", "O-15"],
+  "exonerada_114_1": false,
+  "comprobantes": {
+    "factura_recibida": "COMP 7",
+    "nota_credito_recibida": "COMP 13",
+    "documento_soporte_recibido": "COMP 18",
+    "nota_debito_recibida": "COMP 7"
+  },
+  "cuentas_iva": {
+    "bienes": "24080201",
+    "servicios": "24080308",
+    "reverso_iva_nc": "24080204"
+  },
+  "cuentas_retencion_default": {
+    "rete_fuente": "23652501",
+    "rete_iva": "23680505",
+    "rete_ica": "23680510"
+  },
+  "centro_costo_default": "ADMIN",
+  "consecutivo_inicial": 1,
+  "moneda": "COP"
+}
