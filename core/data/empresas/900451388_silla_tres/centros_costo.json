@@ -1,1 +1,8 @@
-
+{
+  "centros_costo": {
+    "ADMIN": "Administración",
+    "PROD": "Producción avícola",
+    "VENTAS": "Ventas",
+    "FINANC": "Financiero"
+  }
+}

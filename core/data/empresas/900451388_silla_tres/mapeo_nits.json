@@ -1,0 +1,90 @@
+{
+  "_fallback_global": {
+    "cuenta": "519095",
+    "centro_costo": "ADMIN",
+    "concepto": "PENDIENTE DE MAPEO"
+  },
+  "mapeo": {
+    "891301549": {
+      "razon_social": "NUTRIENTES AVICOLAS S.A.S.",
+      "tipo_retencion": "juridica",
+      "default": {
+        "cuenta": "143505",
+        "centro_costo": "PROD",
+        "concepto": "Materia prima - alimento avícola"
+      },
+      "reglas_item": []
+    },
+    "890900099": {
+      "razon_social": "Industrias Estra S.A",
+      "tipo_retencion": "juridica",
+      "default": {
+        "cuenta": "519560",
+        "centro_costo": "ADMIN",
+        "concepto": "Aseo y cafetería"
+      },
+      "reglas_item": [
+        {
+          "patron": "papel|resma|imprenta|cuaderno",
+          "cuenta": "519515",
+          "centro_costo": "ADMIN",
+          "concepto": "Papelería"
+        },
+        {
+          "patron": "caf[eé]|az[uú]car|t[eé]\\b",
+          "cuenta": "519560",
+          "centro_costo": "ADMIN",
+          "concepto": "Cafetería"
+        }
+      ]
+    },
+    "900410852": {
+      "razon_social": "ECOLIMPIADORES S.A.S.",
+      "tipo_retencion": "servicios_natural",
+      "default": {
+        "cuenta": "513550",
+        "centro_costo": "ADMIN",
+        "concepto": "Aseo y vigilancia"
+      },
+      "reglas_item": []
+    },
+    "830037946": {
+      "razon_social": "Empresas Públicas de Medellín ESP",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513525",
+        "centro_costo": "ADMIN",
+        "concepto": "Servicios públicos - EPM"
+      },
+      "reglas_item": [
+        { "patron": "energ[ií]a|kwh|electric", "cuenta": "513525", "centro_costo": "ADMIN", "concepto": "Energía eléctrica" },
+        { "patron": "agua|acueducto|alcantarillado", "cuenta": "513530", "centro_costo": "ADMIN", "concepto": "Acueducto" },
+        { "patron": "\\bgas\\b", "cuenta": "513540", "centro_costo": "ADMIN", "concepto": "Gas natural" },
+        { "patron": "aseo|recolecci[oó]n", "cuenta": "513545", "centro_costo": "ADMIN", "concepto": "Aseo público" }
+      ]
+    },
+    "800007813": {
+      "razon_social": "Vanti SA ESP (Gas Natural)",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513540",
+        "centro_costo": "ADMIN",
+        "concepto": "Gas natural domiciliario"
+      },
+      "reglas_item": []
+    },
+    "800153993": {
+      "razon_social": "COMUNICACIÓN CELULAR S.A. (Claro)",
+      "tipo_retencion": "juridica",
+      "default": {
+        "cuenta": "513535",
+        "centro_costo": "ADMIN",
+        "concepto": "Servicios de telecomunicaciones"
+      },
+      "reglas_item": [
+        { "patron": "internet|fibra|banda\\s*ancha", "cuenta": "513535", "centro_costo": "ADMIN", "concepto": "Internet" },
+        { "patron": "celular|m[oó]vil|telefon[ií]a", "cuenta": "513535", "centro_costo": "ADMIN", "concepto": "Telefonía móvil" }
+      ]
+    }
+  }
+}
