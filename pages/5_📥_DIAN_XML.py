@@ -19,19 +19,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-# Imports nuevos del motor v0.3
-from core.procesadores.motor_mapeo_v03 import (
-    CatalogoEmpresa,
-    resolver_mapeo,
-    calcular_retencion_renta,
-    calcular_reteiva,
-    calcular_reteica,
-    formato_cc_salida,
-)
-from core.procesadores.detector_tipo_doc import (
-    detectar_tipo_documento,
-    mapear_a_comprobante,
-)
+# Imports nuevos del motor v0.3 (se conectarán al procesador en próxima sesión)
+from core.procesadores.motor_mapeo_v03 import CatalogoEmpresa
 
 # Imports legacy del v0.2 (parser UBL, generador de plano)
 from core.procesadores.procesador_dian_xml import (
@@ -101,28 +90,28 @@ with tab_proc:
                 size_mb = z.size / (1024 * 1024)
                 st.caption(f"  • {z.name} ({size_mb:.1f} MB)")
 
-    # ── EMITIDOS ───────────────────────────────────────────
+    # ── EMITIDOS (placeholder por ahora) ──────────────────
     with col_emitidos:
         st.markdown("### 📤 Documentos emitidos")
         st.caption(
             "ZIP con los XMLs emitidos por la empresa a sus clientes "
-            "(facturas de venta, NC, ND emitidas). **Opcional.**"
+            "(facturas de venta)."
         )
-        zips_emitidos = st.file_uploader(
-            "Subir ZIP de emitidos",
+        st.info(
+            "🚧 **Próximamente** — el procesamiento contable de las facturas "
+            "de venta emitidas (comprobante 4 - Ingresos) se habilitará en la "
+            "próxima versión. Por ahora esta caja está deshabilitada."
+        )
+        # Caja deshabilitada para indicar visualmente que viene después
+        st.file_uploader(
+            "Subir ZIP de emitidos (próximamente)",
             type=["zip"],
             accept_multiple_files=True,
-            key="zips_emitidos",
-            help="Por ahora solo se muestra resumen; el procesamiento contable de ventas viene en próxima versión"
+            key="zips_emitidos_placeholder",
+            disabled=True,
+            help="Función en construcción"
         )
-        if zips_emitidos:
-            st.info(
-                f"📊 {len(zips_emitidos)} archivo(s) cargado(s). "
-                "**Función de ventas en construcción** — se mostrará un resumen por ahora."
-            )
-            for z in zips_emitidos:
-                size_mb = z.size / (1024 * 1024)
-                st.caption(f"  • {z.name} ({size_mb:.1f} MB)")
+        zips_emitidos = []  # siempre vacío en esta versión
 
     st.divider()
 
@@ -164,245 +153,47 @@ with tab_proc:
     st.divider()
 
     # ── BOTÓN PROCESAR ────────────────────────────────────
-    if not zips_recibidos and not zips_emitidos:
-        st.info("👆 Sube al menos un ZIP para continuar")
+    if not zips_recibidos:
+        st.info("👆 Sube el ZIP de recibidos para continuar")
     else:
-        if st.button("🚀 Procesar todos los ZIPs", type="primary", use_container_width=True,
+        if st.button("🚀 Procesar ZIPs", type="primary", use_container_width=True,
                      key="btn_procesar_zips"):
-            procesar_y_mostrar(zips_recibidos or [], zips_emitidos or [],
-                                anio, mes, modo_filtro, empresa_forzada, modo_plano)
+            procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
+                                empresa_forzada, modo_plano)
 
 
-def procesar_y_mostrar(zips_recibidos, zips_emitidos, anio, mes, modo_filtro,
+def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
                         empresa_forzada, modo_plano):
-    """Orquesta el procesamiento completo y muestra resultados."""
+    """Orquesta el procesamiento de RECIBIDOS y muestra resultados."""
+    with st.spinner("Procesando documentos recibidos..."):
+        zip_inputs = [
+            ZipInput(
+                nombre=z.name,
+                contenido=z.getbuffer().tobytes(),
+                tipo_declarado=None  # ya no se usa: el detector identifica solo
+            )
+            for z in zips_recibidos
+        ]
+        try:
+            resultado = procesar_multiples_zips(
+                zip_inputs,
+                registry,
+                anio_contable=anio,
+                mes_contable=mes,
+                modo_filtro_fecha=modo_filtro,
+                empresa_forzada=(
+                    empresa_forzada.split(" — ")[0]
+                    if empresa_forzada != "(detector por receptor NIT)"
+                    else None
+                ),
+            )
+        except Exception as e:
+            st.error(f"⚠️ Error al procesar recibidos: {e}")
+            st.exception(e)
+            return
 
-    # ── Procesar RECIBIDOS ────────────────────────────────
-    if zips_recibidos:
-        with st.spinner("Procesando documentos recibidos..."):
-            zip_inputs = [
-                ZipInput(
-                    nombre=z.name,
-                    contenido=z.getbuffer().tobytes(),
-                    tipo_declarado=None  # ya no se usa: el detector identifica solo
-                )
-                for z in zips_recibidos
-            ]
-            try:
-                resultado = procesar_multiples_zips(
-                    zip_inputs,
-                    registry,
-                    anio_contable=anio,
-                    mes_contable=mes,
-                    modo_filtro_fecha=modo_filtro,
-                    empresa_forzada=(
-                        empresa_forzada.split(" — ")[0]
-                        if empresa_forzada != "(detector por receptor NIT)"
-                        else None
-                    ),
-                )
-            except Exception as e:
-                st.error(f"⚠️ Error al procesar recibidos: {e}")
-                st.exception(e)
-                return
-
-        st.success(f"✅ {len(resultado.documentos)} documentos recibidos procesados")
-        mostrar_resultados_recibidos(resultado, modo_plano)
-
-    # ── Procesar EMITIDOS (placeholder) ───────────────────
-    if zips_emitidos:
-        st.divider()
-        st.subheader("📤 Documentos emitidos (resumen)")
-        with st.spinner("Inspeccionando emitidos..."):
-            resumen = inspeccionar_emitidos(zips_emitidos)
-        mostrar_resumen_emitidos(resumen)
-
-
-def inspeccionar_emitidos(zips_emitidos):
-    """
-    Lee los ZIPs de emitidos y devuelve un resumen sin generar plano contable.
-    Por ahora solo cuenta documentos por tipo y total facturado.
-    """
-    import xml.etree.ElementTree as ET
-    NS = {
-        'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
-        'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
-    }
-
-    docs = []
-    for z_obj in zips_emitidos:
-        zf = zipfile.ZipFile(io.BytesIO(z_obj.getbuffer().tobytes()))
-        for name in zf.namelist():
-            if name.endswith('.zip'):
-                # ZIP anidado
-                with zf.open(name) as f:
-                    inner_zf = zipfile.ZipFile(io.BytesIO(f.read()))
-                    for inner_name in inner_zf.namelist():
-                        if inner_name.endswith('.xml'):
-                            with inner_zf.open(inner_name) as fx:
-                                try:
-                                    xml_content = fx.read().decode('utf-8', errors='replace')
-                                    info = _extraer_info_basica_emitido(
-                                        xml_content, name, NS
-                                    )
-                                    if info:
-                                        docs.append(info)
-                                except Exception:
-                                    pass
-            elif name.endswith('.xml'):
-                with zf.open(name) as f:
-                    try:
-                        xml_content = f.read().decode('utf-8', errors='replace')
-                        info = _extraer_info_basica_emitido(xml_content, name, NS)
-                        if info:
-                            docs.append(info)
-                    except Exception:
-                        pass
-
-    # Resumen agregado
-    df = pd.DataFrame(docs) if docs else pd.DataFrame()
-    return {
-        'docs': docs,
-        'df': df,
-        'total_docs': len(docs),
-        'total_facturado': df['total'].sum() if not df.empty and 'total' in df.columns else 0,
-        'total_iva': df['iva'].sum() if not df.empty and 'iva' in df.columns else 0,
-        'por_tipo': df['tipo'].value_counts().to_dict() if not df.empty and 'tipo' in df.columns else {},
-        'top_clientes': (
-            df.groupby(['nit_receptor', 'nombre_receptor'])['total']
-            .sum().sort_values(ascending=False).head(10).reset_index()
-            .to_dict('records')
-            if not df.empty else []
-        ),
-    }
-
-
-def _extraer_info_basica_emitido(xml_content, archivo_nombre, NS):
-    """Extrae info mínima de un XML emitido (factura/NC/ND de venta)."""
-    import xml.etree.ElementTree as ET
-    try:
-        root = ET.fromstring(xml_content)
-    except ET.ParseError:
-        return None
-
-    # Detectar tipo
-    tipo, _ = detectar_tipo_documento(xml_root=root, nombre_archivo=archivo_nombre)
-    if tipo == 'ACUSE':
-        return None
-
-    # Lo que en RECIBIDOS es "AccountingSupplierParty" (proveedor),
-    # en EMITIDOS también lo es… pero ahora ESE proveedor SOMOS NOSOTROS.
-    # El cliente está en "AccountingCustomerParty".
-    inner = root
-    # Si es AttachedDocument extraer el inner
-    tag = root.tag.split('}')[-1]
-    if tag == 'AttachedDocument':
-        for desc in root.iter('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Description'):
-            if desc.text and ('<Invoice' in desc.text or '<CreditNote' in desc.text or '<DebitNote' in desc.text):
-                try:
-                    inner = ET.fromstring(desc.text)
-                    break
-                except ET.ParseError:
-                    pass
-
-    cust = inner.find('.//cac:AccountingCustomerParty', NS)
-    nit_receptor = ''
-    nombre_receptor = ''
-    if cust is not None:
-        cid = cust.find('.//cbc:CompanyID', NS)
-        if cid is not None and cid.text:
-            nit_receptor = cid.text.strip()
-        rn = cust.find('.//cbc:RegistrationName', NS)
-        if rn is not None and rn.text:
-            nombre_receptor = rn.text.strip()
-
-    # Total
-    total_node = inner.find('.//cac:LegalMonetaryTotal/cbc:PayableAmount', NS)
-    total = float(total_node.text) if total_node is not None and total_node.text else 0.0
-
-    # IVA
-    iva_total = 0.0
-    for ts in inner.findall('.//cac:TaxTotal//cac:TaxSubtotal', NS):
-        cat = ts.find('.//cac:TaxCategory/cac:TaxScheme/cbc:ID', NS)
-        amt = ts.find('.//cbc:TaxAmount', NS)
-        if cat is not None and cat.text == '01' and amt is not None and amt.text:
-            try:
-                iva_total += float(amt.text)
-            except ValueError:
-                pass
-
-    # Fecha
-    fecha_node = inner.find('cbc:IssueDate', NS)
-    fecha = fecha_node.text if fecha_node is not None else ''
-
-    # Número
-    numero_node = inner.find('cbc:ID', NS)
-    numero = numero_node.text if numero_node is not None else ''
-
-    return {
-        'tipo': tipo,
-        'archivo': archivo_nombre,
-        'numero': numero,
-        'fecha': fecha,
-        'nit_receptor': nit_receptor,
-        'nombre_receptor': nombre_receptor,
-        'total': total,
-        'iva': iva_total,
-        'base': total - iva_total,
-    }
-
-
-def mostrar_resumen_emitidos(resumen):
-    """Resumen ejecutivo de los emitidos (sin plano contable por ahora)."""
-    if resumen['total_docs'] == 0:
-        st.warning("⚠️ No se encontraron XMLs emitidos válidos en los ZIPs subidos.")
-        return
-
-    st.info(
-        "ℹ️ Los documentos emitidos NO se incluyen en el plano contable "
-        "todavía — esa función está en construcción. Por ahora se muestra un "
-        "resumen ejecutivo y un Excel con el detalle."
-    )
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Documentos emitidos", resumen['total_docs'])
-    col2.metric("Total facturado", f"${resumen['total_facturado']:,.0f}")
-    col3.metric("IVA generado", f"${resumen['total_iva']:,.0f}")
-    col4.metric("Tipos distintos", len(resumen['por_tipo']))
-
-    # Por tipo
-    if resumen['por_tipo']:
-        st.markdown("**Distribución por tipo de documento:**")
-        df_tipos = pd.DataFrame(
-            list(resumen['por_tipo'].items()),
-            columns=['Tipo', 'Cantidad']
-        )
-        df_tipos['Comprobante (sugerido)'] = df_tipos['Tipo'].map({
-            'FE': '5 - Venta',
-            'NC': '11 - NC venta',
-            'ND': '8 - ND venta',
-            'DS': 'N/A (no aplica para emisor)',
-        }).fillna('—')
-        st.dataframe(df_tipos, use_container_width=True, hide_index=True)
-
-    # Top clientes
-    if resumen['top_clientes']:
-        st.markdown("**Top 10 clientes por facturación:**")
-        df_top = pd.DataFrame(resumen['top_clientes'])
-        st.dataframe(df_top, use_container_width=True, hide_index=True)
-
-    # Excel descargable
-    if not resumen['df'].empty:
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            resumen['df'].to_excel(writer, sheet_name='Emitidos', index=False)
-        st.download_button(
-            "📥 Descargar Excel de emitidos",
-            data=buffer.getvalue(),
-            file_name=f"emitidos_{date.today().isoformat()}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="dl_emitidos_xlsx"
-        )
+    st.success(f"✅ {len(resultado.documentos)} documentos recibidos procesados")
+    mostrar_resultados_recibidos(resultado, modo_plano)
 
 
 def mostrar_resultados_recibidos(resultado, modo_plano):
