@@ -1,1 +1,19 @@
-
+{
+  "_comentario": "Índice maestro de empresas. El módulo lo lee al arrancar para saber qué empresas existen.",
+  "empresas": [
+    {
+      "id": "casa_unotres",
+      "nit": "900473959",
+      "razon_social": "Casa UnoTres SAS",
+      "carpeta": "900473959_casa_unotres",
+      "activa": true
+    },
+    {
+      "id": "silla_tres",
+      "nit": "900451388",
+      "razon_social": "Silla Tres SAS",
+      "carpeta": "900451388_silla_tres",
+      "activa": true
+    }
+  ]
+}
