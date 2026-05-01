@@ -2141,9 +2141,9 @@
   },
   "900380500": {
     "nombre": "GRUPO ATOCHA S.A.S",
-    "cuenta_default": "13300501",
+    "cuenta_default": "14350511",
     "cc_default": "10-04",
-    "confianza_cuenta": 0.5,
+    "confianza_cuenta": 1.0,
     "confianza_cc": 0.425,
     "cuentas_vistas": [
       "13300501",
@@ -2165,7 +2165,7 @@
     "fuente": "BP_aprendido",
     "regimen": "ordinario",
     "autorretenedor_renta": false,
-    "concepto_retencion": "sin_retencion"
+    "concepto_retencion": "compras_2_5"
   },
   "900410852": {
     "nombre": "ECOLIMPIADORES S.A.S",
