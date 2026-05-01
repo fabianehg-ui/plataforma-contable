@@ -1,14 +1,15 @@
 """
 📥 DIAN XML — Procesamiento masivo multi-empresa
-Página Streamlit v0.3 (30-04-2026)
+Página Streamlit v0.3.5 (30-04-2026)
 
 Cambios vs v0.2:
 - UN SOLO uploader para "Recibidos" (el ZIP unificado del bookmarklet v0.3)
   reemplaza las 4 cajas anteriores (FE/NC/ND/SP).
-- NUEVO uploader para "Emitidos" (XMLs emitidos por la empresa, opcional).
+- Caja "Emitidos" deshabilitada con mensaje "Próximamente" (FE de venta a comprob 4).
 - El procesador detecta automáticamente el tipo de cada documento desde
   el prefijo del nombre (FE_, NC_, ND_, DS_, ??_) o desde el contenido del XML.
 - Mapeo automático a comprobantes contables (3, 7, 12) según tipo.
+- 🔒 Protegida con auth Supabase (require_auth + sidebar_user_info).
 """
 import io
 import json
@@ -18,6 +19,14 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+# 🔒 Auth — debe ir ANTES de cualquier otra cosa de Streamlit visible
+from auth.login import require_auth, sidebar_user_info
+
+st.set_page_config(page_title="DIAN XML", page_icon="📥", layout="wide")
+
+require_auth()        # corta la página si no hay sesión válida
+sidebar_user_info()   # muestra usuario + botón de logout en el sidebar
 
 # Imports nuevos del motor v0.3 (se conectarán al procesador en próxima sesión)
 from core.procesadores.motor_mapeo_v03 import CatalogoEmpresa
@@ -33,8 +42,6 @@ from core.procesadores.procesador_dian_xml import (
 )
 
 EMPRESAS_DIR = Path("core/data/empresas")
-
-st.set_page_config(page_title="DIAN XML", page_icon="📥", layout="wide")
 
 st.title("📥 DIAN XML — Procesamiento masivo multi-empresa")
 st.caption(
@@ -55,6 +62,69 @@ try:
 except Exception as e:
     st.error(f"⚠️ No se pudo cargar el índice de empresas: {e}")
     st.stop()
+
+# ----------------------------------------------------------- Funciones helper
+# IMPORTANTE: deben declararse ANTES del bloque `with tab_proc:` porque
+# Streamlit ejecuta el archivo de arriba abajo como un script normal.
+
+def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
+                        empresa_forzada, modo_plano):
+    """Orquesta el procesamiento de RECIBIDOS y muestra resultados."""
+    with st.spinner("Procesando documentos recibidos..."):
+        zip_inputs = [
+            ZipInput(
+                nombre=z.name,
+                contenido=z.getbuffer().tobytes(),
+                tipo_declarado=None  # ya no se usa: el detector identifica solo
+            )
+            for z in zips_recibidos
+        ]
+        try:
+            resultado = procesar_multiples_zips(
+                zip_inputs,
+                registry,
+                anio_contable=anio,
+                mes_contable=mes,
+                modo_filtro_fecha=modo_filtro,
+                empresa_forzada=(
+                    empresa_forzada.split(" — ")[0]
+                    if empresa_forzada != "(detector por receptor NIT)"
+                    else None
+                ),
+            )
+        except Exception as e:
+            st.error(f"⚠️ Error al procesar recibidos: {e}")
+            st.exception(e)
+            return
+
+    st.success(f"✅ {len(resultado.documentos)} documentos recibidos procesados")
+    mostrar_resultados_recibidos(resultado, modo_plano)
+
+
+def mostrar_resultados_recibidos(resultado, modo_plano):
+    """Muestra los resultados del procesamiento de recibidos (plano + KPIs)."""
+    st.subheader("📋 Plano contable")
+    st.info(
+        "✏️ La integración del motor v0.3 (mapeo aprendido del BP, retenciones "
+        "por concepto, CC por palabra clave) se completa cuando integremos "
+        "`motor_mapeo_v03.py` dentro de `procesador_dian_xml.py`. "
+        "Esto se hará en la próxima sesión."
+    )
+    # Por ahora reuso la lógica v0.2:
+    if modo_plano == "Plano único consolidado":
+        df_plano = pd.DataFrame([
+            l.__dict__ for l in resultado.lineas_plano
+        ])
+    else:
+        planos_separados = separar_lineas_por_comprobante(resultado.lineas_plano)
+        df_plano = pd.concat([
+            pd.DataFrame([l.__dict__ for l in lineas]).assign(comprobante=c)
+            for c, lineas in planos_separados.items()
+        ], ignore_index=True) if planos_separados else pd.DataFrame()
+
+    if not df_plano.empty:
+        st.dataframe(df_plano, use_container_width=True)
+
 
 # ----------------------------------------------------------- Tabs
 tab_proc, tab_mapeo, tab_empresas = st.tabs(
@@ -160,70 +230,6 @@ with tab_proc:
                      key="btn_procesar_zips"):
             procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
                                 empresa_forzada, modo_plano)
-
-
-def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
-                        empresa_forzada, modo_plano):
-    """Orquesta el procesamiento de RECIBIDOS y muestra resultados."""
-    with st.spinner("Procesando documentos recibidos..."):
-        zip_inputs = [
-            ZipInput(
-                nombre=z.name,
-                contenido=z.getbuffer().tobytes(),
-                tipo_declarado=None  # ya no se usa: el detector identifica solo
-            )
-            for z in zips_recibidos
-        ]
-        try:
-            resultado = procesar_multiples_zips(
-                zip_inputs,
-                registry,
-                anio_contable=anio,
-                mes_contable=mes,
-                modo_filtro_fecha=modo_filtro,
-                empresa_forzada=(
-                    empresa_forzada.split(" — ")[0]
-                    if empresa_forzada != "(detector por receptor NIT)"
-                    else None
-                ),
-            )
-        except Exception as e:
-            st.error(f"⚠️ Error al procesar recibidos: {e}")
-            st.exception(e)
-            return
-
-    st.success(f"✅ {len(resultado.documentos)} documentos recibidos procesados")
-    mostrar_resultados_recibidos(resultado, modo_plano)
-
-
-def mostrar_resultados_recibidos(resultado, modo_plano):
-    """Muestra los resultados del procesamiento de recibidos (plano + KPIs)."""
-    # Aquí se mantiene la lógica de v0.2 — solo pasa el resultado adelante.
-    # En la integración final se conectará al motor v0.3 para enriquecer con:
-    #   - Comprobantes 3/7/12 según tipo detectado
-    #   - CCs por palabra clave / dirección / NIT
-    #   - Retenciones según concepto + régimen
-    st.subheader("📋 Plano contable")
-    st.info(
-        "✏️ La integración del motor v0.3 (mapeo aprendido del BP, retenciones "
-        "por concepto, CC por palabra clave) se completa cuando integremos "
-        "`motor_mapeo_v03.py` dentro de `procesador_dian_xml.py`. "
-        "Esto se hará en la próxima sesión."
-    )
-    # Por ahora reuso la lógica v0.2:
-    if modo_plano == "Plano único consolidado":
-        df_plano = pd.DataFrame([
-            l.__dict__ for l in resultado.lineas_plano
-        ])
-    else:
-        planos_separados = separar_lineas_por_comprobante(resultado.lineas_plano)
-        df_plano = pd.concat([
-            pd.DataFrame([l.__dict__ for l in lineas]).assign(comprobante=c)
-            for c, lineas in planos_separados.items()
-        ], ignore_index=True) if planos_separados else pd.DataFrame()
-
-    if not df_plano.empty:
-        st.dataframe(df_plano, use_container_width=True)
 
 
 # ============================================================================
