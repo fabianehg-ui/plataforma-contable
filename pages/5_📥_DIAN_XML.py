@@ -143,11 +143,12 @@ def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
             return
 
     # Guardar en session_state para persistir entre re-renders
+    # NOTA: NO guardamos modo_plano ni consecutivo_inicial porque sus widgets
+    # (st.radio y st.number_input) ya manejan esa key automáticamente.
+    # Asignar manualmente a una key reservada por un widget genera StreamlitAPIException.
     st.session_state["resultados"] = resultados
     st.session_state["resumen"] = resumen
     st.session_state["anio_mes"] = anio_mes
-    st.session_state["modo_plano"] = modo_plano
-    st.session_state["consecutivo_inicial"] = int(consecutivo_inicial)
 
     mostrar_resultados_recibidos(resultados, resumen, modo_plano,
                                    int(consecutivo_inicial))
