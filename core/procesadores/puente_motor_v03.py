@@ -440,8 +440,8 @@ def _orden_linea_intra_doc(linea: LineaPlano) -> int:
     """Devuelve un peso para ordenar líneas DENTRO de un mismo documento.
     Orden deseado:
       1. Gasto / inventario / costo
-      2. IVA descontable
-      3. Impuestos al consumo (IBUA, ICUI, INC)
+      2. IVA descontable (240810xx, 240813xx, o 24080xxx)
+      3. Impuestos al consumo (IBUA/ICUI en 14359xxx; INC en 52159xxx)
       4. Retenciones (retefuente, reteIVA, reteICA)
       5. Proveedor (CxP) al final, como contrapartida que cuadra el doc.
     """
@@ -458,15 +458,22 @@ def _orden_linea_intra_doc(linea: LineaPlano) -> int:
     if "RETEFUENTE" in desc or "RETEIVA" in desc or "RETEICA" in desc:
         return 80
 
-    # 3. Impuestos al consumo (van DESPUÉS del IVA)
-    if cta.startswith("24080540") or "IBUA" in desc:        # Bebidas azucaradas
+    # 3. Impuestos al consumo / saludables / bolsas
+    #    - IBUA/ICUI (saludables) van al inventario 14359xxx (tras Silla Tres)
+    #    - INC y telefónico van al gasto 52159xxx
+    #    Ambos casos van DESPUÉS del IVA en el orden de impresión.
+    if cta.startswith("14359"):
+        return 40   # IBUA / ICUI / saludable / consumo al inventario
+    if cta.startswith("521595"):
+        return 42   # INC / telefónico / consumo al gasto
+    if "IBUA" in desc or "ICUI" in desc or "BEBIDA AZUC" in desc or "ULTRA" in desc:
         return 40
-    if cta.startswith("24080515") or "ICUI" in desc:        # Ultraprocesados
-        return 41
-    if cta.startswith("24080530") or "INC " in desc or "(INC)" in desc:  # Nacional al Consumo
+    if "(INC)" in desc or "IMPUESTO AL CONSUMO" in desc or "TELEFONIC" in desc:
         return 42
 
-    # 2. IVA descontable (240801, 240802...) — va ANTES de los impuestos al consumo
+    # 2. IVA descontable: 240810 (compras) o 240813 (servicios), o 24080x (legacy)
+    if cta.startswith("240810") or cta.startswith("240813"):
+        return 30
     if cta.startswith("2408"):
         return 30
 
@@ -476,7 +483,7 @@ def _orden_linea_intra_doc(linea: LineaPlano) -> int:
 
 def _ordenar_y_renumerar_plano(
     lineas: list[LineaPlano],
-    consecutivo_inicial: int = 1,
+    consecutivos_iniciales: dict[str, int] | int | None = None,
 ) -> list[LineaPlano]:
     """Ordena el plano contable por fecha de emisión ascendente y renumera
     consecutivos para que las facturas más antiguas tengan los números menores.
@@ -485,11 +492,28 @@ def _ordenar_y_renumerar_plano(
     - Las líneas se agrupan por documento (consecutivo + documento_referencia).
     - Los grupos se ordenan por (fecha ASC, consecutivo_original ASC).
     - Se asigna un nuevo consecutivo correlativo por (comprobante, fecha).
-      Cada comprobante (3, 7, 12) lleva su propia secuencia.
-    - Dentro de cada documento las líneas se ordenan según _orden_linea_intra_doc().
+      Cada comprobante (3=causación, 7=ND, 12=NC) lleva su propia secuencia
+      independiente.
+
+    Parámetro `consecutivos_iniciales` admite tres formas:
+    - dict como {"3": 100, "7": 50, "12": 200}: número inicial por comprobante
+    - int único (ej. 1000): mismo número inicial para todos los comprobantes
+    - None: por defecto cada comprobante arranca en 1
     """
     if not lineas:
         return lineas
+
+    # Normalizar `consecutivos_iniciales` a dict
+    if consecutivos_iniciales is None:
+        iniciales: dict[str, int] = {}
+        default_inicial = 1
+    elif isinstance(consecutivos_iniciales, int):
+        iniciales = {}
+        default_inicial = consecutivos_iniciales
+    else:
+        # Asegurar claves como str y valores como int
+        iniciales = {str(k): int(v) for k, v in consecutivos_iniciales.items()}
+        default_inicial = 1
 
     # Agrupar por (consecutivo_original, documento_referencia)
     grupos: dict[tuple[str, str], list[LineaPlano]] = defaultdict(list)
@@ -505,10 +529,8 @@ def _ordenar_y_renumerar_plano(
             consec_num = int(str(consec_orig).strip())
         except (ValueError, TypeError):
             consec_num = 0
-        # Fecha como tupla ordenable
-        fecha = primera.fecha
         docs_ordenables.append({
-            "fecha": fecha,
+            "fecha": primera.fecha,
             "consec_num": consec_num,
             "consec_orig": consec_orig,
             "doc_ref": doc_ref,
@@ -519,11 +541,14 @@ def _ordenar_y_renumerar_plano(
     # Ordenar por fecha ASC, luego consecutivo original ASC (estable)
     docs_ordenables.sort(key=lambda d: (d["fecha"], d["consec_num"], d["consec_orig"]))
 
-    # Renumerar: cada COMPROBANTE lleva su propia secuencia
+    # Renumerar: cada COMPROBANTE lleva su propia secuencia, arrancando
+    # desde el número que indique el dict (o default_inicial)
     contadores: dict[str, int] = {}
     for d in docs_ordenables:
-        comp = d["comprobante"]
-        contadores.setdefault(comp, consecutivo_inicial - 1)
+        comp = str(d["comprobante"])
+        if comp not in contadores:
+            inicial = iniciales.get(comp, default_inicial)
+            contadores[comp] = inicial - 1
         contadores[comp] += 1
         nuevo_consec = str(contadores[comp])
         # Aplicar nuevo consecutivo a todas las líneas del doc
@@ -540,15 +565,175 @@ def _ordenar_y_renumerar_plano(
 
 
 # ─────────────────────────────────────────────────────────────────
+# REMAPEO DE CUENTAS POR PUC DE EMPRESA (Silla Tres)
+# ─────────────────────────────────────────────────────────────────
+# El procesador legacy asigna cuentas IVA y de impuestos al consumo
+# usando códigos genéricos del PUC (24080201, 24080203, etc.) que NO
+# corresponden con el catálogo real de Silla Tres. Esta función
+# reemplaza esas cuentas por las correctas del BP, según el contexto
+# (compras vs servicios, inventario vs gasto, telefonía vs otros).
+
+# Sufijos que identifican cuentas de inventario en el plano (vienen
+# del legacy o del motor v0.3 antes del remapeo).
+_PREFIJOS_INVENTARIO = ("1435", "14")
+
+# Listas de palabras clave para identificar telefonía/comunicaciones
+_NOMBRES_TELEFONIA = (
+    "COLOMBIA MOVIL", "TIGO", "CLARO", "MOVISTAR", "ETB",
+    "TELEFONICA", "COMUNICACIONES", "AVANTEL", "WOM",
+    "COMCEL", "TELMEX", "UNE EPM", "DIRECTV",
+)
+
+
+def _es_proveedor_telefonia(nombre_emisor: str) -> bool:
+    """Detecta si el emisor es una empresa de telecomunicaciones, para
+    redirigir el INC al impuesto telefónico."""
+    if not nombre_emisor:
+        return False
+    n = nombre_emisor.upper()
+    return any(t in n for t in _NOMBRES_TELEFONIA)
+
+
+def remapear_cuentas_silla_tres(
+    resultados: list[ResultadoProcesamiento],
+    cuentas_override: dict | None = None,
+) -> list[ResultadoProcesamiento]:
+    """Reemplaza las cuentas que asignó el procesador legacy por las
+    correctas del PUC de Silla Tres, según contexto.
+
+    Reglas aplicadas (todas configurables en cuentas_override):
+
+    A) IVA DESCONTABLE — distinguir compras vs servicios y por tarifa:
+       - 24080201 → 24081007 (Compras 19%)
+       - 24080203 → 24081006 (Compras 5%)
+       - 24080308 → 24081303 (Servicios 19%)
+       Si la línea de IVA está acompañada de una línea con cuenta
+       1435xx (inventario) → es COMPRA. Si no, es SERVICIO.
+
+    B) IMPUESTOS AL CONSUMO (INC, telefónico, bolsas):
+       - Si el documento tiene líneas de inventario (1435xx) →
+         el impuesto va al inventario 14359505 (impuesto saludable).
+       - Si el documento es de gasto/servicio:
+            - Telefonía (Tigo/Claro/Movistar/...) → 52159502
+            - Otros → 52159501
+
+    C) IBUA / ICUI (impuestos saludables):
+       - 24080540 (IBUA) → 14359505 (impuesto saludable, ahora 20%)
+       - 24080515 (ICUI) → 14359505 (mismo grupo)
+
+    `cuentas_override` permite cambiar los códigos sin tocar el código.
+    Default = catálogo confirmado de Silla Tres.
+    """
+    # Configuración por defecto (catálogo Silla Tres marzo 2026)
+    cfg = {
+        # IVA descontable
+        "iva_compras_19":    "24081007",
+        "iva_compras_5":     "24081006",
+        "iva_servicios_19":  "24081303",
+        "iva_servicios_5":   "24081303",  # mismo, no hay 5% servicios separado
+
+        # Impuesto saludable (al inventario): IBUA, ICUI, y consumo cuando
+        # el ítem es para inventario
+        "saludable_inventario": "14359505",
+
+        # Impuestos como gasto (cuando NO hay inventario en la factura)
+        "consumo_gasto":     "52159501",   # INC general
+        "consumo_telefonia": "52159502",   # INC telefonía
+
+        # Mapeos de cuentas legacy → cuenta destino (para detectar y reemplazar)
+        "mapa_iva_legacy_a_concepto": {
+            "24080201": ("compras",  "19"),
+            "24080203": ("compras",  "5"),
+            "24080308": ("servicios","19"),
+        },
+        "mapa_consumo_legacy": {
+            "24080540": "saludable",   # IBUA antiguo → saludable inventario
+            "24080515": "saludable",   # ICUI antiguo → saludable inventario
+            "24080530": "consumo",     # INC antiguo → gasto/inventario según contexto
+        },
+    }
+    if cuentas_override:
+        cfg.update(cuentas_override)
+
+    for res in resultados:
+        if not res.lineas_plano:
+            continue
+
+        # Indexar líneas por documento para tener contexto
+        lineas_por_doc: dict[tuple[str, str], list[LineaPlano]] = defaultdict(list)
+        for l in res.lineas_plano:
+            lineas_por_doc[(l.consecutivo, l.documento_referencia)].append(l)
+
+        # Mapa NIT → nombre del emisor para detectar telefonía
+        nit_a_nombre: dict[str, str] = {}
+        for d in res.documentos:
+            nit_a_nombre[normalizar_nit(d.nit_emisor)] = d.nombre_emisor or ""
+
+        for clave, lineas_doc in lineas_por_doc.items():
+            # ¿El documento tiene líneas de INVENTARIO (1435xx)?
+            tiene_inventario = any(
+                l.cuenta.startswith("1435") for l in lineas_doc
+            )
+            # NIT del proveedor (de cualquier línea con nit_tercero)
+            nit_proveedor = ""
+            for l in lineas_doc:
+                if l.nit_tercero:
+                    nit_proveedor = normalizar_nit(l.nit_tercero)
+                    break
+            es_telefonia = _es_proveedor_telefonia(nit_a_nombre.get(nit_proveedor, ""))
+
+            for l in lineas_doc:
+                cta_actual = l.cuenta or ""
+                desc = (l.descripcion or "").upper()
+
+                # ── A) IVA DESCONTABLE ─────────────────────────
+                # Si la cuenta legacy de IVA está mapeada, reemplazar por
+                # compras vs servicios según contexto (inventario o no).
+                mapeo_iva = cfg["mapa_iva_legacy_a_concepto"].get(cta_actual)
+                if mapeo_iva is not None:
+                    _, tarifa = mapeo_iva
+                    concepto = "compras" if tiene_inventario else "servicios"
+                    nueva_cta = cfg.get(f"iva_{concepto}_{tarifa}")
+                    if nueva_cta:
+                        l.cuenta = nueva_cta
+
+                # ── B/C) IMPUESTOS AL CONSUMO / SALUDABLES ─────
+                # IBUA, ICUI → saludable_inventario (sin importar contexto,
+                # son siempre productos de bebidas/alimentos)
+                # INC → contexto: si hay inventario → saludable; si no →
+                # telefonía o consumo gasto.
+                tag_consumo = cfg["mapa_consumo_legacy"].get(cta_actual)
+                if tag_consumo == "saludable" or "IBUA" in desc or "ICUI" in desc:
+                    l.cuenta = cfg["saludable_inventario"]
+                elif tag_consumo == "consumo" or "(INC)" in desc:
+                    if tiene_inventario:
+                        l.cuenta = cfg["saludable_inventario"]
+                    elif es_telefonia:
+                        l.cuenta = cfg["consumo_telefonia"]
+                    else:
+                        l.cuenta = cfg["consumo_gasto"]
+
+    return resultados
+
+
+# ─────────────────────────────────────────────────────────────────
 # POST-PROCESADO: agregar líneas de retenciones
 # ─────────────────────────────────────────────────────────────────
 
 def agregar_retenciones_a_resultados(
     resultados: list[ResultadoProcesamiento],
     ruta_empresas: Path | str,
+    consecutivos_iniciales: dict[str, int] | int | None = None,
 ) -> list[ResultadoProcesamiento]:
     """Agrega líneas de retefuente y reteIVA al plano contable, ajustando
-    el cuadre del proveedor."""
+    el cuadre del proveedor. Al final ordena por fecha de emisión ASC y
+    renumera consecutivos por comprobante.
+
+    `consecutivos_iniciales` puede ser:
+    - dict {"3": 100, "7": 50, "12": 200}: número inicial por comprobante
+    - int único: mismo número inicial para todos los comprobantes
+    - None: cada comprobante arranca en 1
+    """
     ruta_emp = Path(ruta_empresas)
 
     for res in resultados:
@@ -655,10 +840,17 @@ def agregar_retenciones_a_resultados(
             ret_iva = calcular_reteiva(catalogo, float(iva), regimen, float(base_neta))
             if ret_iva and ret_iva.aplicada and ret_iva.valor > 0:
                 valor_iva = _q(Decimal(str(ret_iva.valor)))
+                # Forzar cuenta de reteIVA del PUC Silla Tres (regimen simple 15%)
+                # Si el catálogo tiene una cuenta distinta para reteIVA, esta
+                # línea la sobreescribe.
+                cuenta_reteiva = (
+                    catalogo.empresa_json.get("cuentas_reteiva", {}).get("default")
+                    or "23670515"
+                )
                 if not es_nc:
                     lineas_retencion.append(LineaPlano(
                         fecha=fecha, comprobante=comp, consecutivo=consec,
-                        cuenta=ret_iva.cuenta, centro_costo=cc_doc, nit_tercero=nit_terc,
+                        cuenta=cuenta_reteiva, centro_costo=cc_doc, nit_tercero=nit_terc,
                         descripcion=f"ReteIVA 15%",
                         documento_referencia=doc_ref,
                         debito=Decimal(0), credito=valor_iva,
@@ -668,7 +860,7 @@ def agregar_retenciones_a_resultados(
                 else:
                     lineas_retencion.append(LineaPlano(
                         fecha=fecha, comprobante=comp, consecutivo=consec,
-                        cuenta=ret_iva.cuenta, centro_costo=cc_doc, nit_tercero=nit_terc,
+                        cuenta=cuenta_reteiva, centro_costo=cc_doc, nit_tercero=nit_terc,
                         descripcion=f"Reverso ReteIVA NC",
                         documento_referencia=doc_ref,
                         debito=valor_iva, credito=Decimal(0),
@@ -699,10 +891,21 @@ def agregar_retenciones_a_resultados(
         cuadre_db = sum((l.debito for l in nuevas_lineas), Decimal(0))
         cuadre_cr = sum((l.credito for l in nuevas_lineas), Decimal(0))
 
+        # Asignar las líneas al res ANTES del remapeo para que la función
+        # remapear_cuentas_silla_tres pueda iterar por documento.
+        res.lineas_plano = nuevas_lineas
+
+        # Remapear cuentas de IVA, IBUA, ICUI, INC al PUC real de Silla Tres
+        # (24081007, 24081303, 14359505, 52159501, 52159502).
+        remapear_cuentas_silla_tres([res])
+
         # Ordenar por fecha de emisión ASC y renumerar consecutivos:
         # facturas más antiguas → consecutivos menores. Cada comprobante
-        # (3, 7, 12) lleva su propia secuencia.
-        nuevas_lineas = _ordenar_y_renumerar_plano(nuevas_lineas)
+        # (3, 7, 12) lleva su propia secuencia, arrancando desde lo que
+        # indique consecutivos_iniciales (o desde 1 por defecto).
+        nuevas_lineas = _ordenar_y_renumerar_plano(
+            res.lineas_plano, consecutivos_iniciales=consecutivos_iniciales,
+        )
 
         res.lineas_plano = nuevas_lineas
         res.cuadre_db = cuadre_db
