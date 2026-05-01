@@ -140,109 +140,109 @@ pagina_inicio = st.Page(
     title="Inicio",
     icon="🏠",
     default=True,
-    url_path="/",
+    url_path="inicio",
 )
 
 # ----- Sección: Asistente Contable -----
 asistente_caja = st.Page(
-    "pages/1_Caja_Menor.py",
+    "app_pages/1_Caja_Menor.py",
     title="Caja Menor",
     icon="💵",
-    url_path="/caja-menor",
+    url_path="caja-menor",
 )
 asistente_compras_dian = st.Page(
-    "pages/2_Compras_DIAN.py",
+    "app_pages/2_Compras_DIAN.py",
     title="Compras DIAN",
     icon="🛒",
-    url_path="/compras-dian",
+    url_path="compras-dian",
 )
 asistente_compras_eg = st.Page(
-    "pages/3_Compras_y_Egresos.py",
+    "app_pages/3a_Compras_y_Egresos.py",
     title="Compras y Egresos",
     icon="📊",
-    url_path="/compras-egresos",
+    url_path="compras-egresos",
 )
 asistente_nomina = st.Page(
-    "pages/3_Nomina.py",
+    "app_pages/3_Nomina.py",
     title="Nómina",
     icon="💼",
-    url_path="/nomina",
+    url_path="nomina",
 )
 asistente_prov = st.Page(
-    "pages/4_Provisiones.py",
+    "app_pages/4_Provisiones.py",
     title="Provisiones",
     icon="📝",
-    url_path="/provisiones",
+    url_path="provisiones",
 )
 asistente_ventas_c13 = st.Page(
-    "pages/4_Ventas_C13.py",
+    "app_pages/4a_Ventas_C13.py",
     title="Ventas C13",
     icon="🛍️",
-    url_path="/ventas-c13",
+    url_path="ventas-c13",
 )
 asistente_pos = st.Page(
-    "pages/4_Ingresos_POS.py",
+    "app_pages/4b_Ingresos_POS.py",
     title="Ingresos POS",
     icon="🧾",
-    url_path="/ingresos-pos",
+    url_path="ingresos-pos",
 )
 asistente_pila = st.Page(
-    "pages/5_PILA.py",
+    "app_pages/5_PILA.py",
     title="PILA",
     icon="📎",
-    url_path="/pila",
+    url_path="pila",
 )
 asistente_dian_xml = st.Page(
-    "pages/5_DIAN_XML.py",
+    "app_pages/5a_DIAN_XML.py",
     title="DIAN XML",
     icon="📥",
-    url_path="/dian-xml",
+    url_path="dian-xml",
 )
 
 # ----- Sección: Herramientas Tributarias -----
 trib_exogena = st.Page(
-    "pages/7_Informacion_Exogena.py",
+    "app_pages/7_Informacion_Exogena.py",
     title="Información Exógena",
     icon="📑",
-    url_path="/exogena",
+    url_path="exogena",
 )
 trib_renta = st.Page(
-    "pages/8_Declaracion_Renta.py",
+    "app_pages/8_Declaracion_Renta.py",
     title="Declaración de Renta",
     icon="📝",
-    url_path="/renta",
+    url_path="renta",
 )
 trib_iva = st.Page(
-    "pages/9_IVA.py",
+    "app_pages/9_IVA.py",
     title="IVA y reteIVA",
     icon="💸",
-    url_path="/iva",
+    url_path="iva",
 )
 trib_retencion = st.Page(
-    "pages/10_Retencion_Fuente.py",
+    "app_pages/10_Retencion_Fuente.py",
     title="Retención en la Fuente",
     icon="🧾",
-    url_path="/retencion",
+    url_path="retencion",
 )
 trib_saludables = st.Page(
-    "pages/11_Impuestos_Saludables.py",
+    "app_pages/11_Impuestos_Saludables.py",
     title="Impuestos Saludables",
     icon="🥤",
-    url_path="/saludables",
+    url_path="saludables",
 )
 
 # ----- Sección: Sistema -----
 sistema_panel_admin = st.Page(
-    "pages/0_Panel_Admin.py",
+    "app_pages/0_Panel_Admin.py",
     title="Panel Admin",
     icon="🛡️",
-    url_path="/panel-admin",
+    url_path="panel-admin",
 )
 sistema_config = st.Page(
-    "pages/6_Configuracion.py",
+    "app_pages/6_Configuracion.py",
     title="Configuración",
     icon="⚙️",
-    url_path="/configuracion",
+    url_path="configuracion",
 )
 
 
