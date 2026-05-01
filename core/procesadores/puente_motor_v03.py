@@ -565,12 +565,12 @@ def _ordenar_y_renumerar_plano(
 
 
 # ─────────────────────────────────────────────────────────────────
-# REMAPEO DE CUENTAS POR PUC DE EMPRESA (Silla Tres)
+# REMAPEO DE CUENTAS POR PUC DE EMPRESA
 # ─────────────────────────────────────────────────────────────────
 # El procesador legacy asigna cuentas IVA y de impuestos al consumo
 # usando códigos genéricos del PUC (24080201, 24080203, etc.) que NO
-# corresponden con el catálogo real de Silla Tres. Esta función
-# reemplaza esas cuentas por las correctas del BP, según el contexto
+# corresponden con el catálogo real de cada empresa. Esta función
+# reemplaza esas cuentas por las correctas del PUC, según el contexto
 # (compras vs servicios, inventario vs gasto, telefonía vs otros).
 
 # Sufijos que identifican cuentas de inventario en el plano (vienen
@@ -594,126 +594,205 @@ def _es_proveedor_telefonia(nombre_emisor: str) -> bool:
     return any(t in n for t in _NOMBRES_TELEFONIA)
 
 
-def remapear_cuentas_silla_tres(
+# ─────────────────────────────────────────────────────────────────
+# CONFIGURACIONES PRE-DEFINIDAS POR EMPRESA
+# ─────────────────────────────────────────────────────────────────
+# Cada empresa tiene su propio PUC. Las claves del config son las
+# mismas para todas las empresas; cambian los códigos de cuenta.
+#
+# En el FUTURO (Fase 2) estas configs vivirán en empresa.json en
+# Supabase Storage y se leerán dinámicamente. Por ahora están en
+# código para no romper la compatibilidad.
+
+CONFIG_SILLA_TRES = {
+    "_descripcion": "SILLA TRES S.A.S — NIT 900451388",
+    # IVA descontable
+    "iva_compras_19":    "24081007",
+    "iva_compras_5":     "24081006",
+    "iva_servicios_19":  "24081303",
+    "iva_servicios_5":   "24081303",   # mismo, no hay 5% servicios separado
+
+    # Impuesto saludable (al inventario): IBUA, ICUI, y consumo cuando
+    # el ítem es para inventario
+    "saludable_inventario": "14359505",
+
+    # Impuestos como gasto (cuando NO hay inventario en la factura)
+    "consumo_gasto":     "52159501",   # INC general
+    "consumo_telefonia": "52159502",   # INC telefonía
+
+    # Mapeos de cuentas legacy → cuenta destino (para detectar y reemplazar)
+    "mapa_iva_legacy_a_concepto": {
+        "24080201": ("compras",  "19"),
+        "24080203": ("compras",  "5"),
+        "24080308": ("servicios","19"),
+    },
+    "mapa_consumo_legacy": {
+        "24080540": "saludable",   # IBUA antiguo → saludable inventario
+        "24080515": "saludable",   # ICUI antiguo → saludable inventario
+        "24080530": "consumo",     # INC antiguo → gasto/inventario según contexto
+    },
+}
+
+
+# Diccionario: NIT (sin guion, sin DV) → config de remapeo
+# Cuando se agregue una empresa nueva, basta con añadir su entrada acá.
+# En Fase 2 esto se reemplazará por una lectura dinámica de empresa.json.
+CONFIGS_POR_NIT: dict[str, dict] = {
+    "900451388": CONFIG_SILLA_TRES,
+}
+
+
+def obtener_config_empresa(
+    nit_empresa: str,
+    config_override: dict | None = None,
+) -> dict | None:
+    """Devuelve el config de remapeo para la empresa dada.
+
+    Args:
+        nit_empresa: NIT de la empresa (con o sin guion).
+        config_override: dict explícito que toma precedencia sobre el
+            registro interno. Útil cuando el config viene de Supabase.
+
+    Returns:
+        dict con el config, o None si la empresa no tiene config (en cuyo
+        caso el remapeo no se aplicará).
+    """
+    if config_override is not None:
+        return config_override
+    nit_norm = normalizar_nit(nit_empresa)
+    return CONFIGS_POR_NIT.get(nit_norm)
+
+
+def remapear_cuentas_por_empresa(
     resultados: list[ResultadoProcesamiento],
-    cuentas_override: dict | None = None,
+    config_override: dict | None = None,
 ) -> list[ResultadoProcesamiento]:
     """Reemplaza las cuentas que asignó el procesador legacy por las
-    correctas del PUC de Silla Tres, según contexto.
+    correctas del PUC de cada empresa, según contexto.
 
-    Reglas aplicadas (todas configurables en cuentas_override):
+    Para cada empresa en `resultados`, busca su config en `CONFIGS_POR_NIT`
+    usando el NIT de la empresa. Si no encuentra config, no hace nada
+    (la empresa pasa intacta).
 
-    A) IVA DESCONTABLE — distinguir compras vs servicios y por tarifa:
-       - 24080201 → 24081007 (Compras 19%)
-       - 24080203 → 24081006 (Compras 5%)
-       - 24080308 → 24081303 (Servicios 19%)
-       Si la línea de IVA está acompañada de una línea con cuenta
-       1435xx (inventario) → es COMPRA. Si no, es SERVICIO.
+    Reglas aplicadas (todas configurables en config_override):
+
+    A) IVA DESCONTABLE — distinguir compras vs servicios y por tarifa.
+       Si la línea de IVA está acompañada de líneas con cuenta `1435xx`
+       (inventario) → es COMPRA. Si no, es SERVICIO.
 
     B) IMPUESTOS AL CONSUMO (INC, telefónico, bolsas):
        - Si el documento tiene líneas de inventario (1435xx) →
-         el impuesto va al inventario 14359505 (impuesto saludable).
+         el impuesto va al inventario (saludable_inventario).
        - Si el documento es de gasto/servicio:
-            - Telefonía (Tigo/Claro/Movistar/...) → 52159502
-            - Otros → 52159501
+            - Telefonía (Tigo/Claro/Movistar/...) → consumo_telefonia
+            - Otros → consumo_gasto
 
     C) IBUA / ICUI (impuestos saludables):
-       - 24080540 (IBUA) → 14359505 (impuesto saludable, ahora 20%)
-       - 24080515 (ICUI) → 14359505 (mismo grupo)
+       Siempre van a saludable_inventario, sin importar el contexto.
 
-    `cuentas_override` permite cambiar los códigos sin tocar el código.
-    Default = catálogo confirmado de Silla Tres.
+    Args:
+        resultados: lista de ResultadoProcesamiento (uno por empresa).
+        config_override: si se da, se aplica este config a TODAS las empresas
+            de `resultados`, ignorando el NIT. Útil para test o para
+            forzar una empresa específica.
     """
-    # Configuración por defecto (catálogo Silla Tres marzo 2026)
-    cfg = {
-        # IVA descontable
-        "iva_compras_19":    "24081007",
-        "iva_compras_5":     "24081006",
-        "iva_servicios_19":  "24081303",
-        "iva_servicios_5":   "24081303",  # mismo, no hay 5% servicios separado
-
-        # Impuesto saludable (al inventario): IBUA, ICUI, y consumo cuando
-        # el ítem es para inventario
-        "saludable_inventario": "14359505",
-
-        # Impuestos como gasto (cuando NO hay inventario en la factura)
-        "consumo_gasto":     "52159501",   # INC general
-        "consumo_telefonia": "52159502",   # INC telefonía
-
-        # Mapeos de cuentas legacy → cuenta destino (para detectar y reemplazar)
-        "mapa_iva_legacy_a_concepto": {
-            "24080201": ("compras",  "19"),
-            "24080203": ("compras",  "5"),
-            "24080308": ("servicios","19"),
-        },
-        "mapa_consumo_legacy": {
-            "24080540": "saludable",   # IBUA antiguo → saludable inventario
-            "24080515": "saludable",   # ICUI antiguo → saludable inventario
-            "24080530": "consumo",     # INC antiguo → gasto/inventario según contexto
-        },
-    }
-    if cuentas_override:
-        cfg.update(cuentas_override)
-
     for res in resultados:
         if not res.lineas_plano:
             continue
 
-        # Indexar líneas por documento para tener contexto
-        lineas_por_doc: dict[tuple[str, str], list[LineaPlano]] = defaultdict(list)
-        for l in res.lineas_plano:
-            lineas_por_doc[(l.consecutivo, l.documento_referencia)].append(l)
+        # Determinar el config aplicable para ESTA empresa
+        cfg = obtener_config_empresa(
+            nit_empresa=getattr(res, "empresa_nit", "") or res.empresa_id,
+            config_override=config_override,
+        )
+        if cfg is None:
+            # Empresa sin config registrada: no remapear, pasa intacta
+            continue
 
-        # Mapa NIT → nombre del emisor para detectar telefonía
-        nit_a_nombre: dict[str, str] = {}
-        for d in res.documentos:
-            nit_a_nombre[normalizar_nit(d.nit_emisor)] = d.nombre_emisor or ""
-
-        for clave, lineas_doc in lineas_por_doc.items():
-            # ¿El documento tiene líneas de INVENTARIO (1435xx)?
-            tiene_inventario = any(
-                l.cuenta.startswith("1435") for l in lineas_doc
-            )
-            # NIT del proveedor (de cualquier línea con nit_tercero)
-            nit_proveedor = ""
-            for l in lineas_doc:
-                if l.nit_tercero:
-                    nit_proveedor = normalizar_nit(l.nit_tercero)
-                    break
-            es_telefonia = _es_proveedor_telefonia(nit_a_nombre.get(nit_proveedor, ""))
-
-            for l in lineas_doc:
-                cta_actual = l.cuenta or ""
-                desc = (l.descripcion or "").upper()
-
-                # ── A) IVA DESCONTABLE ─────────────────────────
-                # Si la cuenta legacy de IVA está mapeada, reemplazar por
-                # compras vs servicios según contexto (inventario o no).
-                mapeo_iva = cfg["mapa_iva_legacy_a_concepto"].get(cta_actual)
-                if mapeo_iva is not None:
-                    _, tarifa = mapeo_iva
-                    concepto = "compras" if tiene_inventario else "servicios"
-                    nueva_cta = cfg.get(f"iva_{concepto}_{tarifa}")
-                    if nueva_cta:
-                        l.cuenta = nueva_cta
-
-                # ── B/C) IMPUESTOS AL CONSUMO / SALUDABLES ─────
-                # IBUA, ICUI → saludable_inventario (sin importar contexto,
-                # son siempre productos de bebidas/alimentos)
-                # INC → contexto: si hay inventario → saludable; si no →
-                # telefonía o consumo gasto.
-                tag_consumo = cfg["mapa_consumo_legacy"].get(cta_actual)
-                if tag_consumo == "saludable" or "IBUA" in desc or "ICUI" in desc:
-                    l.cuenta = cfg["saludable_inventario"]
-                elif tag_consumo == "consumo" or "(INC)" in desc:
-                    if tiene_inventario:
-                        l.cuenta = cfg["saludable_inventario"]
-                    elif es_telefonia:
-                        l.cuenta = cfg["consumo_telefonia"]
-                    else:
-                        l.cuenta = cfg["consumo_gasto"]
+        _aplicar_remapeo_a_resultado(res, cfg)
 
     return resultados
+
+
+def _aplicar_remapeo_a_resultado(res: ResultadoProcesamiento, cfg: dict) -> None:
+    """Aplica el remapeo de cuentas a un resultado individual.
+    Extraído para que la lógica sea testeable sin la lista de resultados."""
+    # Indexar líneas por documento para tener contexto
+    lineas_por_doc: dict[tuple[str, str], list[LineaPlano]] = defaultdict(list)
+    for l in res.lineas_plano:
+        lineas_por_doc[(l.consecutivo, l.documento_referencia)].append(l)
+
+    # Mapa NIT → nombre del emisor para detectar telefonía
+    nit_a_nombre: dict[str, str] = {}
+    for d in res.documentos:
+        nit_a_nombre[normalizar_nit(d.nit_emisor)] = d.nombre_emisor or ""
+
+    # Configs con defaults seguros
+    mapa_iva = cfg.get("mapa_iva_legacy_a_concepto", {})
+    mapa_consumo = cfg.get("mapa_consumo_legacy", {})
+
+    for clave, lineas_doc in lineas_por_doc.items():
+        # ¿El documento tiene líneas de INVENTARIO (1435xx)?
+        tiene_inventario = any(
+            l.cuenta.startswith("1435") for l in lineas_doc
+        )
+        # NIT del proveedor (de cualquier línea con nit_tercero)
+        nit_proveedor = ""
+        for l in lineas_doc:
+            if l.nit_tercero:
+                nit_proveedor = normalizar_nit(l.nit_tercero)
+                break
+        es_telefonia = _es_proveedor_telefonia(nit_a_nombre.get(nit_proveedor, ""))
+
+        for l in lineas_doc:
+            cta_actual = l.cuenta or ""
+            desc = (l.descripcion or "").upper()
+
+            # ── A) IVA DESCONTABLE ─────────────────────────
+            mapeo_iva = mapa_iva.get(cta_actual)
+            if mapeo_iva is not None:
+                _, tarifa = mapeo_iva
+                concepto = "compras" if tiene_inventario else "servicios"
+                nueva_cta = cfg.get(f"iva_{concepto}_{tarifa}")
+                if nueva_cta:
+                    l.cuenta = nueva_cta
+
+            # ── B/C) IMPUESTOS AL CONSUMO / SALUDABLES ─────
+            tag_consumo = mapa_consumo.get(cta_actual)
+            if tag_consumo == "saludable" or "IBUA" in desc or "ICUI" in desc:
+                cta_dest = cfg.get("saludable_inventario")
+                if cta_dest:
+                    l.cuenta = cta_dest
+            elif tag_consumo == "consumo" or "(INC)" in desc:
+                if tiene_inventario:
+                    cta_dest = cfg.get("saludable_inventario")
+                elif es_telefonia:
+                    cta_dest = cfg.get("consumo_telefonia")
+                else:
+                    cta_dest = cfg.get("consumo_gasto")
+                if cta_dest:
+                    l.cuenta = cta_dest
+
+
+# ─────────────────────────────────────────────────────────────────
+# COMPATIBILIDAD HACIA ATRÁS
+# ─────────────────────────────────────────────────────────────────
+# La función original se llamaba `remapear_cuentas_silla_tres`. Mantenemos
+# el alias para que cualquier código que la importe siga funcionando.
+# DEPRECADO: usar `remapear_cuentas_por_empresa()`.
+
+def remapear_cuentas_silla_tres(
+    resultados: list[ResultadoProcesamiento],
+    cuentas_override: dict | None = None,
+) -> list[ResultadoProcesamiento]:
+    """[DEPRECADO] Alias de `remapear_cuentas_por_empresa` que fuerza la
+    config de Silla Tres. Mantenido para compatibilidad con código que
+    importa esta función directamente. Se eliminará en una versión futura.
+    """
+    cfg = CONFIG_SILLA_TRES.copy()
+    if cuentas_override:
+        cfg.update(cuentas_override)
+    return remapear_cuentas_por_empresa(resultados, config_override=cfg)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -892,12 +971,14 @@ def agregar_retenciones_a_resultados(
         cuadre_cr = sum((l.credito for l in nuevas_lineas), Decimal(0))
 
         # Asignar las líneas al res ANTES del remapeo para que la función
-        # remapear_cuentas_silla_tres pueda iterar por documento.
+        # de remapeo pueda iterar por documento.
         res.lineas_plano = nuevas_lineas
 
-        # Remapear cuentas de IVA, IBUA, ICUI, INC al PUC real de Silla Tres
-        # (24081007, 24081303, 14359505, 52159501, 52159502).
-        remapear_cuentas_silla_tres([res])
+        # Remapear cuentas de IVA, IBUA, ICUI, INC al PUC real de la empresa.
+        # `remapear_cuentas_por_empresa` busca el config en `CONFIGS_POR_NIT`
+        # según el NIT de la empresa. Si no hay config, no hace nada.
+        # En Fase 2 esto se reemplazará por config dinámico desde Supabase.
+        remapear_cuentas_por_empresa([res])
 
         # Ordenar por fecha de emisión ASC y renumerar consecutivos:
         # facturas más antiguas → consecutivos menores. Cada comprobante
