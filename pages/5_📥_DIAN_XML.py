@@ -30,6 +30,12 @@ sidebar_user_info()   # muestra usuario + botón de logout en el sidebar
 
 # Imports nuevos del motor v0.3 (se conectarán al procesador en próxima sesión)
 from core.procesadores.motor_mapeo_v03 import CatalogoEmpresa
+from core.procesadores.exportador_silla_tres import (
+    construir_dataframe_silla_tres,
+    exportar_txt_silla_tres,
+    exportar_csv_silla_tres,
+    exportar_xlsx_silla_tres,
+)
 
 # Imports legacy del v0.2 (parser UBL, generador de plano)
 from core.procesadores.procesador_dian_xml import (
@@ -56,6 +62,17 @@ def cargar_registry():
     return RegistryEmpresas(EMPRESAS_DIR)
 
 
+def _cargar_catalogo_para(empresa_id: str) -> CatalogoEmpresa:
+    """Carga el CatalogoEmpresa para un empresa_id dado, buscando la carpeta correcta."""
+    for p in EMPRESAS_DIR.iterdir():
+        if not p.is_dir() or p.name.startswith("_"):
+            continue
+        # Las carpetas siguen el patrón "<NIT>_<slug>"
+        if p.name.startswith(f"{empresa_id}_") or p.name == empresa_id:
+            return CatalogoEmpresa.cargar(p)
+    raise FileNotFoundError(f"No se encontró carpeta para empresa_id={empresa_id}")
+
+
 try:
     registry = cargar_registry()
     empresas = registry.listar()
@@ -68,7 +85,7 @@ except Exception as e:
 # Streamlit ejecuta el archivo de arriba abajo como un script normal.
 
 def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
-                        empresa_forzada, modo_plano):
+                        empresa_forzada, modo_plano, consecutivo_inicial=1):
     """Orquesta el procesamiento de RECIBIDOS y muestra resultados."""
     # ── Convertir parámetros UI a los esperados por procesar_multiples_zips ──
     anio_mes = f"{anio}{int(mes):02d}"
@@ -130,11 +147,14 @@ def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
     st.session_state["resumen"] = resumen
     st.session_state["anio_mes"] = anio_mes
     st.session_state["modo_plano"] = modo_plano
+    st.session_state["consecutivo_inicial"] = int(consecutivo_inicial)
 
-    mostrar_resultados_recibidos(resultados, resumen, modo_plano)
+    mostrar_resultados_recibidos(resultados, resumen, modo_plano,
+                                   int(consecutivo_inicial))
 
 
-def mostrar_resultados_recibidos(resultados, resumen, modo_plano):
+def mostrar_resultados_recibidos(resultados, resumen, modo_plano,
+                                   consecutivo_inicial=1):
     """Muestra los resultados del procesamiento (resumen + plano por empresa)."""
     # ── Resumen de ingesta ─────────────────────────────────
     st.markdown("---")
@@ -193,28 +213,75 @@ def mostrar_resultados_recibidos(resultados, resumen, modo_plano):
                 for adv in r.advertencias:
                     st.warning(f"⚠️ {adv}")
 
-            # Plano
+            # ── Construir DataFrame en formato Silla Tres ─────
+            # Determinar formato CC según empresa.json (sin_guion por defecto)
+            try:
+                cat = _cargar_catalogo_para(r.empresa_id)
+                cc_formato = cat.empresa_json.get("formato_salida", {}).get(
+                    "cc_formato", "sin_guion"
+                )
+            except Exception:
+                cc_formato = "sin_guion"
+
             if modo_plano == "Plano único consolidado":
-                df_plano = pd.DataFrame([l.__dict__ for l in r.lineas_plano])
+                df_plano = construir_dataframe_silla_tres(
+                    r.lineas_plano,
+                    cc_formato=cc_formato,
+                    consecutivo_inicial=consecutivo_inicial,
+                )
             else:
                 planos_sep = separar_lineas_por_comprobante(r.lineas_plano)
-                df_plano = pd.concat([
-                    pd.DataFrame([l.__dict__ for l in lineas]).assign(_comprobante=c)
-                    for c, lineas in planos_sep.items()
-                ], ignore_index=True) if planos_sep else pd.DataFrame()
+                dfs = []
+                for c, lineas in planos_sep.items():
+                    df_c = construir_dataframe_silla_tres(
+                        lineas,
+                        cc_formato=cc_formato,
+                        consecutivo_inicial=consecutivo_inicial,
+                    )
+                    df_c.insert(0, "_grupo_comprobante", c)
+                    dfs.append(df_c)
+                df_plano = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
-            if not df_plano.empty:
-                st.dataframe(df_plano, use_container_width=True, height=300)
+            if df_plano.empty:
+                st.info("No hay líneas en el plano para esta empresa.")
+                continue
 
-                # Botón de descarga TXT
-                anio_mes = st.session_state.get("anio_mes", "XXXXXX")
-                txt_plano = exportar_plano_txt(r.lineas_plano)
+            st.dataframe(df_plano, use_container_width=True, height=350, hide_index=True)
+
+            # ── 3 botones de descarga: TXT, CSV, XLSX ─────────
+            anio_mes = st.session_state.get("anio_mes", "XXXXXX")
+            base_nombre = f"plano_{r.empresa_id}_{anio_mes}"
+
+            # Para los downloads usamos el df sin el grupo_comprobante (si lo agregamos)
+            df_export = df_plano.drop(columns=["_grupo_comprobante"], errors="ignore")
+
+            col_dl1, col_dl2, col_dl3 = st.columns(3)
+            with col_dl1:
                 st.download_button(
-                    f"⬇️ Descargar plano {r.empresa_id} (.txt)",
-                    data=txt_plano,
-                    file_name=f"plano_{r.empresa_id}_{anio_mes}.txt",
+                    "⬇️ TXT (tab)",
+                    data=exportar_txt_silla_tres(df_export),
+                    file_name=f"{base_nombre}.txt",
                     mime="text/plain",
-                    key=f"dl_plano_{r.empresa_id}",
+                    key=f"dl_txt_{r.empresa_id}",
+                    use_container_width=True,
+                )
+            with col_dl2:
+                st.download_button(
+                    "⬇️ CSV",
+                    data=exportar_csv_silla_tres(df_export),
+                    file_name=f"{base_nombre}.csv",
+                    mime="text/csv",
+                    key=f"dl_csv_{r.empresa_id}",
+                    use_container_width=True,
+                )
+            with col_dl3:
+                st.download_button(
+                    "⬇️ Excel",
+                    data=exportar_xlsx_silla_tres(df_export),
+                    file_name=f"{base_nombre}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_xlsx_{r.empresa_id}",
+                    use_container_width=True,
                 )
 
 
@@ -286,6 +353,16 @@ with tab_proc:
                                 value=date.today().year, step=1, key="anio_proc")
         mes = st.number_input("Mes contable", min_value=1, max_value=12,
                                value=max(date.today().month - 1, 1), step=1, key="mes_proc")
+        consecutivo_inicial = st.number_input(
+            "Consecutivo inicial DOCUMENTO",
+            min_value=1, max_value=999999999, value=1, step=1,
+            key="consecutivo_inicial",
+            help=(
+                "Número desde el cual empieza el consecutivo de la columna "
+                "DOCUMENTO. Cada factura/asiento contable lleva un número "
+                "y se incrementa para el siguiente."
+            )
+        )
     with col_b:
         st.markdown("**Filtrar por fecha**")
         modo_filtro = st.radio(
@@ -321,7 +398,7 @@ with tab_proc:
         if st.button("🚀 Procesar ZIPs", type="primary", use_container_width=True,
                      key="btn_procesar_zips"):
             procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
-                                empresa_forzada, modo_plano)
+                                empresa_forzada, modo_plano, consecutivo_inicial)
 
 
 # ============================================================================
