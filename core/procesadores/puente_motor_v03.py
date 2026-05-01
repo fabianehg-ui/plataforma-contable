@@ -433,6 +433,113 @@ def aplicar_mapeo_v03(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN
 
 
 # ─────────────────────────────────────────────────────────────────
+# ORDENAMIENTO POR FECHA + RENUMERACIÓN DE CONSECUTIVOS
+# ─────────────────────────────────────────────────────────────────
+
+def _orden_linea_intra_doc(linea: LineaPlano) -> int:
+    """Devuelve un peso para ordenar líneas DENTRO de un mismo documento.
+    Orden deseado:
+      1. Gasto / inventario / costo
+      2. IVA descontable
+      3. Impuestos al consumo (IBUA, ICUI, INC)
+      4. Retenciones (retefuente, reteIVA, reteICA)
+      5. Proveedor (CxP) al final, como contrapartida que cuadra el doc.
+    """
+    cta = linea.cuenta or ""
+    desc = (linea.descripcion or "").upper()
+
+    # 5. Cuenta del proveedor (CxP) al final
+    if cta.startswith("2205"):
+        return 90
+
+    # 4. Retenciones de renta/IVA/ICA: 2365xx, 2367xx, 2368xx
+    if cta.startswith("2365") or cta.startswith("2367") or cta.startswith("2368"):
+        return 80
+    if "RETEFUENTE" in desc or "RETEIVA" in desc or "RETEICA" in desc:
+        return 80
+
+    # 3. Impuestos al consumo (van DESPUÉS del IVA)
+    if cta.startswith("24080540") or "IBUA" in desc:        # Bebidas azucaradas
+        return 40
+    if cta.startswith("24080515") or "ICUI" in desc:        # Ultraprocesados
+        return 41
+    if cta.startswith("24080530") or "INC " in desc or "(INC)" in desc:  # Nacional al Consumo
+        return 42
+
+    # 2. IVA descontable (240801, 240802...) — va ANTES de los impuestos al consumo
+    if cta.startswith("2408"):
+        return 30
+
+    # 1. Gasto / inventario / costo (1xxx, 5xxx, 6xxx, 7xxx) — primero
+    return 10
+
+
+def _ordenar_y_renumerar_plano(
+    lineas: list[LineaPlano],
+    consecutivo_inicial: int = 1,
+) -> list[LineaPlano]:
+    """Ordena el plano contable por fecha de emisión ascendente y renumera
+    consecutivos para que las facturas más antiguas tengan los números menores.
+
+    Reglas:
+    - Las líneas se agrupan por documento (consecutivo + documento_referencia).
+    - Los grupos se ordenan por (fecha ASC, consecutivo_original ASC).
+    - Se asigna un nuevo consecutivo correlativo por (comprobante, fecha).
+      Cada comprobante (3, 7, 12) lleva su propia secuencia.
+    - Dentro de cada documento las líneas se ordenan según _orden_linea_intra_doc().
+    """
+    if not lineas:
+        return lineas
+
+    # Agrupar por (consecutivo_original, documento_referencia)
+    grupos: dict[tuple[str, str], list[LineaPlano]] = defaultdict(list)
+    for l in lineas:
+        grupos[(l.consecutivo, l.documento_referencia)].append(l)
+
+    # Lista de docs con su clave de orden
+    docs_ordenables = []
+    for (consec_orig, doc_ref), lns in grupos.items():
+        primera = lns[0]
+        # Intentar parsear consecutivo original como int para orden numérico estable
+        try:
+            consec_num = int(str(consec_orig).strip())
+        except (ValueError, TypeError):
+            consec_num = 0
+        # Fecha como tupla ordenable
+        fecha = primera.fecha
+        docs_ordenables.append({
+            "fecha": fecha,
+            "consec_num": consec_num,
+            "consec_orig": consec_orig,
+            "doc_ref": doc_ref,
+            "comprobante": primera.comprobante,
+            "lineas": lns,
+        })
+
+    # Ordenar por fecha ASC, luego consecutivo original ASC (estable)
+    docs_ordenables.sort(key=lambda d: (d["fecha"], d["consec_num"], d["consec_orig"]))
+
+    # Renumerar: cada COMPROBANTE lleva su propia secuencia
+    contadores: dict[str, int] = {}
+    for d in docs_ordenables:
+        comp = d["comprobante"]
+        contadores.setdefault(comp, consecutivo_inicial - 1)
+        contadores[comp] += 1
+        nuevo_consec = str(contadores[comp])
+        # Aplicar nuevo consecutivo a todas las líneas del doc
+        for l in d["lineas"]:
+            l.consecutivo = nuevo_consec
+        # Ordenar líneas dentro del doc
+        d["lineas"].sort(key=_orden_linea_intra_doc)
+
+    # Devolver lista plana en el nuevo orden
+    resultado: list[LineaPlano] = []
+    for d in docs_ordenables:
+        resultado.extend(d["lineas"])
+    return resultado
+
+
+# ─────────────────────────────────────────────────────────────────
 # POST-PROCESADO: agregar líneas de retenciones
 # ─────────────────────────────────────────────────────────────────
 
@@ -591,6 +698,12 @@ def agregar_retenciones_a_resultados(
         # Recalcular cuadre
         cuadre_db = sum((l.debito for l in nuevas_lineas), Decimal(0))
         cuadre_cr = sum((l.credito for l in nuevas_lineas), Decimal(0))
+
+        # Ordenar por fecha de emisión ASC y renumerar consecutivos:
+        # facturas más antiguas → consecutivos menores. Cada comprobante
+        # (3, 7, 12) lleva su propia secuencia.
+        nuevas_lineas = _ordenar_y_renumerar_plano(nuevas_lineas)
+
         res.lineas_plano = nuevas_lineas
         res.cuadre_db = cuadre_db
         res.cuadre_cr = cuadre_cr
