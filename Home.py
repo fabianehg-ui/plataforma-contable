@@ -1,13 +1,14 @@
 """
-Plataforma Contable Web - Página principal
+Plataforma Contable Web - Punto de entrada con navegación agrupada
 
-Esta es la entrada de la aplicación. Muestra:
-    - Formulario de login si no hay sesión
-    - Dashboard de bienvenida + selector de empresa si hay sesión
-    - Lista de módulos disponibles SEGÚN la empresa activa
+Usa st.navigation() (Streamlit 1.36+) para agrupar las páginas en secciones:
+    - 🤖 Asistente Contable: módulos de procesamiento contable diario
+    - 📊 Herramientas Tributarias: declaraciones e información tributaria
+    - ⚙️ Sistema: configuración y administración
 
-Las páginas de módulos están en pages/ y solo son accesibles cuando
-hay sesión iniciada Y el módulo está habilitado para la empresa.
+A diferencia del modo automático con pages/, aquí controlamos explícitamente
+qué páginas se ven, en qué orden, y bajo qué grupo. Las páginas de cada
+módulo viven en app/<seccion>/<modulo>.py
 """
 import sys
 from pathlib import Path
@@ -17,14 +18,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st
-from auth.login import require_auth, sidebar_user_info, current_user
-from auth.empresas import seleccionar_empresa_sidebar, empresas_del_usuario, empresa_activa
-from auth import modulos as mod_sys
-from auth.superadmin import es_superadmin
+from auth.login import login_form, is_authenticated, current_user
 
 
 # ============================================================
-# Configuración de la página
+# Configuración global de la app (única llamada en todo el proyecto)
 # ============================================================
 
 st.set_page_config(
@@ -36,99 +34,82 @@ st.set_page_config(
 
 
 # ============================================================
-# Autenticación
+# Si no hay sesión, mostrar login y detener
 # ============================================================
 
-require_auth()
-seleccionar_empresa_sidebar()
-sidebar_user_info()
+if not is_authenticated():
+    login_form()
+    st.stop()
 
 
 # ============================================================
-# Dashboard
+# Página de inicio (dashboard de bienvenida)
 # ============================================================
 
-user = current_user()
-st.title("📊 Plataforma Contable")
-st.markdown(f"Bienvenido, **{user['email']}**")
-st.markdown("---")
-
-empresas = empresas_del_usuario()
-emp = empresa_activa()
-
-if not empresas:
-    st.warning(
-        "🏢 No tienes empresas asignadas todavía.\n\n"
-        "Contacta al administrador del sistema."
+def home_page():
+    """Dashboard de bienvenida con tarjetas de cada sección."""
+    from auth.login import sidebar_user_info
+    from auth.empresas import (
+        seleccionar_empresa_sidebar,
+        empresas_del_usuario,
     )
-elif not emp:
-    st.info("Selecciona una empresa en el panel lateral para ver tus módulos.")
-else:
-    # Cargar módulos del sistema y los habilitados para esta empresa
-    catalogo = mod_sys.listar_modulos_sistema()
-    habilitados = mod_sys.codigos_modulos_habilitados(emp["id"])
-    superadm = es_superadmin()
 
-    n_habilitados = len(habilitados)
-    n_total = len(catalogo)
+    seleccionar_empresa_sidebar()
+    sidebar_user_info()
 
-    # Métricas
+    user = current_user()
+    st.title("📊 Plataforma Contable")
+    st.markdown(f"Bienvenido, **{user['email']}**")
+    st.markdown("---")
+
+    empresas = empresas_del_usuario()
+    if not empresas:
+        st.warning(
+            "🏢 No tienes empresas asignadas todavía.\n\n"
+            "Si eres administrador, ve a la sección **Configuración** para "
+            "crear tu primera empresa. Si no, contacta a tu administrador."
+        )
+        return
+
+    # Métricas superiores
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric(
-            "Módulos habilitados",
-            f"{n_habilitados} de {n_total}",
-        )
+        st.metric("Módulos disponibles", "11 totales")
     with col3:
         st.metric("Sesión", "Activa")
 
-    # Tabla de módulos: marcamos cuáles están habilitados para esta empresa
-    st.markdown(f"### 📦 Módulos para {emp['razon_social']}")
+    st.markdown("### 📦 Secciones de la plataforma")
 
-    if n_habilitados == 0 and not superadm:
-        st.warning(
-            "🔒 Esta empresa no tiene ningún módulo habilitado todavía. "
-            "Pídele al superadmin que active al menos uno desde la "
-            "sección Configuración."
-        )
-    else:
-        st.caption(
-            "Usa el menú lateral para entrar a cada módulo. "
-            "Solo verás los módulos habilitados para tu empresa."
-        )
+    col_a, col_b = st.columns(2)
 
-        # Construir la tabla
-        filas_md = ["| Módulo | Estado | Descripción |", "|---|---|---|"]
-        for m in catalogo:
-            emoji = m.get("emoji", "") or ""
-            nombre = m.get("nombre", m["codigo"])
-            descripcion = m.get("descripcion", "") or ""
-            esta_habilitado = m["codigo"] in habilitados
+    with col_a:
+        with st.container(border=True):
+            st.markdown("#### 🤖 Asistente Contable")
+            st.markdown(
+                "_Procesamiento contable mensual: facturas, pagos, nómina._"
+            )
+            st.markdown(
+                "- 💵 Caja Menor\n"
+                "- 🛒 Compras DIAN\n"
+                "- 💼 Nómina\n"
+                "- 📝 Provisiones\n"
+                "- 📎 PILA"
+            )
 
-            if esta_habilitado:
-                estado = "✅ Disponible"
-            elif superadm:
-                estado = "⚪ No habilitado para esta empresa"
-            else:
-                # No mostrar a operadores los módulos no habilitados
-                continue
-
-            filas_md.append(f"| {emoji} **{nombre}** | {estado} | {descripcion} |")
-
-        # Siempre mostrar Configuración como módulo accesible
-        filas_md.append(
-            "| ⚙️ **Configuración** | ✅ Disponible | Empresas, balance histórico, gestión de usuarios y módulos |"
-        )
-
-        st.markdown("\n".join(filas_md))
-
-        if superadm:
-            st.info(
-                "👑 Eres **superadmin**: ves todos los módulos del sistema en "
-                "el menú, aunque no estén habilitados para la empresa actual. "
-                "Esto te permite gestionar todas las empresas."
+    with col_b:
+        with st.container(border=True):
+            st.markdown("#### 📊 Herramientas Tributarias")
+            st.markdown(
+                "_Declaraciones e información tributaria periódica._"
+            )
+            st.markdown(
+                "- 📑 Información Exógena\n"
+                "- 📝 Declaración de Renta\n"
+                "- 💸 IVA y reteIVA\n"
+                "- 🧾 Retención en la Fuente\n"
+                "- 🥤 Impuestos Saludables (INC, IBUA, ICUI)"
             )
 
     st.markdown("### 🔒 Seguridad")
@@ -137,3 +118,117 @@ else:
         "Todos los archivos que subes quedan asociados solo a la empresa activa "
         "y no son visibles para usuarios de otras empresas."
     )
+
+
+# ============================================================
+# Definir las páginas y sus grupos con st.Page + st.navigation
+# ============================================================
+
+# Página de inicio (sin grupo, va arriba del todo)
+pagina_inicio = st.Page(
+    home_page,
+    title="Inicio",
+    icon="🏠",
+    default=True,
+    url_path="/",
+)
+
+# Sección: Asistente Contable
+asistente_caja = st.Page(
+    "app/asistente/caja_menor.py",
+    title="Caja Menor",
+    icon="💵",
+    url_path="/caja-menor",
+)
+asistente_compras = st.Page(
+    "app/asistente/compras_dian.py",
+    title="Compras DIAN",
+    icon="🛒",
+    url_path="/compras-dian",
+)
+asistente_nomina = st.Page(
+    "app/asistente/nomina.py",
+    title="Nómina",
+    icon="💼",
+    url_path="/nomina",
+)
+asistente_prov = st.Page(
+    "app/asistente/provisiones.py",
+    title="Provisiones",
+    icon="📝",
+    url_path="/provisiones",
+)
+asistente_pila = st.Page(
+    "app/asistente/pila.py",
+    title="PILA",
+    icon="📎",
+    url_path="/pila",
+)
+
+# Sección: Herramientas Tributarias
+trib_exogena = st.Page(
+    "app/tributarias/exogena.py",
+    title="Información Exógena",
+    icon="📑",
+    url_path="/exogena",
+)
+trib_renta = st.Page(
+    "app/tributarias/renta.py",
+    title="Declaración de Renta",
+    icon="📝",
+    url_path="/renta",
+)
+trib_iva = st.Page(
+    "app/tributarias/iva.py",
+    title="IVA y reteIVA",
+    icon="💸",
+    url_path="/iva",
+)
+trib_retencion = st.Page(
+    "app/tributarias/retencion.py",
+    title="Retención en la Fuente",
+    icon="🧾",
+    url_path="/retencion",
+)
+trib_saludables = st.Page(
+    "app/tributarias/saludables.py",
+    title="Impuestos Saludables",
+    icon="🥤",
+    url_path="/saludables",
+)
+
+# Sección: Sistema
+sistema_config = st.Page(
+    "app/sistema/configuracion.py",
+    title="Configuración",
+    icon="⚙️",
+    url_path="/configuracion",
+)
+
+
+# Navegación agrupada
+nav = st.navigation(
+    {
+        "": [pagina_inicio],
+        "🤖 Asistente Contable": [
+            asistente_caja,
+            asistente_compras,
+            asistente_nomina,
+            asistente_prov,
+            asistente_pila,
+        ],
+        "📊 Herramientas Tributarias": [
+            trib_exogena,
+            trib_renta,
+            trib_iva,
+            trib_retencion,
+            trib_saludables,
+        ],
+        "⚙️ Sistema": [sistema_config],
+    },
+    position="sidebar",
+)
+
+
+# Ejecutar la página seleccionada
+nav.run()
