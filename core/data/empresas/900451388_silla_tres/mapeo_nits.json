@@ -1833,9 +1833,9 @@
   },
   "890933726": {
     "nombre": "SERVICIOS MEDICOS SAN IGNACIO",
-    "cuenta_default": "13300501",
+    "cuenta_default": "52058402",
     "cc_default": "10-19",
-    "confianza_cuenta": 0.88,
+    "confianza_cuenta": 1.0,
     "confianza_cc": 0.9,
     "cuentas_vistas": [
       "13300501",
@@ -1852,7 +1852,7 @@
     "fuente": "BP_aprendido",
     "regimen": "ordinario",
     "autorretenedor_renta": false,
-    "concepto_retencion": "sin_retencion"
+    "concepto_retencion": "servicios_salud_ips_2"
   },
   "890940343": {
     "nombre": "DISTRIBUCION Y DECORACION SAS",
