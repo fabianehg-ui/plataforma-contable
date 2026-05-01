@@ -91,8 +91,14 @@ except Exception as e:
 # Streamlit ejecuta el archivo de arriba abajo como un script normal.
 
 def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
-                        empresa_forzada, modo_plano, consecutivo_inicial=1):
-    """Orquesta el procesamiento de RECIBIDOS y muestra resultados."""
+                        empresa_forzada, modo_plano, consecutivos_iniciales=None):
+    """Orquesta el procesamiento de RECIBIDOS y muestra resultados.
+
+    `consecutivos_iniciales`: dict {"3": N, "7": N, "12": N} con el número
+    inicial de cada secuencia de comprobante. Si es None, todos arrancan en 1.
+    """
+    if consecutivos_iniciales is None:
+        consecutivos_iniciales = {"3": 1, "7": 1, "12": 1}
     # ── Convertir parámetros UI a los esperados por procesar_multiples_zips ──
     anio_mes = f"{anio}{int(mes):02d}"
 
@@ -148,17 +154,18 @@ def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
             st.exception(e)
             return
 
-    # 🆕 Post-procesar para agregar retenciones (motor v0.3)
+    # 🆕 Post-procesar para agregar retenciones (motor v0.3) + ordenar/renumerar
     try:
         resultados = puente_motor_v03.agregar_retenciones_a_resultados(
-            resultados, ruta_empresas=EMPRESAS_DIR
+            resultados, ruta_empresas=EMPRESAS_DIR,
+            consecutivos_iniciales=consecutivos_iniciales,
         )
     except Exception as e:
         st.warning(f"⚠️ El motor v0.3 no pudo agregar retenciones: {e}")
         st.exception(e)
 
     # Guardar en session_state para persistir entre re-renders
-    # NOTA: NO guardamos modo_plano ni consecutivo_inicial porque sus widgets
+    # NOTA: NO guardamos modo_plano ni consecutivos_iniciales porque sus widgets
     # (st.radio y st.number_input) ya manejan esa key automáticamente.
     # Asignar manualmente a una key reservada por un widget genera StreamlitAPIException.
     st.session_state["resultados"] = resultados
@@ -166,12 +173,22 @@ def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
     st.session_state["anio_mes"] = anio_mes
 
     mostrar_resultados_recibidos(resultados, resumen, modo_plano,
-                                   int(consecutivo_inicial))
+                                   consecutivos_iniciales)
 
 
 def mostrar_resultados_recibidos(resultados, resumen, modo_plano,
-                                   consecutivo_inicial=1):
-    """Muestra los resultados del procesamiento (resumen + plano por empresa)."""
+                                   consecutivos_iniciales=None):
+    """Muestra los resultados del procesamiento (resumen + plano por empresa).
+
+    `consecutivos_iniciales`: dict {"3": N, "7": N, "12": N}. El puente ya
+    renumeró, este valor solo se pasa al exportador como referencia.
+    """
+    if consecutivos_iniciales is None:
+        consecutivos_iniciales = {"3": 1, "7": 1, "12": 1}
+    # Para compatibilidad con el exportador (que espera un solo int):
+    # le pasamos el menor de los valores del dict. El exportador respeta
+    # el l.consecutivo que ya viene asignado por el puente.
+    consecutivo_inicial_compat = min(consecutivos_iniciales.values())
     # ── Resumen de ingesta ─────────────────────────────────
     st.markdown("---")
     st.subheader("3️⃣ Resumen de ingesta")
@@ -243,7 +260,7 @@ def mostrar_resultados_recibidos(resultados, resumen, modo_plano,
                 df_plano = construir_dataframe_silla_tres(
                     r.lineas_plano,
                     cc_formato=cc_formato,
-                    consecutivo_inicial=consecutivo_inicial,
+                    consecutivo_inicial=consecutivo_inicial_compat,
                 )
             else:
                 planos_sep = separar_lineas_por_comprobante(r.lineas_plano)
@@ -252,7 +269,7 @@ def mostrar_resultados_recibidos(resultados, resumen, modo_plano,
                     df_c = construir_dataframe_silla_tres(
                         lineas,
                         cc_formato=cc_formato,
-                        consecutivo_inicial=consecutivo_inicial,
+                        consecutivo_inicial=consecutivo_inicial_compat,
                     )
                     df_c.insert(0, "_grupo_comprobante", c)
                     dfs.append(df_c)
@@ -369,16 +386,34 @@ with tab_proc:
                                 value=date.today().year, step=1, key="anio_proc")
         mes = st.number_input("Mes contable", min_value=1, max_value=12,
                                value=max(date.today().month - 1, 1), step=1, key="mes_proc")
-        consecutivo_inicial = st.number_input(
-            "Consecutivo inicial DOCUMENTO",
-            min_value=1, max_value=999999999, value=1, step=1,
-            key="consecutivo_inicial",
-            help=(
-                "Número desde el cual empieza el consecutivo de la columna "
-                "DOCUMENTO. Cada factura/asiento contable lleva un número "
-                "y se incrementa para el siguiente."
+        st.markdown("**Consecutivo inicial por comprobante**")
+        st.caption("Número desde el cual arranca cada secuencia. Cada "
+                   "comprobante lleva su propio contador.")
+        sub_a, sub_b, sub_c = st.columns(3)
+        with sub_a:
+            cons_inicial_3 = st.number_input(
+                "Compras (3)", min_value=1, max_value=999999999,
+                value=1, step=1, key="cons_inicial_3",
+                help="Consecutivo inicial para causación de compras (comprobante 3)",
             )
-        )
+        with sub_b:
+            cons_inicial_7 = st.number_input(
+                "ND (7)", min_value=1, max_value=999999999,
+                value=1, step=1, key="cons_inicial_7",
+                help="Consecutivo inicial para notas débito (comprobante 7)",
+            )
+        with sub_c:
+            cons_inicial_12 = st.number_input(
+                "NC (12)", min_value=1, max_value=999999999,
+                value=1, step=1, key="cons_inicial_12",
+                help="Consecutivo inicial para notas crédito (comprobante 12)",
+            )
+        # Dict que se pasa al puente y al renumerador
+        consecutivos_iniciales = {
+            "3": int(cons_inicial_3),
+            "7": int(cons_inicial_7),
+            "12": int(cons_inicial_12),
+        }
     with col_b:
         st.markdown("**Filtrar por fecha**")
         modo_filtro = st.radio(
@@ -414,7 +449,7 @@ with tab_proc:
         if st.button("🚀 Procesar ZIPs", type="primary", use_container_width=True,
                      key="btn_procesar_zips"):
             procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
-                                empresa_forzada, modo_plano, consecutivo_inicial)
+                                empresa_forzada, modo_plano, consecutivos_iniciales)
 
 
 # ============================================================================
