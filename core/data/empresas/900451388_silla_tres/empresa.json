@@ -72,6 +72,14 @@
   "cuenta_pendiente_revision": "519095",
   "cuenta_no_deducible": "529596",
 
+  "comprobantes": {
+    "_descripcion": "Mapeo legacy v0.2 (usado por procesador_dian_xml.py). Mantener sincronizado con comprobantes_por_tipo_dian.",
+    "factura_recibida": "3",
+    "nota_credito_recibida": "12",
+    "nota_debito_recibida": "7",
+    "documento_soporte_recibido": "3"
+  },
+
   "comprobantes_por_tipo_dian": {
     "_descripcion": "Mapeo de tipo de documento DIAN a comprobante contable de Silla Tres",
     "FE": { "comprobante": "3",  "descripcion": "Causación factura compra" },
