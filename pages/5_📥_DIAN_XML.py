@@ -37,6 +37,14 @@ from core.procesadores.exportador_silla_tres import (
     exportar_xlsx_silla_tres,
 )
 
+EMPRESAS_DIR = Path("core/data/empresas")
+
+# 🆕 Puente motor v0.3 → procesador legacy
+# Activa monkey-patch en el procesador para que use el motor de mapeo v0.3
+# (cuentas, CCs, retenciones aprendidas del BP)
+from core.procesadores import puente_motor_v03
+puente_motor_v03.activar(ruta_empresas=EMPRESAS_DIR)
+
 # Imports legacy del v0.2 (parser UBL, generador de plano)
 from core.procesadores.procesador_dian_xml import (
     RegistryEmpresas,
@@ -46,8 +54,6 @@ from core.procesadores.procesador_dian_xml import (
     exportar_plano_txt,
     ZipInput,
 )
-
-EMPRESAS_DIR = Path("core/data/empresas")
 
 st.title("📥 DIAN XML — Procesamiento masivo multi-empresa")
 st.caption(
@@ -141,6 +147,15 @@ def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
             st.error(f"⚠️ Error al procesar recibidos: {e}")
             st.exception(e)
             return
+
+    # 🆕 Post-procesar para agregar retenciones (motor v0.3)
+    try:
+        resultados = puente_motor_v03.agregar_retenciones_a_resultados(
+            resultados, ruta_empresas=EMPRESAS_DIR
+        )
+    except Exception as e:
+        st.warning(f"⚠️ El motor v0.3 no pudo agregar retenciones: {e}")
+        st.exception(e)
 
     # Guardar en session_state para persistir entre re-renders
     # NOTA: NO guardamos modo_plano ni consecutivo_inicial porque sus widgets
