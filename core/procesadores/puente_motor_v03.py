@@ -1,0 +1,643 @@
+"""
+Puente entre el procesador legacy y el motor v0.3 — VERSIÓN COMPLETA
+====================================================================
+
+Objetivo: que el plano contable salga con TODOS los recursos posibles:
+- Cuenta + CC desde mapeo_nits.json (los 126 NITs aprendidos del BP)
+- CC desde palabras clave en notas del XML (CTS1.=...)
+- CC desde dirección de entrega del XML
+- Heurísticas por descripción de item (10 reglas) para PENDIENTES
+- Memoria de proveedores aprendida en runtime
+- Retenciones (retefuente + reteIVA) calculadas según motor v0.3
+
+Estrategia: monkey-patch al procesador legacy en TRES puntos:
+1. Parser (parsear_xml_dian) → para extraer notas y dirección
+2. aplicar_mapeo → para usar el motor v0.3
+3. ResultadoProcesamiento → para post-procesar y agregar retenciones
+
+USO:
+    from core.procesadores import puente_motor_v03
+    puente_motor_v03.activar()
+
+    resultados, resumen = procesar_multiples_zips(...)  # ya usa motor v0.3
+    resultados = puente_motor_v03.agregar_retenciones_a_resultados(
+        resultados, ruta_empresas
+    )
+"""
+from __future__ import annotations
+import json
+import re
+import xml.etree.ElementTree as ET
+from collections import defaultdict
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+# Imports del procesador legacy
+from core.procesadores import procesador_dian_xml as legacy
+from core.procesadores.procesador_dian_xml import (
+    DocumentoDIAN, ItemFactura, LineaPlano, ResultadoProcesamiento, _q
+)
+
+# Imports del motor v0.3
+from core.procesadores.motor_mapeo_v03 import (
+    CatalogoEmpresa,
+    resolver_mapeo,
+    calcular_retencion_renta,
+    calcular_reteiva,
+    normalizar_nit,
+)
+
+
+# ─────────────────────────────────────────────────────────────────
+# REGLAS HEURÍSTICAS POR DESCRIPCIÓN DEL ITEM
+# ─────────────────────────────────────────────────────────────────
+
+REGLAS_HEURISTICAS_PENDIENTES = [
+    {
+        "nombre": "software_saas",
+        "patrones_nombre": ["SIIGO", "MICROSOFT", "GOOGLE", "ZOOM", "ADOBE", "SOFTWARE",
+                             "AWS", "AZURE", "DROPBOX"],
+        "patrones_desc": ["LICENCIA", "SOFTWARE", "SUSCRIPCION", "SAAS", "SaaS",
+                           "MENSUALIDAD SISTEMA", "PLAN MENSUAL", "CRÉDITO", "CREDITO"],
+        "cuenta": "519515",
+        "concepto": "Software / licenciamiento",
+        "concepto_retencion": "software_3_5",
+    },
+    {
+        "nombre": "hardware_computo",
+        "patrones_nombre": ["TECH", "TECNOLOG", "COMPUTAC", "JAL"],
+        "patrones_desc": ["TABLET", "LAPTOP", "COMPUTAD", "IMPRESORA", "LENOVO", "HP ", "DELL",
+                           "MONITOR", "TECLADO", "MOUSE", "ESTUCHE", "VIDRIO TEMPLADO"],
+        "cuenta": "152405",
+        "concepto": "Equipo de cómputo",
+        "concepto_retencion": "compras_2_5",
+    },
+    {
+        "nombre": "aseo_limpieza",
+        "patrones_nombre": ["ECOLAB", "QUIMICOS", "LIMPIEZA"],
+        "patrones_desc": ["DETERGENTE", "DESINFECT", "JABON", "JABÓN", "CLORO", "ASEO",
+                           "LIMPIEZA", "PRO CARE", "SCOUT", "BLANQUEADOR"],
+        "cuenta": "519525",
+        "concepto": "Productos de aseo y limpieza",
+        "concepto_retencion": "compras_2_5",
+    },
+    {
+        "nombre": "uniformes_dotacion",
+        "patrones_nombre": ["CONFECCION", "TEXTIL", "UNIFORME"],
+        "patrones_desc": ["DELANTAL", "CAMISETA", "JOGGER", "ZAPATO", "UNIFORME", "DOTACION",
+                           "DOTACIÓN", "PANTALON", "BUZO"],
+        "cuenta": "519520",
+        "concepto": "Dotación / uniformes",
+        "concepto_retencion": "compras_2_5",
+    },
+    {
+        "nombre": "salud_ocupacional",
+        "patrones_nombre": ["CENDIATRA", "SALUD", "MEDIC", "IPS", "CLINIC"],
+        "patrones_desc": ["EXAMEN", "OSTEOMUSCULAR", "HEMOGRAMA", "GLUCOSA", "MEDICO",
+                           "MÉDICO", "OCUPACIONAL", "LABORATORIO"],
+        "cuenta": "519030",
+        "concepto": "Salud ocupacional / exámenes médicos",
+        "concepto_retencion": "servicios_salud_ips_2",
+    },
+    {
+        "nombre": "publicidad",
+        "patrones_nombre": ["PUBLICIDAD", "VISUAL", "MEDIOS", "MARKETING"],
+        "patrones_desc": ["AVISO", "VINILO", "ACRILICO", "PLOTTER", "INSTALACION", "INSTALACIÓN",
+                           "LOGO", "ROTULO", "RÓTULO", "LED"],
+        "cuenta": "513025",
+        "concepto": "Publicidad / avisos",
+        "concepto_retencion": "compras_2_5",
+    },
+    {
+        "nombre": "insumos_alimenticios",
+        "patrones_nombre": ["ALIMENTOS", "PROVEEDORA", "DISTRIBUI"],
+        "patrones_desc": ["TRIDENT", "GOMA", "DULCE", "SNACK", "BEBIDA", "ZUMO", "JUGO",
+                           "CHICLE", "GALLETA", "CARNE", "POLLO", "VERDURA", "FRUTA",
+                           "ARROZ", "PAN ", "QUESO", "LECHE"],
+        "cuenta": "14350503",
+        "concepto": "Insumos alimenticios",
+        "concepto_retencion": "compras_2_5",
+    },
+    {
+        "nombre": "papeleria",
+        "patrones_desc": ["LAPICERO", "ESFERO", "PAPEL", "FOLDER", "CARPETA", "AGENDA",
+                           "CUADERNO", "MARCADOR", "RESALTADOR"],
+        "cuenta": "519530",
+        "concepto": "Papelería / útiles oficina",
+        "concepto_retencion": "compras_2_5",
+    },
+    {
+        "nombre": "fletes_transporte",
+        "patrones_desc": ["FLETE", "TRANSPORTE", "ENVIO", "ENVÍO", "DOMICILIO"],
+        "cuenta": "513550",
+        "concepto": "Flete / transporte",
+        "concepto_retencion": "transporte_carga_1",
+    },
+    {
+        "nombre": "honorarios_genericos",
+        "patrones_nombre": ["S.A.S", "LTDA", "CIA", "SAS"],
+        "patrones_desc": ["SERVICIO", "ASESOR", "CONSULT"],
+        "cuenta": "511005",
+        "concepto": "Servicios profesionales",
+        "concepto_retencion": "servicios_4",
+    },
+]
+
+
+def _detectar_cuenta_heuristica(
+    nombre_emisor: str,
+    descripciones: list[str],
+) -> dict | None:
+    """Aplica las reglas heurísticas. Devuelve dict con cuenta/concepto/regla o None."""
+    nombre_norm = (nombre_emisor or "").upper()
+    descs_norm = " | ".join((d or "").upper() for d in descripciones if d)
+
+    for regla in REGLAS_HEURISTICAS_PENDIENTES:
+        patrones_nombre = regla.get("patrones_nombre", [])
+        patrones_desc = regla.get("patrones_desc", [])
+
+        match_nombre = (not patrones_nombre) or any(
+            p in nombre_norm for p in patrones_nombre
+        )
+        match_desc = (not patrones_desc) or any(
+            p in descs_norm for p in patrones_desc
+        )
+
+        if match_nombre and match_desc:
+            return {
+                "cuenta": regla["cuenta"],
+                "concepto": regla["concepto"],
+                "concepto_retencion": regla.get("concepto_retencion", "compras_2_5"),
+                "regla": regla["nombre"],
+            }
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────
+# MEMORIA DE PROVEEDORES (aprendizaje runtime)
+# ─────────────────────────────────────────────────────────────────
+# Cuando la heurística clasifica un NIT, lo guardamos para que el siguiente
+# documento del mismo NIT en la sesión vaya directo al match aprendido.
+
+_memoria_proveedores: dict[str, dict] = {}
+
+
+def memoria_aprender(nit: str, info: dict) -> None:
+    """Guarda en memoria que <nit> debe ir a info['cuenta'] / info['concepto_retencion']."""
+    nit_norm = normalizar_nit(nit)
+    if nit_norm and nit_norm not in _memoria_proveedores:
+        _memoria_proveedores[nit_norm] = info
+
+
+def memoria_consultar(nit: str) -> dict | None:
+    return _memoria_proveedores.get(normalizar_nit(nit))
+
+
+def memoria_clear() -> None:
+    _memoria_proveedores.clear()
+
+
+# ─────────────────────────────────────────────────────────────────
+# CACHÉ DE CATÁLOGOS DEL MOTOR v0.3
+# ─────────────────────────────────────────────────────────────────
+_cache_catalogos: dict[str, CatalogoEmpresa] = {}
+
+
+def _cargar_catalogo_motor(empresa_id: str, ruta_empresas: Path) -> CatalogoEmpresa | None:
+    if empresa_id in _cache_catalogos:
+        return _cache_catalogos[empresa_id]
+    for p in Path(ruta_empresas).iterdir():
+        if not p.is_dir() or p.name.startswith("_"):
+            continue
+        if p.name.startswith(f"{empresa_id}_") or p.name == empresa_id:
+            try:
+                cat = CatalogoEmpresa.cargar(p)
+                _cache_catalogos[empresa_id] = cat
+                return cat
+            except Exception:
+                return None
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────
+# MONKEY-PATCH 1: PARSER (extraer notas y dirección)
+# ─────────────────────────────────────────────────────────────────
+_parsear_xml_original = legacy.parsear_xml_dian
+
+
+def _extraer_notas_y_direccion(xml_bytes: bytes) -> tuple[list[str], str, list[list[str]]]:
+    """Parsea el XML para extraer:
+    - notas a nivel raíz (cbc:Note)
+    - dirección de entrega (cac:Delivery / cac:DeliveryAddress)
+    - notas por línea (cbc:Note dentro de cada InvoiceLine)
+    """
+    NS = {
+        "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
+        "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+    }
+    notas: list[str] = []
+    direccion = ""
+    notas_por_linea: list[list[str]] = []
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except Exception:
+        return ([], "", [])
+
+    # Si es AttachedDocument, extraer doc interno
+    tag_root = root.tag.split("}")[-1] if "}" in root.tag else root.tag
+    if tag_root == "AttachedDocument":
+        for desc in root.iter(f"{{{NS['cbc']}}}Description"):
+            if desc.text and ("<Invoice" in desc.text or "<CreditNote" in desc.text
+                               or "<DebitNote" in desc.text):
+                try:
+                    root = ET.fromstring(desc.text)
+                except Exception:
+                    pass
+                break
+
+    # 1) Notas a nivel raíz
+    for note in root.findall(f"{{{NS['cbc']}}}Note"):
+        if note.text:
+            notas.append(note.text.strip())
+
+    # 2) Dirección de entrega - varios paths posibles
+    delivery_paths = [
+        "cac:Delivery/cac:DeliveryAddress/cac:AddressLine/cbc:Line",
+        "cac:Delivery/cac:DeliveryLocation/cac:Address/cac:AddressLine/cbc:Line",
+        "cac:Delivery/cac:DeliveryAddress/cbc:StreetName",
+        "cac:Delivery/cac:DeliveryLocation/cac:Address/cbc:StreetName",
+    ]
+    for path in delivery_paths:
+        # Convertir path con namespaces
+        partes = path.split("/")
+        actual = root
+        for parte in partes:
+            if ":" in parte:
+                pre, tag = parte.split(":")
+                ns = NS.get(pre, "")
+                elem = actual.find(f"{{{ns}}}{tag}")
+            else:
+                elem = actual.find(parte)
+            if elem is None:
+                actual = None
+                break
+            actual = elem
+        if actual is not None and actual.text:
+            direccion = actual.text.strip()
+            break
+
+    # Si no se encontró por paths estándar, buscar AddressLine en cualquier parte
+    if not direccion:
+        for line_elem in root.iter(f"{{{NS['cbc']}}}Line"):
+            txt = (line_elem.text or "").strip()
+            if txt and len(txt) > 5:
+                direccion = txt
+                break
+
+    # 3) Notas por línea (InvoiceLine, CreditNoteLine, DebitNoteLine)
+    for line_tag in ("InvoiceLine", "CreditNoteLine", "DebitNoteLine"):
+        for line in root.findall(f"{{{NS['cac']}}}{line_tag}"):
+            notas_linea = []
+            for note in line.findall(f"{{{NS['cbc']}}}Note"):
+                if note.text:
+                    notas_linea.append(note.text.strip())
+            notas_por_linea.append(notas_linea)
+
+    return (notas, direccion, notas_por_linea)
+
+
+def parsear_xml_dian_extendido(xml_bytes: bytes, archivo_origen: str = "") -> DocumentoDIAN:
+    """Parser extendido: usa el legacy y le agrega notas + dirección."""
+    doc = _parsear_xml_original(xml_bytes, archivo_origen)
+    notas, direccion, notas_por_linea = _extraer_notas_y_direccion(xml_bytes)
+    # Inyectar atributos extra (aunque no estén en el dataclass, Python los acepta)
+    doc.notas = notas
+    doc.direccion_entrega = direccion
+    doc.notas_por_linea = notas_por_linea
+    return doc
+
+
+# ─────────────────────────────────────────────────────────────────
+# MONKEY-PATCH 2: aplicar_mapeo
+# ─────────────────────────────────────────────────────────────────
+_aplicar_mapeo_original = legacy.aplicar_mapeo
+
+
+def aplicar_mapeo_v03(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN:
+    """Reemplazo de aplicar_mapeo() que usa el motor v0.3 + memoria + heurísticas."""
+    empresa = bundle_empresa.get("empresa", {})
+    empresa_id = empresa.get("id") or empresa.get("nit") or ""
+    ruta_empresas = bundle_empresa.get("_ruta_empresas") or Path("core/data/empresas")
+
+    catalogo = _cargar_catalogo_motor(str(empresa_id), Path(ruta_empresas))
+    if catalogo is None:
+        return _aplicar_mapeo_original(doc, bundle_empresa)
+
+    # Recolectar TODA la información disponible del documento
+    nit_emi = normalizar_nit(doc.nit_emisor)
+    direccion = getattr(doc, "direccion_entrega", "") or ""
+    notas_doc = getattr(doc, "notas", []) or []
+    notas_por_linea = getattr(doc, "notas_por_linea", []) or []
+
+    # Concatenar TODAS las notas: doc + por línea
+    notas_todas: list[str] = list(notas_doc)
+    for nl in notas_por_linea:
+        notas_todas.extend(nl)
+
+    descripciones = [it.descripcion or "" for it in doc.items]
+
+    # Resolver con motor v0.3
+    resolucion = resolver_mapeo(
+        catalogo,
+        nit_emisor=nit_emi,
+        nombre_emisor=doc.nombre_emisor or "",
+        direccion_entrega=direccion,
+        items_descripcion=" || ".join(descripciones[:30]),
+        items_descripciones_lista=descripciones,
+        notas_xml=notas_todas,
+    )
+
+    # ── Caso 1: NIT catalogado en mapeo_nits.json (NO es pendiente) ─────
+    if not resolucion.es_pendiente_revision:
+        cuenta_doc = resolucion.cuenta
+        cc_doc = resolucion.cc
+        concepto_doc = doc.nombre_emisor or ""
+        concepto_ret = resolucion.concepto_retencion or "compras_2_5"
+        regla = f"MOTOR_V03:{resolucion.fuente_cuenta}/{resolucion.fuente_cc}"
+
+    # ── Caso 2: NIT NO catalogado pero SÍ está en memoria de proveedores ─
+    elif (memoria := memoria_consultar(nit_emi)):
+        cuenta_doc = memoria["cuenta"]
+        cc_doc = "10-10"  # General
+        concepto_doc = memoria["concepto"]
+        concepto_ret = memoria["concepto_retencion"]
+        regla = f"MEMORIA_PROVEEDOR:{memoria['regla']}"
+        doc.advertencias.append(
+            f"ℹ NIT {nit_emi} resuelto desde memoria de proveedores ({memoria['regla']})"
+        )
+
+    # ── Caso 3: PENDIENTE → aplicar reglas heurísticas por descripción ───
+    else:
+        heuristica = _detectar_cuenta_heuristica(doc.nombre_emisor or "", descripciones)
+        if heuristica:
+            cuenta_doc = heuristica["cuenta"]
+            cc_doc = "10-10"  # General
+            concepto_doc = heuristica["concepto"]
+            concepto_ret = heuristica["concepto_retencion"]
+            regla = f"HEURISTICA:{heuristica['regla']}"
+            # Aprender para futuros XMLs en la misma sesión
+            memoria_aprender(nit_emi, heuristica)
+            doc.advertencias.append(
+                f"⚠ NIT no catalogado — cuenta sugerida heurística: "
+                f"{heuristica['cuenta']} ({heuristica['concepto']}) - regla: {heuristica['regla']}"
+            )
+        else:
+            cuenta_doc = catalogo.empresa_json.get("cuenta_pendiente_revision", "519095")
+            cc_doc = "10-10"  # General
+            concepto_doc = "PENDIENTE DE MAPEO"
+            concepto_ret = "sin_retencion"
+            regla = "FALLBACK_PENDIENTE"
+            doc.pendiente_revision = True
+            doc.razon_pendiente = (
+                f"NIT {nit_emi} ({doc.nombre_emisor}) sin mapeo, sin memoria, "
+                f"y descripción no matcheó ninguna regla heurística"
+            )
+            doc.advertencias.append(doc.razon_pendiente)
+
+    # Refinar cuenta de inventario por tarifa de IVA si aplica
+    cuentas_inv_tarifa = catalogo.empresa_json.get("cuentas_inventario_por_tarifa_iva", {})
+
+    for it in doc.items:
+        cuenta_item = cuenta_doc
+        if cuentas_inv_tarifa and cuenta_doc.startswith("14350"):
+            tarifa_key = str(int(it.iva_porcentaje or 0))
+            cuenta_por_tarifa = cuentas_inv_tarifa.get(tarifa_key)
+            if cuenta_por_tarifa:
+                cuenta_item = cuenta_por_tarifa
+
+        it.cuenta = cuenta_item
+        it.centro_costo = cc_doc
+        it.concepto = concepto_doc
+        it.regla_aplicada = regla
+
+    # Guardar info para post-procesado de retenciones
+    doc._motor_v03_concepto_retencion = concepto_ret
+    doc._motor_v03_regimen_emisor = resolucion.regimen_emisor
+    doc._motor_v03_autorretenedor = resolucion.autorretenedor_renta
+    doc._motor_v03_resolucion = resolucion
+
+    return doc
+
+
+# ─────────────────────────────────────────────────────────────────
+# POST-PROCESADO: agregar líneas de retenciones
+# ─────────────────────────────────────────────────────────────────
+
+def agregar_retenciones_a_resultados(
+    resultados: list[ResultadoProcesamiento],
+    ruta_empresas: Path | str,
+) -> list[ResultadoProcesamiento]:
+    """Agrega líneas de retefuente y reteIVA al plano contable, ajustando
+    el cuadre del proveedor."""
+    ruta_emp = Path(ruta_empresas)
+
+    for res in resultados:
+        catalogo = _cargar_catalogo_motor(res.empresa_id, ruta_emp)
+        if catalogo is None:
+            continue
+
+        cuenta_proveedor_default = catalogo.empresa_json.get(
+            "cuentas_proveedores", {}
+        ).get("default", "22050501")
+
+        # Indexar líneas por (consecutivo, doc_ref) para encontrarlas rápido
+        lineas_por_doc: dict[tuple[str, str], list[LineaPlano]] = defaultdict(list)
+        for l in res.lineas_plano:
+            lineas_por_doc[(l.consecutivo, l.documento_referencia)].append(l)
+
+        # Recorrer documentos
+        nuevas_lineas: list[LineaPlano] = []
+        ya_agregadas: set[tuple[str, str]] = set()
+
+        for doc in res.documentos:
+            doc_ref = f"{doc.prefijo}{doc.numero}"
+            # Buscar la(s) líneas del doc en el plano
+            clave_match = None
+            for clave, lineas in lineas_por_doc.items():
+                if clave[1] == doc_ref:
+                    clave_match = clave
+                    break
+            if clave_match is None:
+                continue
+
+            lineas_doc = lineas_por_doc[clave_match]
+            ya_agregadas.add(clave_match)
+
+            # Datos comunes
+            primera = lineas_doc[0]
+            consec = primera.consecutivo
+            comp = primera.comprobante
+            fecha = primera.fecha
+            nit_terc = primera.nit_tercero
+
+            # Determinar CC dominante del documento (el que más se repite en líneas no-proveedor)
+            cc_dominante = primera.centro_costo
+            cc_count: dict[str, int] = {}
+            for l in lineas_doc:
+                if not (l.cuenta.startswith("2205") or l.cuenta == cuenta_proveedor_default):
+                    cc_count[l.centro_costo] = cc_count.get(l.centro_costo, 0) + 1
+            if cc_count:
+                cc_dominante = max(cc_count.items(), key=lambda x: x[1])[0]
+
+            cc_doc = cc_dominante  # CC para nuevas líneas de retención
+
+            # Reemplazar CC en líneas de proveedor: si quedaron como ADMIN o default,
+            # ponerles el CC dominante del documento
+            cc_default_legacy = catalogo.empresa_json.get("centro_costo_default", "ADMIN")
+            for l in lineas_doc:
+                if (l.cuenta.startswith("2205") or l.cuenta == cuenta_proveedor_default):
+                    if l.centro_costo in ("ADMIN", "", cc_default_legacy):
+                        l.centro_costo = cc_dominante
+
+            # Obtener concepto_retencion
+            concepto_ret = getattr(doc, "_motor_v03_concepto_retencion", "sin_retencion")
+            regimen = getattr(doc, "_motor_v03_regimen_emisor", "ordinario")
+            autorret = getattr(doc, "_motor_v03_autorretenedor", False)
+
+            es_nc = doc.tipo_codigo == "91"
+            base_neta = _q(doc.valor_base_gravable if doc.valor_base_gravable
+                           else (doc.valor_total - doc.iva_total))
+            iva = _q(doc.iva_total)
+
+            # Calcular retenciones
+            total_retenciones = Decimal(0)
+            lineas_retencion: list[LineaPlano] = []
+
+            # Retefuente
+            if concepto_ret and concepto_ret != "sin_retencion":
+                ret = calcular_retencion_renta(catalogo, concepto_ret, float(base_neta),
+                                                regimen, autorret)
+                if ret and ret.aplicada and ret.valor > 0:
+                    valor_ret = _q(Decimal(str(ret.valor)))
+                    if not es_nc:
+                        lineas_retencion.append(LineaPlano(
+                            fecha=fecha, comprobante=comp, consecutivo=consec,
+                            cuenta=ret.cuenta, centro_costo=cc_doc, nit_tercero=nit_terc,
+                            descripcion=f"Retefuente {ret.tarifa*100:.2f}% ({concepto_ret})",
+                            documento_referencia=doc_ref,
+                            debito=Decimal(0), credito=valor_ret,
+                            base=base_neta, porcentaje=Decimal(str(ret.tarifa * 100)),
+                        ))
+                        total_retenciones += valor_ret
+                    else:
+                        # NC: invierte sentido
+                        lineas_retencion.append(LineaPlano(
+                            fecha=fecha, comprobante=comp, consecutivo=consec,
+                            cuenta=ret.cuenta, centro_costo=cc_doc, nit_tercero=nit_terc,
+                            descripcion=f"Reverso Retefuente NC ({concepto_ret})",
+                            documento_referencia=doc_ref,
+                            debito=valor_ret, credito=Decimal(0),
+                            base=base_neta, porcentaje=Decimal(str(ret.tarifa * 100)),
+                        ))
+                        total_retenciones -= valor_ret
+
+            # ReteIVA
+            ret_iva = calcular_reteiva(catalogo, float(iva), regimen, float(base_neta))
+            if ret_iva and ret_iva.aplicada and ret_iva.valor > 0:
+                valor_iva = _q(Decimal(str(ret_iva.valor)))
+                if not es_nc:
+                    lineas_retencion.append(LineaPlano(
+                        fecha=fecha, comprobante=comp, consecutivo=consec,
+                        cuenta=ret_iva.cuenta, centro_costo=cc_doc, nit_tercero=nit_terc,
+                        descripcion=f"ReteIVA 15%",
+                        documento_referencia=doc_ref,
+                        debito=Decimal(0), credito=valor_iva,
+                        base=iva, porcentaje=Decimal("15"),
+                    ))
+                    total_retenciones += valor_iva
+                else:
+                    lineas_retencion.append(LineaPlano(
+                        fecha=fecha, comprobante=comp, consecutivo=consec,
+                        cuenta=ret_iva.cuenta, centro_costo=cc_doc, nit_tercero=nit_terc,
+                        descripcion=f"Reverso ReteIVA NC",
+                        documento_referencia=doc_ref,
+                        debito=valor_iva, credito=Decimal(0),
+                        base=iva, porcentaje=Decimal("15"),
+                    ))
+                    total_retenciones -= valor_iva
+
+            # Ajustar línea del proveedor (CR menor por las retenciones)
+            if total_retenciones != 0:
+                for l in lineas_doc:
+                    if l.cuenta.startswith("2205") or l.cuenta == cuenta_proveedor_default:
+                        if not es_nc and l.credito > 0:
+                            l.credito = _q(l.credito - total_retenciones)
+                        elif es_nc and l.debito > 0:
+                            l.debito = _q(l.debito - abs(total_retenciones))
+                        break
+
+            # Agregar líneas: primero las originales del doc, después las retenciones
+            nuevas_lineas.extend(lineas_doc)
+            nuevas_lineas.extend(lineas_retencion)
+
+        # Líneas que no estaban indexadas (raro, pero por si acaso)
+        for clave, lineas in lineas_por_doc.items():
+            if clave not in ya_agregadas:
+                nuevas_lineas.extend(lineas)
+
+        # Recalcular cuadre
+        cuadre_db = sum((l.debito for l in nuevas_lineas), Decimal(0))
+        cuadre_cr = sum((l.credito for l in nuevas_lineas), Decimal(0))
+        res.lineas_plano = nuevas_lineas
+        res.cuadre_db = cuadre_db
+        res.cuadre_cr = cuadre_cr
+        res.cuadrado = (cuadre_db == cuadre_cr)
+
+    return resultados
+
+
+# ─────────────────────────────────────────────────────────────────
+# ACTIVACIÓN / DESACTIVACIÓN
+# ─────────────────────────────────────────────────────────────────
+_activo = False
+
+
+def activar(ruta_empresas: Path | str = "core/data/empresas") -> None:
+    """Aplica los monkey-patches al procesador legacy."""
+    global _activo
+    if _activo:
+        return
+
+    # Patch 1: parser
+    legacy.parsear_xml_dian = parsear_xml_dian_extendido
+
+    # Patch 2: aplicar_mapeo
+    legacy.aplicar_mapeo = aplicar_mapeo_v03
+
+    # Patch 3: cargar() para que el bundle lleve la ruta
+    if hasattr(legacy, "RegistryEmpresas"):
+        original_cargar = legacy.RegistryEmpresas.cargar
+        ruta = Path(ruta_empresas)
+
+        def cargar_con_ruta(self, empresa_id: str) -> dict:
+            bundle = original_cargar(self, empresa_id)
+            bundle["_ruta_empresas"] = ruta
+            return bundle
+
+        legacy.RegistryEmpresas.cargar = cargar_con_ruta
+
+    _activo = True
+
+
+def desactivar() -> None:
+    global _activo
+    if not _activo:
+        return
+    legacy.parsear_xml_dian = _parsear_xml_original
+    legacy.aplicar_mapeo = _aplicar_mapeo_original
+    _activo = False
+    _cache_catalogos.clear()
+    memoria_clear()
