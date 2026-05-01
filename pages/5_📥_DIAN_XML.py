@@ -70,60 +70,152 @@ except Exception as e:
 def procesar_y_mostrar(zips_recibidos, anio, mes, modo_filtro,
                         empresa_forzada, modo_plano):
     """Orquesta el procesamiento de RECIBIDOS y muestra resultados."""
-    with st.spinner("Procesando documentos recibidos..."):
-        zip_inputs = [
+    # ── Convertir parámetros UI a los esperados por procesar_multiples_zips ──
+    anio_mes = f"{anio}{int(mes):02d}"
+
+    # modo_filtro UI → modo_filtro_codigo del procesador
+    modo_filtro_codigo = {
+        "No filtrar (procesar todo)": "ninguno",
+        "Por fecha de emisión": "emision",
+        "Por fecha de recepción DIAN": "recepcion",
+    }.get(modo_filtro, "ninguno")
+
+    # Si se filtra por fecha, fijar rango = mes contable completo
+    fecha_desde = ""
+    fecha_hasta = ""
+    if modo_filtro_codigo != "ninguno":
+        from datetime import date as _date
+        primer_dia = _date(int(anio), int(mes), 1)
+        # último día del mes
+        if int(mes) == 12:
+            ultimo_dia = _date(int(anio), 12, 31)
+        else:
+            ultimo_dia = _date(int(anio), int(mes) + 1, 1) - pd.Timedelta(days=1)
+        fecha_desde = primer_dia.strftime("%Y-%m-%d")
+        fecha_hasta = ultimo_dia.strftime("%Y-%m-%d")
+
+    # empresa_forzada: viene como "900451388 — Silla Tres SAS" o "(detector por receptor NIT)"
+    emp_forzada = None
+    if empresa_forzada and not empresa_forzada.startswith("("):
+        nit_sel = empresa_forzada.split(" — ")[0].strip()
+        for e in empresas:
+            if str(e.get("nit", "")) == nit_sel:
+                emp_forzada = e.get("id") or nit_sel
+                break
+
+    with st.spinner(f"Procesando {len(zips_recibidos)} ZIP(s)..."):
+        zips_input = [
             ZipInput(
                 nombre=z.name,
                 contenido=z.getbuffer().tobytes(),
-                tipo_declarado=None  # ya no se usa: el detector identifica solo
+                tipo_declarado=None  # detector identifica el tipo automáticamente
             )
             for z in zips_recibidos
         ]
         try:
-            resultado = procesar_multiples_zips(
-                zip_inputs,
-                registry,
-                anio_contable=anio,
-                mes_contable=mes,
-                modo_filtro_fecha=modo_filtro,
-                empresa_forzada=(
-                    empresa_forzada.split(" — ")[0]
-                    if empresa_forzada != "(detector por receptor NIT)"
-                    else None
-                ),
+            resultados, resumen = procesar_multiples_zips(
+                zips_input, registry, anio_mes,
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                empresa_id_forzada=emp_forzada,
+                modo_filtro_fecha=modo_filtro_codigo,
             )
         except Exception as e:
             st.error(f"⚠️ Error al procesar recibidos: {e}")
             st.exception(e)
             return
 
-    st.success(f"✅ {len(resultado.documentos)} documentos recibidos procesados")
-    mostrar_resultados_recibidos(resultado, modo_plano)
+    # Guardar en session_state para persistir entre re-renders
+    st.session_state["resultados"] = resultados
+    st.session_state["resumen"] = resumen
+    st.session_state["anio_mes"] = anio_mes
+    st.session_state["modo_plano"] = modo_plano
+
+    mostrar_resultados_recibidos(resultados, resumen, modo_plano)
 
 
-def mostrar_resultados_recibidos(resultado, modo_plano):
-    """Muestra los resultados del procesamiento de recibidos (plano + KPIs)."""
-    st.subheader("📋 Plano contable")
+def mostrar_resultados_recibidos(resultados, resumen, modo_plano):
+    """Muestra los resultados del procesamiento (resumen + plano por empresa)."""
+    # ── Resumen de ingesta ─────────────────────────────────
+    st.markdown("---")
+    st.subheader("3️⃣ Resumen de ingesta")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("XMLs extraídos", resumen.total_xmls_extraidos)
+    col2.metric("Duplicados", resumen.duplicados_descartados,
+                 delta_color="off" if resumen.duplicados_descartados == 0 else "inverse")
+    col3.metric("Fuera de rango", resumen.fuera_de_rango_fecha,
+                 delta_color="off" if resumen.fuera_de_rango_fecha == 0 else "inverse")
+    col4.metric("Errores parseo", resumen.errores_parseo,
+                 delta_color="off" if resumen.errores_parseo == 0 else "inverse")
+    col5.metric("Empresas detectadas", len(resumen.por_empresa))
+
+    # Distribución por tipo
+    if resumen.por_tipo:
+        st.markdown("**Distribución por tipo:**")
+        tipos_label = {
+            "factura_recibida": "📄 Facturas",
+            "nota_credito_recibida": "🔻 NC",
+            "nota_debito_recibida": "🔺 ND",
+            "documento_soporte_recibido": "📋 DS",
+        }
+        cols = st.columns(len(resumen.por_tipo))
+        for col, (tipo, n) in zip(cols, resumen.por_tipo.items()):
+            col.metric(tipos_label.get(tipo, tipo), n)
+
+    # Detalle de descartados
+    if resumen.descartados_detalle:
+        with st.expander(
+            f"🔍 Ver detalle de {len(resumen.descartados_detalle)} documento(s) descartado(s)"
+        ):
+            df_desc = pd.DataFrame(resumen.descartados_detalle)
+            st.dataframe(df_desc, use_container_width=True, hide_index=True)
+
+    # ── Resultados por empresa ─────────────────────────────
+    st.markdown("---")
+    st.subheader(f"4️⃣ Resultados por empresa ({len(resultados)})")
+
     st.info(
-        "✏️ La integración del motor v0.3 (mapeo aprendido del BP, retenciones "
-        "por concepto, CC por palabra clave) se completa cuando integremos "
-        "`motor_mapeo_v03.py` dentro de `procesador_dian_xml.py`. "
-        "Esto se hará en la próxima sesión."
+        "ℹ️ La integración del motor v0.3 (mapeo aprendido del BP, retenciones "
+        "por concepto, CC por palabra clave) se hará en la próxima sesión. "
+        "Por ahora el plano usa la lógica del procesador v0.2."
     )
-    # Por ahora reuso la lógica v0.2:
-    if modo_plano == "Plano único consolidado":
-        df_plano = pd.DataFrame([
-            l.__dict__ for l in resultado.lineas_plano
-        ])
-    else:
-        planos_separados = separar_lineas_por_comprobante(resultado.lineas_plano)
-        df_plano = pd.concat([
-            pd.DataFrame([l.__dict__ for l in lineas]).assign(comprobante=c)
-            for c, lineas in planos_separados.items()
-        ], ignore_index=True) if planos_separados else pd.DataFrame()
 
-    if not df_plano.empty:
-        st.dataframe(df_plano, use_container_width=True)
+    for r in resultados:
+        cuadre_emoji = "✅" if r.cuadrado else "❌"
+        with st.expander(
+            f"{cuadre_emoji} {r.empresa_razon_social} — "
+            f"{len(r.documentos)} doc(s) · {len(r.lineas_plano)} líneas · "
+            f"Db ${r.cuadre_db:,.0f} = Cr ${r.cuadre_cr:,.0f}",
+            expanded=True,
+        ):
+            if r.advertencias:
+                for adv in r.advertencias:
+                    st.warning(f"⚠️ {adv}")
+
+            # Plano
+            if modo_plano == "Plano único consolidado":
+                df_plano = pd.DataFrame([l.__dict__ for l in r.lineas_plano])
+            else:
+                planos_sep = separar_lineas_por_comprobante(r.lineas_plano)
+                df_plano = pd.concat([
+                    pd.DataFrame([l.__dict__ for l in lineas]).assign(_comprobante=c)
+                    for c, lineas in planos_sep.items()
+                ], ignore_index=True) if planos_sep else pd.DataFrame()
+
+            if not df_plano.empty:
+                st.dataframe(df_plano, use_container_width=True, height=300)
+
+                # Botón de descarga TXT
+                anio_mes = st.session_state.get("anio_mes", "XXXXXX")
+                txt_plano = exportar_plano_txt(r.lineas_plano)
+                st.download_button(
+                    f"⬇️ Descargar plano {r.empresa_id} (.txt)",
+                    data=txt_plano,
+                    file_name=f"plano_{r.empresa_id}_{anio_mes}.txt",
+                    mime="text/plain",
+                    key=f"dl_plano_{r.empresa_id}",
+                )
 
 
 # ----------------------------------------------------------- Tabs
