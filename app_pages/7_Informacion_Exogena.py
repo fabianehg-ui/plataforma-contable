@@ -154,12 +154,13 @@ st.markdown("---")
 # Tabs principales del módulo
 # ============================================================
 
-tab_resumen, tab_mapeo, tab_terceros, tab_balance, tab_clasificar, tab_generar, tab_envios = st.tabs([
+tab_resumen, tab_mapeo, tab_terceros, tab_balance, tab_clasificar, tab_conciliacion, tab_generar, tab_envios = st.tabs([
     "📊 Resumen",
     "🗂️ Mapeo nativo",
     "👥 Terceros",
     "📥 Balance",
     "⚙️ Clasificar",
+    "🔍 Conciliación",
     "📤 Generar XML",
     "📦 Envíos",
 ])
@@ -1057,6 +1058,309 @@ with tab_clasificar:
                 else:
                     if d["n_clasif"] > 0:
                         st.success("🎉 **¡Todas las cuentas están clasificadas!** Puedes pasar a generar XMLs.")
+
+
+# ============================================================
+# Tab: Conciliación
+# ============================================================
+
+with tab_conciliacion:
+    st.markdown("### 🔍 Conciliación tributaria")
+    st.caption(
+        "Cruza los datos del balance con documentos externos (PILA, certificados bancarios) "
+        "para determinar valores deducibles vs no deducibles antes de generar los formatos."
+    )
+
+    sb = get_supabase()
+    periodo_actual = obtener_periodo(empresa["id"], año_gravable)
+
+    if not periodo_actual:
+        st.warning("⚠️ Primero debes cargar el balance auxiliar.")
+    else:
+        # ============================================================
+        # 1. DICTAMEN PREVIO
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 📊 Dictamen: cuentas que requieren conciliación")
+
+        col_d1, col_d2 = st.columns([2, 1])
+        with col_d2:
+            ejecutar_dictamen = st.button(
+                "🔍 Generar dictamen",
+                type="primary",
+                use_container_width=True,
+                key="btn_dictamen_concilia",
+            )
+
+        if ejecutar_dictamen:
+            with st.spinner("Analizando movimientos..."):
+                from core.exogena.conciliacion import construir_dictamen
+                from core.exogena.motor_clasificacion import (
+                    MotorClasificacion, Movimiento,
+                    ReglaCapa1, ReglaCapa2, ReglaCapa3
+                )
+
+                # Cargar reglas
+                capa1_data = sb.table("exogena_puc_generico").select("*").eq(
+                    "año_gravable", año_gravable
+                ).execute().data or []
+                capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
+                    "empresa_id", empresa["id"]
+                ).eq("año_gravable", año_gravable).execute().data or []
+                capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
+                    "empresa_id", empresa["id"]
+                ).eq("año_gravable", año_gravable).execute().data or []
+
+                reglas_c1 = [ReglaCapa1(codigo_cuenta=r["codigo_cuenta"],
+                    formato_dian=r["formato_dian"], concepto_dian=r.get("concepto_dian"),
+                    nombre_cuenta=r.get("nombre_cuenta", "")) for r in capa1_data]
+                reglas_c2 = [ReglaCapa2(formato_dian=r["formato_dian"],
+                    concepto_dian=r["concepto_dian"], cuenta_inicial=r["cuenta_inicial"],
+                    cuenta_final=r["cuenta_final"]) for r in capa2_data]
+                reglas_c3 = [ReglaCapa3(codigo_cuenta=r["codigo_cuenta"],
+                    nit=r.get("nit"), formato_dian=r["formato_dian"],
+                    concepto_dian=r.get("concepto_dian")) for r in capa3_data]
+
+                # Cargar movimientos clasificados
+                movs_data = sb.table("exogena_balance").select("*").eq(
+                    "periodo_id", periodo_actual["id"]
+                ).eq("es_totalizador", False).execute().data or []
+                
+                movimientos = [Movimiento(
+                    codigo_cuenta=m["codigo_cuenta"], nit=m.get("nit"),
+                    debitos=float(m.get("debitos", 0) or 0),
+                    creditos=float(m.get("creditos", 0) or 0),
+                    saldo_final=float(m.get("saldo_final", 0) or 0),
+                    nombre_cuenta=m.get("nombre_cuenta", ""),
+                    nombre_tercero=m.get("nombre_tercero", ""),
+                ) for m in movs_data]
+
+                motor = MotorClasificacion(reglas_c1, reglas_c2, reglas_c3)
+                resultado = motor.clasificar_balance(movimientos)
+
+                # Convertir a lista de dicts para el detector
+                movs_dict = []
+                for mc in resultado.movimientos:
+                    if mc.capa_resolucion == 'sin_resolver':
+                        continue
+                    # Buscar el movimiento original para obtener nombres
+                    mov_orig = next((m for m in movimientos
+                                     if m.codigo_cuenta == mc.codigo_cuenta and m.nit == mc.nit),
+                                    None)
+                    movs_dict.append({
+                        'codigo_cuenta': mc.codigo_cuenta,
+                        'nombre_cuenta': mov_orig.nombre_cuenta if mov_orig else '',
+                        'nit': mc.nit,
+                        'nombre_tercero': mov_orig.nombre_tercero if mov_orig else '',
+                        'debitos': mov_orig.debitos if mov_orig else 0,
+                        'creditos': mov_orig.creditos if mov_orig else 0,
+                        'saldo_final': mov_orig.saldo_final if mov_orig else 0,
+                        'formato_dian': mc.formato_dian,
+                        'concepto_dian': mc.concepto_dian,
+                    })
+
+                dictamen = construir_dictamen(movs_dict)
+                st.session_state["exo_dictamen_concilia"] = dictamen
+
+        # Mostrar dictamen si existe
+        if "exo_dictamen_concilia" in st.session_state:
+            dc = st.session_state["exo_dictamen_concilia"]
+
+            col_m1, col_m2, col_m3 = st.columns(3)
+            with col_m1:
+                st.metric("Cuentas Seguridad Social",
+                          len(dc.cuentas_seguridad_social),
+                          f"${dc.total_seguridad_social:,.0f}")
+            with col_m2:
+                st.metric("Cuentas GMF",
+                          len(dc.cuentas_gmf),
+                          f"${dc.total_gmf:,.0f}")
+            with col_m3:
+                st.metric("Total a conciliar",
+                          f"{len(dc.cuentas_seguridad_social) + len(dc.cuentas_gmf)}",
+                          f"${dc.total_general:,.0f}")
+
+            # Tabla seguridad social
+            if dc.cuentas_seguridad_social:
+                st.markdown("**🏥 Cuentas de Seguridad Social** (separar empleador vs trabajador)")
+                df_ss = pd.DataFrame([{
+                    "Cuenta": c.codigo_cuenta,
+                    "Nombre": c.nombre_cuenta,
+                    "Concepto": f"{c.concepto_sugerido} - {c.descripcion_concepto}",
+                    "Movs": c.cantidad_movimientos,
+                    "NITs": c.cantidad_nits,
+                    "Saldo": float(c.saldo_total),
+                    "Separar Emp/Trab": "Sí" if c.requiere_separacion_emp_trab else "No (100% empleador)",
+                } for c in dc.cuentas_seguridad_social])
+                st.dataframe(df_ss, use_container_width=True, hide_index=True)
+
+            # Tabla GMF
+            if dc.cuentas_gmf:
+                st.markdown("**🏦 Cuentas de GMF** (50% deducible)")
+                df_gmf = pd.DataFrame([{
+                    "Cuenta": c.codigo_cuenta,
+                    "Nombre": c.nombre_cuenta,
+                    "Movs": c.cantidad_movimientos,
+                    "Saldo Total": float(c.saldo_total),
+                    "Deducible (50%)": float(c.saldo_total) * 0.5,
+                    "No Deducible (50%)": float(c.saldo_total) * 0.5,
+                } for c in dc.cuentas_gmf])
+                st.dataframe(df_gmf, use_container_width=True, hide_index=True)
+
+            # ============================================================
+            # 2. DESCARGAR EXCEL EDITABLE
+            # ============================================================
+            st.markdown("---")
+            st.markdown("#### 📥 Excel editable para conciliación")
+            st.caption(
+                "Descarga este Excel, complete los aportes empleador/trabajador y los certificados "
+                "GMF, y vuelve a subirlo al sistema."
+            )
+
+            from core.exogena.excel_conciliacion import generar_excel_conciliacion
+            excel_buf = generar_excel_conciliacion(
+                dc,
+                {'razon_social': empresa.get('razon_social', ''), 'nit': empresa.get('nit', '')},
+                año_gravable,
+            )
+
+            st.download_button(
+                "📥 Descargar Excel de conciliación",
+                data=excel_buf.getvalue(),
+                file_name=f"conciliacion_{empresa.get('nit','empresa')}_{año_gravable}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=False,
+            )
+
+            # ============================================================
+            # 3. CARGAR ARCHIVO PILA
+            # ============================================================
+            st.markdown("---")
+            st.markdown("#### 📁 Cargar archivo PILA")
+            st.caption(
+                "Sube el archivo de la PILA (planilla de seguridad social) para que el sistema "
+                "extraiga automáticamente el aporte empleador vs trabajador."
+            )
+
+            archivo_pila = st.file_uploader(
+                "Archivo PILA (xlsx)",
+                type=["xlsx"],
+                key="exo_archivo_pila",
+            )
+
+            if archivo_pila:
+                from core.exogena.cargador_pila import cargar_pila
+                try:
+                    res_pila = cargar_pila(archivo_pila)
+
+                    if res_pila.errores:
+                        for e in res_pila.errores:
+                            st.error(f"❌ {e}")
+
+                    if res_pila.advertencias:
+                        with st.expander(f"⚠️ {len(res_pila.advertencias)} advertencias"):
+                            for a in res_pila.advertencias:
+                                st.text(a)
+
+                    if res_pila.registros:
+                        st.success(f"✅ {len(res_pila.registros)} registros parseados")
+                        
+                        # Consolidado
+                        cons = res_pila.consolidado_por_concepto()
+                        df_pila = pd.DataFrame([{
+                            "Tipo": k.upper(),
+                            "Concepto DIAN": v["concepto_dian"] or "—",
+                            "Aporte Empleador": float(v["aporte_empleador"]),
+                            "Aporte Trabajador": float(v["aporte_trabajador"]),
+                            "Total": float(v["aporte_total"]),
+                            "Filas": v["cantidad_filas"],
+                        } for k, v in cons.items()])
+                        st.dataframe(df_pila, use_container_width=True, hide_index=True)
+
+                        require_rol(["admin", "operador"])
+                        if st.button("💾 Guardar PILA en base de datos",
+                                      type="primary", key="btn_save_pila"):
+                            # Limpiar PILA previa
+                            sb.table("exogena_conciliacion_pila").delete().eq(
+                                "periodo_id", periodo_actual["id"]
+                            ).execute()
+
+                            # Insertar registros
+                            registros = [{
+                                "periodo_id": periodo_actual["id"],
+                                "nro_planilla": r.nro_planilla,
+                                "periodo_pago": r.periodo_pago,
+                                "tipo_aporte": r.tipo_aporte,
+                                "concepto_dian": r.concepto_dian,
+                                "aporte_empleador": float(r.aporte_empleador),
+                                "aporte_trabajador": float(r.aporte_trabajador),
+                                "aporte_total": float(r.aporte_total),
+                                "fila_origen": r.fila_origen,
+                            } for r in res_pila.registros]
+                            
+                            sb.table("exogena_conciliacion_pila").insert(registros).execute()
+                            st.success(f"✅ {len(registros)} registros PILA guardados")
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error procesando PILA: {e}")
+                    st.exception(e)
+
+            # ============================================================
+            # 4. CARGAR/INGRESAR GMF
+            # ============================================================
+            st.markdown("---")
+            st.markdown("#### 🏦 GMF por banco")
+            st.caption("Ingresa el total de GMF certificado por cada banco. El 50% es deducible.")
+
+            # Mostrar GMF ya guardados
+            try:
+                gmf_existentes = sb.table("exogena_conciliacion_gmf").select("*").eq(
+                    "periodo_id", periodo_actual["id"]
+                ).execute().data or []
+            except Exception:
+                gmf_existentes = []
+
+            if gmf_existentes:
+                st.markdown("**GMF ya cargados:**")
+                df_gmf_e = pd.DataFrame([{
+                    "Banco": g.get("banco_nombre", ""),
+                    "NIT": g.get("banco_nit", ""),
+                    "GMF Certificado": float(g.get("gmf_total_certificado", 0)),
+                    "Deducible 50%": float(g.get("gmf_total_certificado", 0)) * 0.5,
+                    "Certificado": g.get("nro_certificado", ""),
+                } for g in gmf_existentes])
+                st.dataframe(df_gmf_e, use_container_width=True, hide_index=True)
+
+            # Formulario para agregar nuevo
+            with st.expander("➕ Agregar/actualizar GMF de un banco"):
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    gmf_banco_nit = st.text_input("NIT del banco", key="gmf_nit")
+                    gmf_banco_nombre = st.text_input("Nombre del banco", key="gmf_nombre")
+                with col_g2:
+                    gmf_total = st.number_input("GMF Total Certificado",
+                                                  min_value=0.0, step=1000.0, key="gmf_total")
+                    gmf_certificado = st.text_input("Nro Certificado (opcional)", key="gmf_cert")
+
+                if st.button("💾 Guardar GMF", key="btn_save_gmf"):
+                    if not gmf_banco_nit or gmf_total <= 0:
+                        st.error("Banco NIT y Total son obligatorios")
+                    else:
+                        require_rol(["admin", "operador"])
+                        # Eliminar previo del mismo banco
+                        sb.table("exogena_conciliacion_gmf").delete().eq(
+                            "periodo_id", periodo_actual["id"]
+                        ).eq("banco_nit", gmf_banco_nit).execute()
+                        # Insertar
+                        sb.table("exogena_conciliacion_gmf").insert({
+                            "periodo_id": periodo_actual["id"],
+                            "banco_nit": gmf_banco_nit,
+                            "banco_nombre": gmf_banco_nombre,
+                            "gmf_total_certificado": gmf_total,
+                            "nro_certificado": gmf_certificado,
+                        }).execute()
+                        st.success(f"✅ GMF guardado para {gmf_banco_nombre or gmf_banco_nit}")
+                        st.rerun()
 
 
 # ============================================================
