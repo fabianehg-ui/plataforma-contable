@@ -965,18 +965,30 @@ with tab_clasificar:
                                 ):
                                     if fmt == "__ignorar__":
                                         # Marcar como ignorada (regla con formato vacío)
-                                        sb.table("exogena_mapeo_manual").upsert({
+                                        # Eliminar regla previa si existe y crear nueva
+                                        sb.table("exogena_mapeo_manual").delete().eq(
+                                            "empresa_id", empresa["id"]
+                                        ).eq("año_gravable", año_gravable).eq(
+                                            "codigo_cuenta", ch["cuenta"]
+                                        ).is_("nit", "null").execute()
+                                        sb.table("exogena_mapeo_manual").insert({
                                             "empresa_id": empresa["id"],
                                             "año_gravable": año_gravable,
                                             "codigo_cuenta": ch["cuenta"],
                                             "nit": None,
-                                            "formato_dian": "__ignorar__",
+                                            "formato_dian": "999999",
                                             "concepto_dian": None,
                                             "nota": "Marcada como no aplica por usuario",
                                         }).execute()
                                         st.success(f"✓ Cuenta {ch['cuenta']} ignorada")
                                     elif fmt:
-                                        sb.table("exogena_mapeo_manual").upsert({
+                                        # Eliminar regla previa si existe y crear nueva
+                                        sb.table("exogena_mapeo_manual").delete().eq(
+                                            "empresa_id", empresa["id"]
+                                        ).eq("año_gravable", año_gravable).eq(
+                                            "codigo_cuenta", ch["cuenta"]
+                                        ).is_("nit", "null").execute()
+                                        sb.table("exogena_mapeo_manual").insert({
                                             "empresa_id": empresa["id"],
                                             "año_gravable": año_gravable,
                                             "codigo_cuenta": ch["cuenta"],
