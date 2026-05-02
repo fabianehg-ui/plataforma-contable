@@ -97,6 +97,144 @@ class ResultadoClasificacion:
 
 
 # ================================================================
+# REGLAS ESPECIALES: clasificación con cálculos personalizados
+# ================================================================
+# Algunas familias de cuentas requieren cálculos especiales que no se
+# pueden expresar con las 3 capas de mapeo simples:
+#
+# 1. Activos fijos (15xx): valor = débitos - créditos (movimiento neto del año)
+#    Excluyendo cuentas de depreciación (nombre contiene "depreciacion")
+#    → Formato 1001, concepto 5008 (compra de activos fijos)
+#
+# 2. Inventarios (14xx): valor = débitos - créditos (compras netas)
+#    Excluyendo traslados/transferencias entre bodegas
+#    → Formato 1001, concepto 5007 (compra activos movibles)
+#
+# 3. Cartera clientes (1305xx-1315xx): valor = débitos - créditos (saldo)
+#    → Formato 1008 (saldos cuentas por cobrar)
+
+
+def _normalize_text(s) -> str:
+    """Normaliza texto: minúsculas + sin tildes."""
+    if s is None:
+        return ''
+    s = str(s).strip().lower()
+    repl = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n'}
+    for k, v in repl.items():
+        s = s.replace(k, v)
+    return s
+
+
+def _es_cuenta_activos_fijos(codigo_cuenta: str, nombre_cuenta: str) -> bool:
+    """Detecta cuentas de activos fijos (15xx) excluyendo depreciación."""
+    cuenta = str(codigo_cuenta).strip()
+    if not cuenta.startswith('15'):
+        return False
+    nombre_norm = _normalize_text(nombre_cuenta)
+    # Excluir depreciación, amortización, agotamiento (contracuentas)
+    palabras_excluir = ['depreciacion', 'amortizacion', 'agotamiento', 'desvalorizacion', 'provision']
+    for palabra in palabras_excluir:
+        if palabra in nombre_norm:
+            return False
+    return True
+
+
+def _es_cuenta_inventario_compra(codigo_cuenta: str, nombre_cuenta: str) -> bool:
+    """Detecta cuentas de inventario (14xx) excluyendo traslados/transferencias."""
+    cuenta = str(codigo_cuenta).strip()
+    if not cuenta.startswith('14'):
+        return False
+    nombre_norm = _normalize_text(nombre_cuenta)
+    # Excluir traslados, transferencias, bodegas (movimientos internos)
+    palabras_excluir = ['traslado', 'transferencia', 'bodega']
+    for palabra in palabras_excluir:
+        if palabra in nombre_norm:
+            return False
+    return True
+
+
+def _es_cuenta_cartera_1008(codigo_cuenta: str) -> bool:
+    """Detecta cuentas de cartera que van al formato 1008 (1305 a 1315)."""
+    cuenta = str(codigo_cuenta).strip()
+    if not cuenta.startswith('13'):
+        return False
+    # Solo 1305 a 1315 inclusive
+    if len(cuenta) < 4:
+        return False
+    try:
+        prefijo = int(cuenta[:4])
+        return 1305 <= prefijo <= 1315
+    except (ValueError, TypeError):
+        return False
+
+
+def aplicar_regla_especial(mov: 'Movimiento') -> Optional['MovimientoClasificado']:
+    """Aplica las reglas especiales de cálculo si la cuenta corresponde.
+    
+    Returns:
+        MovimientoClasificado si aplica una regla especial, None en otro caso.
+    
+    Las reglas especiales se aplican ANTES de Capa 1 y 2, pero pueden ser
+    sobrescritas por Capa 3 (manual del usuario).
+    """
+    cuenta = str(mov.codigo_cuenta).strip()
+    nombre = mov.nombre_cuenta or ''
+    
+    # 1. Activos fijos → 1001 / 5008
+    if _es_cuenta_activos_fijos(cuenta, nombre):
+        valor = mov.debitos - mov.creditos
+        # Solo reportar si hubo compras netas (valor positivo)
+        if valor > 0:
+            return MovimientoClasificado(
+                codigo_cuenta=cuenta, nit=mov.nit,
+                formato_dian='1001', concepto_dian=5008,
+                valor=abs(valor),
+                base_aplicable='debitos_menos_creditos',
+                capa_resolucion='regla_especial_activos_fijos',
+                requiere_revision=False,
+                nota='Activos fijos: débitos - créditos (excluye depreciación)',
+                balance_id=mov.balance_id,
+            )
+        return None  # No reportar si saldo neto es <= 0
+    
+    # 2. Inventarios → 1001 / 5007
+    if _es_cuenta_inventario_compra(cuenta, nombre):
+        valor = mov.debitos - mov.creditos
+        # Reportar solo si hubo compras netas positivas
+        if valor > 0:
+            return MovimientoClasificado(
+                codigo_cuenta=cuenta, nit=mov.nit,
+                formato_dian='1001', concepto_dian=5007,
+                valor=abs(valor),
+                base_aplicable='debitos_menos_creditos',
+                capa_resolucion='regla_especial_inventarios',
+                requiere_revision=False,
+                nota='Inventarios: débitos - créditos (excluye traslados)',
+                balance_id=mov.balance_id,
+            )
+        return None
+    
+    # 3. Cartera clientes (1305-1315) → formato 1008
+    if _es_cuenta_cartera_1008(cuenta):
+        valor = mov.debitos - mov.creditos
+        # Reportar saldos positivos (cartera por cobrar)
+        if valor != 0:
+            return MovimientoClasificado(
+                codigo_cuenta=cuenta, nit=mov.nit,
+                formato_dian='1008', concepto_dian=None,
+                valor=abs(valor),
+                base_aplicable='debitos_menos_creditos',
+                capa_resolucion='regla_especial_cartera',
+                requiere_revision=False,
+                nota='Cartera clientes (1305-1315): saldo por cobrar',
+                balance_id=mov.balance_id,
+            )
+        return None
+    
+    return None
+
+
+# ================================================================
 # CONFIGURACIÓN: cómo determinar qué base usar (débitos/créditos/saldo)
 # ================================================================
 # Por formato, cuál columna del balance representa el valor a informar.
@@ -219,6 +357,26 @@ class MotorClasificacion:
                 ))
             return resultados
 
+        # REGLAS ESPECIALES: activos fijos, inventarios, cartera 1008
+        # Se aplican antes de Capa 2 porque son cálculos especiales
+        # (débitos - créditos) que no se pueden expresar con rangos.
+        regla_esp = aplicar_regla_especial(mov)
+        if regla_esp is not None:
+            return [regla_esp]
+        
+        # Si la cuenta cae en familia 14, 15 o 1305-1315 pero no aplicó la regla
+        # (ej. depreciación, traslado, saldo cero), NO continuar a las otras capas
+        # — porque sabemos que no debe reportarse.
+        cuenta_str = str(mov.codigo_cuenta).strip()
+        if cuenta_str.startswith('15') or cuenta_str.startswith('14'):
+            # Es activo fijo o inventario pero excluido (depreciación, traslado)
+            # No reportar en ningún formato
+            nombre = mov.nombre_cuenta or ''
+            if (cuenta_str.startswith('15') and not _es_cuenta_activos_fijos(cuenta_str, nombre)) or \
+               (cuenta_str.startswith('14') and not _es_cuenta_inventario_compra(cuenta_str, nombre)):
+                # Pasa al flujo normal (capa 2/1) por si el usuario lo mapeó manualmente
+                pass
+
         # CAPA 2: mapeo nativo
         capa2 = self._buscar_capa2(mov.codigo_cuenta)
         if capa2:
@@ -278,7 +436,7 @@ class MotorClasificacion:
     def clasificar_balance(self, movimientos: list[Movimiento]) -> ResultadoClasificacion:
         res = ResultadoClasificacion()
         contador = {'capa1': 0, 'capa2_unico': 0, 'capa2_ambiguo': 0,
-                    'capa3': 0, 'sin_resolver': 0}
+                    'capa3': 0, 'regla_especial': 0, 'sin_resolver': 0}
 
         for mov in movimientos:
             clasificaciones = self.clasificar_movimiento(mov)
@@ -290,6 +448,8 @@ class MotorClasificacion:
                 contador['sin_resolver'] += 1
             elif primera.capa_resolucion == 'mapeo_manual':
                 contador['capa3'] += 1
+            elif primera.capa_resolucion.startswith('regla_especial'):
+                contador['regla_especial'] += 1
             elif primera.capa_resolucion == 'mapeo_empresa':
                 if primera.requiere_revision:
                     contador['capa2_ambiguo'] += 1
