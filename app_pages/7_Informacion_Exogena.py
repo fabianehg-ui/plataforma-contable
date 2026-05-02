@@ -940,10 +940,10 @@ with tab_clasificar:
                             with cols[5]:
                                 cpt_key = f"cpt_{ch['cuenta']}_{idx}"
                                 if fmt and fmt != "__ignorar__":
-                                    conceptos_disp = conceptos_por_formato.get(fmt, [])
+                                    # conceptos viene de todos_conceptos
                                     cpt_options = {
                                         c["codigo"]: f"{c['codigo']} - {c['descripcion'][:30]}"
-                                        for c in conceptos_disp
+                                        for c in todos_conceptos
                                     }
                                     cpt_options[None] = "(sin concepto)"
                                     cpt = st.selectbox(
