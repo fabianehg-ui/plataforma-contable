@@ -891,15 +891,15 @@ with tab_clasificar:
                                     st.warning(f"No se pudo cargar {tabla}: {e}")
                                     return []
 
-                    formatos_dian = _cargar_catalogo("exogena_formatos", "codigo_dian,nombre")
+                    formatos_dian = _cargar_catalogo("exogena_cat_formatos", "codigo,nombre")
                     formatos_options = {
-                        f["codigo_dian"]: f"{f['codigo_dian']} - {f['nombre'][:40]}"
-                        for f in sorted(formatos_dian, key=lambda x: x["codigo_dian"])
+                        f["codigo"]: f"{f['codigo']} - {f['nombre'][:40]}"
+                        for f in sorted(formatos_dian, key=lambda x: x["codigo"])
                     }
                     formatos_options["__ignorar__"] = "❌ No aplica (ignorar)"
 
                     conceptos_dian = _cargar_catalogo(
-                        "exogena_conceptos", "codigo_dian,formato_dian,descripcion"
+                        "exogena_cat_conceptos", "codigo,descripcion"
                     )
                     conceptos_por_formato = {}
                     for c in conceptos_dian:
@@ -945,7 +945,7 @@ with tab_clasificar:
                                 if fmt and fmt != "__ignorar__":
                                     conceptos_disp = conceptos_por_formato.get(fmt, [])
                                     cpt_options = {
-                                        c["codigo_dian"]: f"{c['codigo_dian']} - {c['descripcion'][:30]}"
+                                        c["codigo"]: f"{c['codigo']} - {c['descripcion'][:30]}"
                                         for c in conceptos_disp
                                     }
                                     cpt_options[None] = "(sin concepto)"
