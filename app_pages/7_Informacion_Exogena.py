@@ -1362,6 +1362,197 @@ with tab_conciliacion:
                         st.success(f"✅ GMF guardado para {gmf_banco_nombre or gmf_banco_nit}")
                         st.rerun()
 
+            # ============================================================
+            # 5. CUADRE BALANCE vs REPORTADO POR CONCEPTO
+            #    (Validación preventiva antes de generar XML)
+            # ============================================================
+            st.markdown("---")
+            st.markdown("#### 📐 Cuadre: Balance vs Valor a reportar")
+            st.caption(
+                "Comparación concepto a concepto del saldo del balance contra el valor "
+                "que se reportará en el XML aplicando las conciliaciones (PILA, GMF, ajustes manuales)."
+            )
+
+            if st.button("🔍 Generar cuadre", key="btn_cuadre_concilia", type="primary"):
+                with st.spinner("Calculando cuadre..."):
+                    from core.exogena.conciliacion import construir_cuadre_balance_vs_formatos
+                    from core.exogena.motor_clasificacion import (
+                        MotorClasificacion, Movimiento,
+                        ReglaCapa1, ReglaCapa2, ReglaCapa3
+                    )
+
+                    # Cargar reglas
+                    capa1_data = sb.table("exogena_puc_generico").select("*").eq(
+                        "año_gravable", año_gravable
+                    ).execute().data or []
+                    capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
+                        "empresa_id", empresa["id"]
+                    ).eq("año_gravable", año_gravable).execute().data or []
+                    capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
+                        "empresa_id", empresa["id"]
+                    ).eq("año_gravable", año_gravable).execute().data or []
+
+                    reglas_c1 = [ReglaCapa1(codigo_cuenta=r["codigo_cuenta"],
+                        formato_dian=r["formato_dian"], concepto_dian=r.get("concepto_dian"),
+                        nombre_cuenta=r.get("nombre_cuenta", "")) for r in capa1_data]
+                    reglas_c2 = [ReglaCapa2(formato_dian=r["formato_dian"],
+                        concepto_dian=r["concepto_dian"], cuenta_inicial=r["cuenta_inicial"],
+                        cuenta_final=r["cuenta_final"]) for r in capa2_data]
+                    reglas_c3 = [ReglaCapa3(codigo_cuenta=r["codigo_cuenta"],
+                        nit=r.get("nit"), formato_dian=r["formato_dian"],
+                        concepto_dian=r.get("concepto_dian")) for r in capa3_data]
+
+                    # Cargar movimientos
+                    movs_data = sb.table("exogena_balance").select("*").eq(
+                        "periodo_id", periodo_actual["id"]
+                    ).eq("es_totalizador", False).execute().data or []
+                    
+                    movimientos = [Movimiento(
+                        codigo_cuenta=m["codigo_cuenta"], nit=m.get("nit"),
+                        debitos=float(m.get("debitos", 0) or 0),
+                        creditos=float(m.get("creditos", 0) or 0),
+                        saldo_final=float(m.get("saldo_final", 0) or 0),
+                        nombre_cuenta=m.get("nombre_cuenta", ""),
+                        nombre_tercero=m.get("nombre_tercero", ""),
+                    ) for m in movs_data]
+
+                    motor = MotorClasificacion(reglas_c1, reglas_c2, reglas_c3)
+                    resultado = motor.clasificar_balance(movimientos)
+
+                    # Convertir a list de dicts para la función de cuadre
+                    movs_clasif = []
+                    for mc in resultado.movimientos:
+                        if mc.capa_resolucion == 'sin_resolver':
+                            continue
+                        mov_orig = next((m for m in movimientos
+                                         if m.codigo_cuenta == mc.codigo_cuenta
+                                         and m.nit == mc.nit), None)
+                        movs_clasif.append({
+                            'codigo_cuenta': mc.codigo_cuenta,
+                            'nombre_cuenta': mov_orig.nombre_cuenta if mov_orig else '',
+                            'nit': mc.nit,
+                            'nombre_tercero': mov_orig.nombre_tercero if mov_orig else '',
+                            'debitos': mov_orig.debitos if mov_orig else 0,
+                            'creditos': mov_orig.creditos if mov_orig else 0,
+                            'formato_dian': mc.formato_dian,
+                            'concepto_dian': mc.concepto_dian,
+                        })
+
+                    # Cargar PILA consolidada (si existe)
+                    pila_data = sb.table("exogena_conciliacion_pila").select("*").eq(
+                        "periodo_id", periodo_actual["id"]
+                    ).execute().data or []
+                    
+                    pila_consolidado = {}
+                    for p in pila_data:
+                        tipo = p.get("tipo_aporte", "")
+                        if tipo not in pila_consolidado:
+                            pila_consolidado[tipo] = {
+                                'aporte_empleador': 0,
+                                'aporte_trabajador': 0,
+                                'aporte_total': 0,
+                            }
+                        pila_consolidado[tipo]['aporte_empleador'] += float(p.get("aporte_empleador", 0) or 0)
+                        pila_consolidado[tipo]['aporte_trabajador'] += float(p.get("aporte_trabajador", 0) or 0)
+                        pila_consolidado[tipo]['aporte_total'] += float(p.get("aporte_total", 0) or 0)
+
+                    # Cargar certificados GMF
+                    gmf_data = sb.table("exogena_conciliacion_gmf").select("*").eq(
+                        "periodo_id", periodo_actual["id"]
+                    ).execute().data or []
+                    gmf_certificados = {g["banco_nit"]: g for g in gmf_data}
+
+                    # Cargar ajustes manuales (si existen)
+                    try:
+                        ajustes_data = sb.table("exogena_conciliacion_ajustes").select("*").eq(
+                            "periodo_id", periodo_actual["id"]
+                        ).execute().data or []
+                    except Exception:
+                        ajustes_data = []
+
+                    # Construir cuadre
+                    cuadre = construir_cuadre_balance_vs_formatos(
+                        movs_clasif,
+                        pila_consolidado=pila_consolidado,
+                        gmf_certificados=gmf_certificados,
+                        ajustes_manuales=ajustes_data,
+                    )
+                    
+                    st.session_state["exo_cuadre"] = cuadre
+
+            # Mostrar cuadre si existe
+            if "exo_cuadre" in st.session_state:
+                cuadre = st.session_state["exo_cuadre"]
+                
+                if not cuadre:
+                    st.warning("⚠️ No hay movimientos clasificados para mostrar.")
+                else:
+                    # Resumen general
+                    total_balance_general = sum(c.total_balance for c in cuadre.values())
+                    total_reportado_general = sum(c.total_reportado for c in cuadre.values())
+                    total_diferencia_general = sum(c.total_diferencia for c in cuadre.values())
+                    
+                    col_t1, col_t2, col_t3 = st.columns(3)
+                    with col_t1:
+                        st.metric("Total Balance", f"${total_balance_general:,.0f}")
+                    with col_t2:
+                        st.metric("Total a Reportar", f"${total_reportado_general:,.0f}",
+                                  delta=f"${(total_reportado_general - total_balance_general):,.0f}")
+                    with col_t3:
+                        st.metric("Diferencia (No deducible)",
+                                  f"${total_diferencia_general:,.0f}",
+                                  delta="positivo" if total_diferencia_general > 0 else "negativo",
+                                  delta_color="off")
+
+                    # Por cada formato, mostrar tabla
+                    for fmt_code, cf in sorted(cuadre.items()):
+                        with st.expander(f"📋 {cf.nombre_formato} — Balance: ${cf.total_balance:,.0f} → Reportado: ${cf.total_reportado:,.0f}",
+                                          expanded=True):
+                            df_cuadre = pd.DataFrame([{
+                                "Concepto": f.concepto_dian,
+                                "Descripción": f.descripcion_concepto,
+                                "Cuentas": f.cantidad_cuentas,
+                                "Movs": f.cantidad_movimientos,
+                                "Saldo Balance": float(f.saldo_balance),
+                                "A Reportar": float(f.valor_reportado),
+                                "Diferencia": float(f.diferencia),
+                                "Estado": f.estado,
+                                "Motivo": f.motivo,
+                            } for f in cf.filas])
+                            
+                            # Aplicar formato de moneda
+                            st.dataframe(
+                                df_cuadre,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Saldo Balance": st.column_config.NumberColumn(format="$%.0f"),
+                                    "A Reportar": st.column_config.NumberColumn(format="$%.0f"),
+                                    "Diferencia": st.column_config.NumberColumn(format="$%.0f"),
+                                }
+                            )
+                            
+                            # Resumen formato
+                            col_r1, col_r2, col_r3 = st.columns(3)
+                            with col_r1:
+                                st.metric("Balance", f"${cf.total_balance:,.0f}")
+                            with col_r2:
+                                st.metric("A Reportar", f"${cf.total_reportado:,.0f}")
+                            with col_r3:
+                                st.metric("Diferencia", f"${cf.total_diferencia:,.0f}")
+
+                    # Estado general
+                    st.markdown("---")
+                    if total_diferencia_general == 0:
+                        st.success("✅ Balance y formatos cuadran perfectamente. Listo para generar XML.")
+                    elif any(f.estado == 'DIFERENCIA' for cf in cuadre.values() for f in cf.filas):
+                        st.error("❌ Hay diferencias inexplicadas. Revisa los conceptos marcados como 'DIFERENCIA'.")
+                    else:
+                        st.info(
+                            f"ℹ️ Diferencia total esperada: ${total_diferencia_general:,.0f} "
+                            "(corresponde a: parte trabajador de seguridad social + 50% no deducible de GMF)."
+                        )
+
 
 # ============================================================
 # Tab: Generar XML
