@@ -500,24 +500,143 @@ with tab_terceros:
 
 
 # ============================================================
-# Tab: Balance
+# Tab: Balance / Equilibrio
 # ============================================================
 
 with tab_balance:
-    render_proximamente(
-        titulo="Carga del balance auxiliar",
-        descripcion=(
-            "Subir el balance de prueba con movimientos por NIT exportado del software "
-            "contable. El sistema cruza cada movimiento con el mapeo nativo + el maestro "
-            "de terceros para clasificarlo en formatos DIAN."
-        ),
-        fases=[
-            "Parser para los formatos típicos del balance (cuenta, NIT, débitos, créditos, saldo)",
-            "Detección automática de filas resumen vs movimientos por tercero",
-            "Validación de cuadre Db = Cr antes de aceptar la carga",
-            "Vista previa antes de persistir en BD",
-        ],
+    st.markdown("### 📥 Balance auxiliar por NIT")
+    st.caption(
+        "Sube el balance de prueba con movimientos por NIT exportado del software "
+        "contable. El parser limpia automáticamente: cuentas con guiones, NITs con "
+        "puntos y dígito de verificación pegado."
     )
+
+    archivo_balance = st.file_uploader(
+        "Archivo de balance (xlsx)",
+        type=["xlsx", "xls"],
+        key="exo_archivo_balance",
+        help="Estructura esperada: Cuenta | Equivalencia | Nombre | NIT | Nombre NIT | Saldo Anterior | Débitos | Créditos | Nuevo Saldo",
+    )
+
+    if archivo_balance:
+        from core.exogena.cargador_balance import cargar_balance
+        try:
+            res_bal = cargar_balance(archivo_balance, año_gravable=año_gravable)
+
+            # Mostrar cabecera detectada
+            with st.expander("📋 Cabecera detectada", expanded=True):
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    st.text(f"Empresa: {res_bal.cabecera.empresa}")
+                    st.text(f"NIT empresa: {res_bal.cabecera.nit_empresa}")
+                with col_b2:
+                    st.text(f"Período: {res_bal.cabecera.periodo}")
+                    st.text(f"Fecha corte: {res_bal.cabecera.fecha_corte}")
+
+                # Validar coincidencia de NIT
+                if res_bal.cabecera.nit_empresa and empresa.get('nit'):
+                    nit_empresa_limpio = ''.join(c for c in str(empresa['nit']) if c.isdigit())
+                    nit_balance = res_bal.cabecera.nit_empresa
+                    if nit_balance and nit_balance != nit_empresa_limpio.rstrip('0123456789')[:9] and not nit_empresa_limpio.startswith(nit_balance):
+                        if not (nit_empresa_limpio.startswith(nit_balance) or nit_balance.startswith(nit_empresa_limpio[:9])):
+                            st.warning(
+                                f"⚠️ El NIT del balance ({nit_balance}) parece distinto al de la empresa activa "
+                                f"({nit_empresa_limpio}). Verifica que estás cargando el archivo correcto."
+                            )
+
+            # Resumen
+            col_a, col_b, col_c, col_d = st.columns(4)
+            with col_a:
+                st.metric("Movimientos", f"{len(res_bal.movimientos):,}")
+            with col_b:
+                st.metric("NITs únicos", f"{len(res_bal.nits_unicos):,}")
+            with col_c:
+                st.metric("Cuentas únicas", f"{len(res_bal.cuentas_unicas):,}")
+            with col_d:
+                st.metric("Totalizadores", f"{len(res_bal.totalizadores):,}")
+
+            if res_bal.errores:
+                st.error(f"❌ {len(res_bal.errores)} errores:")
+                for e in res_bal.errores[:10]:
+                    st.text(f"  - {e}")
+
+            if res_bal.advertencias:
+                with st.expander(f"⚠️ {len(res_bal.advertencias)} advertencias"):
+                    for a in res_bal.advertencias:
+                        st.text(a)
+
+            # Vista previa
+            if res_bal.movimientos:
+                st.markdown("**Vista previa de movimientos (primeros 50):**")
+                df_mov = pd.DataFrame([{
+                    "Cuenta": m.codigo_cuenta,
+                    "NIT": m.nit,
+                    "Tercero": m.nombre_tercero,
+                    "Saldo Anterior": float(m.saldo_anterior),
+                    "Débitos": float(m.debitos),
+                    "Créditos": float(m.creditos),
+                    "Saldo Final": float(m.saldo_final),
+                } for m in res_bal.movimientos[:50]])
+                st.dataframe(df_mov, use_container_width=True, hide_index=True, height=400)
+
+            # Botón guardar
+            require_rol(["admin", "operador"])
+            if res_bal.movimientos and st.button(
+                "💾 Guardar balance en la base de datos",
+                type="primary",
+                key="btn_guardar_balance",
+            ):
+                sb = get_supabase()
+                # 1. Crear o usar periodo
+                periodo = crear_periodo_si_no_existe(empresa["id"], año_gravable)
+                
+                # 2. Limpiar balance previo del periodo (si lo hubiera)
+                sb.table("exogena_balance").delete().eq(
+                    "periodo_id", periodo["id"]
+                ).execute()
+
+                # 3. Insertar movimientos en lotes
+                LOTE = 200
+                registros = [{
+                    "periodo_id": periodo["id"],
+                    "codigo_cuenta": m.codigo_cuenta,
+                    "nombre_cuenta": m.nombre_cuenta,
+                    "nit": m.nit,
+                    "nombre_tercero": m.nombre_tercero,
+                    "saldo_anterior": float(m.saldo_anterior),
+                    "debitos": float(m.debitos),
+                    "creditos": float(m.creditos),
+                    "saldo_final": float(m.saldo_final),
+                    "es_totalizador": False,
+                    "fila_origen": m.fila_origen,
+                } for m in res_bal.movimientos]
+                
+                # También guardar totalizadores de nivel alto (1, 2 dígitos) para validación
+                registros += [{
+                    "periodo_id": periodo["id"],
+                    "codigo_cuenta": t.codigo_cuenta,
+                    "nombre_cuenta": t.nombre_cuenta,
+                    "nit": None,
+                    "nombre_tercero": None,
+                    "saldo_anterior": float(t.saldo_anterior),
+                    "debitos": float(t.debitos),
+                    "creditos": float(t.creditos),
+                    "saldo_final": float(t.saldo_final),
+                    "es_totalizador": True,
+                    "fila_origen": t.fila_origen,
+                } for t in res_bal.totalizadores if t.nivel <= 4]
+
+                for i in range(0, len(registros), LOTE):
+                    sb.table("exogena_balance").insert(registros[i:i+LOTE]).execute()
+
+                obtener_periodo.clear()
+                st.success(f"✅ Balance guardado: {len(res_bal.movimientos)} movimientos + "
+                           f"{sum(1 for r in registros if r['es_totalizador'])} totalizadores")
+                st.rerun()
+
+        except Exception as e:
+            st.error(f"❌ Error procesando balance: {e}")
+            st.exception(e)
 
 
 # ============================================================
@@ -525,24 +644,347 @@ with tab_balance:
 # ============================================================
 
 with tab_clasificar:
-    render_proximamente(
-        titulo="Motor de clasificación de movimientos",
-        descripcion=(
-            "Aplica las 3 capas de mapeo (manual → nativo empresa → PUC genérico) "
-            "a cada movimiento del balance. Los movimientos con múltiples reglas "
-            "aplicables se marcan como 'requiere revisión' para decisión del usuario."
-        ),
-        fases=[
-            "Procesamiento masivo del balance contra las 3 capas",
-            "UI de revisión de ambigüedades con opciones del usuario",
-            "Distribución de monto entre formatos cuando aplique",
-            "Persistencia de decisiones para reutilizar en próximos años",
-        ],
-        relacionados=[
-            ("Mapeo nativo", "Capa 2 del motor"),
-            ("Terceros", "Source de datos demográficos para los formatos"),
-        ],
+    st.markdown("### ⚙️ Clasificación de movimientos")
+    st.caption(
+        "Aplica las 3 capas de mapeo a los movimientos del balance: "
+        "**Capa 3** (manual por NIT) → **Capa 2** (mapeo nativo de la empresa) → "
+        "**Capa 1** (PUC genérico DIAN). Cuentas no clasificadas requieren asignación manual."
     )
+
+    sb = get_supabase()
+
+    # Verificar prerequisitos
+    periodo_actual = obtener_periodo(empresa["id"], año_gravable)
+    
+    if not periodo_actual:
+        st.warning("⚠️ Primero debes cargar el balance auxiliar en el tab anterior.")
+    else:
+        # Contar movimientos en BD
+        try:
+            n_movs = sb.table("exogena_balance").select("id", count="exact").eq(
+                "periodo_id", periodo_actual["id"]
+            ).eq("es_totalizador", False).execute().count or 0
+        except Exception:
+            n_movs = 0
+
+        if n_movs == 0:
+            st.warning("⚠️ No hay movimientos cargados para este periodo. Carga el balance primero.")
+        else:
+            col_h1, col_h2, col_h3 = st.columns([2, 1, 1])
+            with col_h1:
+                st.markdown(f"**Movimientos disponibles:** {n_movs:,}")
+            with col_h2:
+                ejecutar = st.button(
+                    "▶️ Ejecutar clasificación",
+                    type="primary",
+                    use_container_width=True,
+                )
+            with col_h3:
+                if st.button("🔄 Recargar dictamen", use_container_width=True):
+                    if "exo_dictamen" in st.session_state:
+                        del st.session_state["exo_dictamen"]
+                    st.rerun()
+
+            # ============================================================
+            # Ejecutar clasificación cuando se da click
+            # ============================================================
+            if ejecutar:
+                with st.spinner("Clasificando movimientos..."):
+                    from core.exogena.motor_clasificacion import (
+                        MotorClasificacion, Movimiento,
+                        ReglaCapa1, ReglaCapa2, ReglaCapa3
+                    )
+
+                    # 1. Cargar reglas de las 3 capas desde BD
+                    # Capa 1: PUC genérico (compartido todas las empresas)
+                    capa1_data = sb.table("exogena_puc_generico").select("*").eq(
+                        "año_gravable", año_gravable
+                    ).execute().data or []
+                    reglas_c1 = [
+                        ReglaCapa1(
+                            codigo_cuenta=r["codigo_cuenta"],
+                            formato_dian=r["formato_dian"],
+                            concepto_dian=r.get("concepto_dian"),
+                            nombre_cuenta=r.get("nombre_cuenta", ""),
+                        ) for r in capa1_data
+                    ]
+
+                    # Capa 2: Mapeo nativo de la empresa
+                    capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
+                        "empresa_id", empresa["id"]
+                    ).eq("año_gravable", año_gravable).execute().data or []
+                    reglas_c2 = [
+                        ReglaCapa2(
+                            formato_dian=r["formato_dian"],
+                            concepto_dian=r["concepto_dian"],
+                            cuenta_inicial=r["cuenta_inicial"],
+                            cuenta_final=r["cuenta_final"],
+                            descripcion_concepto=r.get("descripcion_concepto", ""),
+                            id=r.get("id"),
+                            fila_origen=r.get("fila_origen", 0),
+                        ) for r in capa2_data
+                    ]
+
+                    # Capa 3: Mapeo manual (overrides por cuenta+NIT)
+                    capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
+                        "empresa_id", empresa["id"]
+                    ).eq("año_gravable", año_gravable).execute().data or []
+                    reglas_c3 = [
+                        ReglaCapa3(
+                            codigo_cuenta=r["codigo_cuenta"],
+                            nit=r.get("nit"),
+                            formato_dian=r["formato_dian"],
+                            concepto_dian=r.get("concepto_dian"),
+                            nota=r.get("nota", ""),
+                            id=r.get("id"),
+                        ) for r in capa3_data
+                    ]
+
+                    # 2. Cargar movimientos del balance
+                    movs_data = sb.table("exogena_balance").select("*").eq(
+                        "periodo_id", periodo_actual["id"]
+                    ).eq("es_totalizador", False).execute().data or []
+                    movimientos = [
+                        Movimiento(
+                            codigo_cuenta=m["codigo_cuenta"],
+                            nit=m.get("nit"),
+                            debitos=float(m.get("debitos", 0) or 0),
+                            creditos=float(m.get("creditos", 0) or 0),
+                            saldo_final=float(m.get("saldo_final", 0) or 0),
+                            nombre_cuenta=m.get("nombre_cuenta", ""),
+                            nombre_tercero=m.get("nombre_tercero", ""),
+                            balance_id=m.get("id"),
+                        ) for m in movs_data
+                    ]
+
+                    # 3. Ejecutar el motor
+                    motor = MotorClasificacion(reglas_c1, reglas_c2, reglas_c3)
+                    resultado = motor.clasificar_balance(movimientos)
+
+                    # 4. Calcular estadísticas para el dictamen
+                    n_total = len(movimientos)
+                    n_huerf = len(resultado.sin_resolver)
+                    # Los "clasificados" son los que NO terminaron como sin_resolver
+                    movs_clasif = [m for m in resultado.movimientos
+                                   if m.capa_resolucion != 'sin_resolver']
+                    n_clasif = len(movs_clasif)
+                    n_revisar = sum(1 for m in movs_clasif if m.requiere_revision)
+
+                    # Distribución por capa
+                    por_capa = {}
+                    for mc in movs_clasif:
+                        por_capa[mc.capa_resolucion] = por_capa.get(mc.capa_resolucion, 0) + 1
+
+                    # Distribución por formato
+                    por_formato = {}
+                    for mc in movs_clasif:
+                        if mc.formato_dian:
+                            por_formato.setdefault(mc.formato_dian, {"movs": 0, "valor": 0.0})
+                            por_formato[mc.formato_dian]["movs"] += 1
+                            por_formato[mc.formato_dian]["valor"] += abs(mc.valor)
+
+                    # Cuentas huérfanas agrupadas
+                    cuentas_huerfanas = {}
+                    for m in resultado.sin_resolver:
+                        c = m.codigo_cuenta
+                        if c not in cuentas_huerfanas:
+                            cuentas_huerfanas[c] = {
+                                "cuenta": c,
+                                "nombre_cuenta": m.nombre_cuenta,
+                                "movs": 0,
+                                "saldo_total": 0.0,
+                                "ejemplos_nits": [],
+                            }
+                        cuentas_huerfanas[c]["movs"] += 1
+                        cuentas_huerfanas[c]["saldo_total"] += abs(m.debitos) + abs(m.creditos)
+                        if m.nit and len(cuentas_huerfanas[c]["ejemplos_nits"]) < 3:
+                            cuentas_huerfanas[c]["ejemplos_nits"].append(
+                                f"{m.nit} {m.nombre_tercero[:25]}"
+                            )
+
+                    # Guardar en session_state para que persista entre interacciones
+                    st.session_state["exo_dictamen"] = {
+                        "n_total": n_total,
+                        "n_clasif": n_clasif,
+                        "n_huerf": n_huerf,
+                        "n_revisar": n_revisar,
+                        "por_capa": por_capa,
+                        "por_formato": por_formato,
+                        "cuentas_huerfanas": list(cuentas_huerfanas.values()),
+                    }
+
+            # ============================================================
+            # Mostrar dictamen si existe
+            # ============================================================
+            if "exo_dictamen" in st.session_state:
+                d = st.session_state["exo_dictamen"]
+
+                st.markdown("---")
+                st.markdown("### 📊 Dictamen de clasificación")
+
+                # Métricas principales
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                with col_m1:
+                    st.metric("Total movimientos", f"{d['n_total']:,}")
+                with col_m2:
+                    pct = (d["n_clasif"] / d["n_total"] * 100) if d["n_total"] else 0
+                    st.metric("Clasificados", f"{d['n_clasif']:,}", f"{pct:.1f}%")
+                with col_m3:
+                    pct_h = (d["n_huerf"] / d["n_total"] * 100) if d["n_total"] else 0
+                    st.metric("⚠️ Huérfanos", f"{d['n_huerf']:,}", f"{pct_h:.1f}%")
+                with col_m4:
+                    st.metric("Por revisar", f"{d['n_revisar']:,}")
+
+                # Distribución por capa
+                with st.expander("📚 Distribución por capa que clasificó", expanded=False):
+                    capa_labels = {
+                        "mapeo_manual": "🥇 Capa 3 — Manual (override por NIT)",
+                        "mapeo_empresa": "🥈 Capa 2 — Mapeo nativo de la empresa",
+                        "puc_generico": "🥉 Capa 1 — PUC genérico DIAN",
+                    }
+                    for capa, label in capa_labels.items():
+                        n = d["por_capa"].get(capa, 0)
+                        if n:
+                            st.write(f"- **{label}**: {n:,} movs")
+
+                # Distribución por formato
+                if d["por_formato"]:
+                    with st.expander("📊 Distribución por formato DIAN", expanded=True):
+                        df_fmt = pd.DataFrame([
+                            {
+                                "Formato": fmt,
+                                "Movimientos": info["movs"],
+                                "Valor total": info["valor"],
+                            }
+                            for fmt, info in sorted(d["por_formato"].items())
+                        ])
+                        st.dataframe(df_fmt, use_container_width=True, hide_index=True)
+
+                # ============================================================
+                # Cuentas huérfanas: tabla interactiva para asignación manual
+                # ============================================================
+                if d["cuentas_huerfanas"]:
+                    st.markdown("---")
+                    st.markdown(f"### 🚨 {len(d['cuentas_huerfanas'])} cuentas sin clasificar")
+                    st.caption(
+                        "Estas cuentas tienen movimientos pero ninguna regla de las 3 capas las cubre. "
+                        "Asigna **formato + concepto** y guarda para que el sistema las use el próximo año."
+                    )
+
+                    # Cargar opciones desde catálogos DIAN
+                    formatos_dian = sb.table("exogena_formatos").select(
+                        "codigo_dian,nombre"
+                    ).eq("año_gravable", año_gravable).execute().data or []
+                    formatos_options = {
+                        f["codigo_dian"]: f"{f['codigo_dian']} - {f['nombre'][:40]}"
+                        for f in sorted(formatos_dian, key=lambda x: x["codigo_dian"])
+                    }
+                    formatos_options["__ignorar__"] = "❌ No aplica (ignorar)"
+
+                    conceptos_dian = sb.table("exogena_conceptos").select(
+                        "codigo_dian,formato_dian,descripcion"
+                    ).eq("año_gravable", año_gravable).execute().data or []
+                    conceptos_por_formato = {}
+                    for c in conceptos_dian:
+                        conceptos_por_formato.setdefault(c["formato_dian"], []).append(c)
+
+                    # Ordenar cuentas huérfanas por valor descendente (más impactantes primero)
+                    cuentas_orden = sorted(
+                        d["cuentas_huerfanas"],
+                        key=lambda x: x["saldo_total"],
+                        reverse=True,
+                    )
+
+                    # Mostrar las primeras 20 (limit para no saturar UI)
+                    LIMIT = 20
+                    if len(cuentas_orden) > LIMIT:
+                        st.info(f"Mostrando las {LIMIT} cuentas con mayor valor. "
+                                f"Hay {len(cuentas_orden) - LIMIT} adicionales.")
+
+                    require_rol(["admin", "operador"])
+
+                    for idx, ch in enumerate(cuentas_orden[:LIMIT]):
+                        with st.container():
+                            cols = st.columns([1.5, 3, 1.2, 1.5, 2, 2, 1.5])
+                            with cols[0]:
+                                st.text(ch["cuenta"])
+                            with cols[1]:
+                                st.text(ch["nombre_cuenta"][:35])
+                            with cols[2]:
+                                st.text(f"{ch['movs']} movs")
+                            with cols[3]:
+                                st.text(f"${ch['saldo_total']:,.0f}")
+                            with cols[4]:
+                                fmt_key = f"fmt_{ch['cuenta']}_{idx}"
+                                fmt = st.selectbox(
+                                    "Formato",
+                                    options=list(formatos_options.keys()),
+                                    format_func=lambda k: formatos_options[k],
+                                    key=fmt_key,
+                                    label_visibility="collapsed",
+                                )
+                            with cols[5]:
+                                cpt_key = f"cpt_{ch['cuenta']}_{idx}"
+                                if fmt and fmt != "__ignorar__":
+                                    conceptos_disp = conceptos_por_formato.get(fmt, [])
+                                    cpt_options = {
+                                        c["codigo_dian"]: f"{c['codigo_dian']} - {c['descripcion'][:30]}"
+                                        for c in conceptos_disp
+                                    }
+                                    cpt_options[None] = "(sin concepto)"
+                                    cpt = st.selectbox(
+                                        "Concepto",
+                                        options=list(cpt_options.keys()),
+                                        format_func=lambda k: cpt_options[k] if k else "(sin concepto)",
+                                        key=cpt_key,
+                                        label_visibility="collapsed",
+                                    )
+                                else:
+                                    cpt = None
+                                    st.text("—")
+                            with cols[6]:
+                                if st.button(
+                                    "💾 Aplicar",
+                                    key=f"apply_{ch['cuenta']}_{idx}",
+                                    use_container_width=True,
+                                ):
+                                    if fmt == "__ignorar__":
+                                        # Marcar como ignorada (regla con formato vacío)
+                                        sb.table("exogena_mapeo_manual").upsert({
+                                            "empresa_id": empresa["id"],
+                                            "año_gravable": año_gravable,
+                                            "codigo_cuenta": ch["cuenta"],
+                                            "nit": None,
+                                            "formato_dian": "__ignorar__",
+                                            "concepto_dian": None,
+                                            "nota": "Marcada como no aplica por usuario",
+                                        }).execute()
+                                        st.success(f"✓ Cuenta {ch['cuenta']} ignorada")
+                                    elif fmt:
+                                        sb.table("exogena_mapeo_manual").upsert({
+                                            "empresa_id": empresa["id"],
+                                            "año_gravable": año_gravable,
+                                            "codigo_cuenta": ch["cuenta"],
+                                            "nit": None,
+                                            "formato_dian": fmt,
+                                            "concepto_dian": cpt,
+                                            "nota": "",
+                                        }).execute()
+                                        st.success(f"✓ {ch['cuenta']} → {fmt}")
+                                    # Limpiar dictamen para que se reejecute
+                                    if "exo_dictamen" in st.session_state:
+                                        del st.session_state["exo_dictamen"]
+                                    st.rerun()
+
+                            # Mostrar ejemplos de NITs en esta cuenta (en una línea aparte)
+                            if ch["ejemplos_nits"]:
+                                st.caption(
+                                    f"  Ejemplos: " + " | ".join(ch["ejemplos_nits"][:3])
+                                )
+                            st.markdown("")  # separador
+                else:
+                    if d["n_clasif"] > 0:
+                        st.success("🎉 **¡Todas las cuentas están clasificadas!** Puedes pasar a generar XMLs.")
 
 
 # ============================================================
