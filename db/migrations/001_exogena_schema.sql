@@ -85,7 +85,10 @@ create table if not exists public.exogena_puc_generico (
     nota text,
     activo boolean default true,
     año_gravable integer not null,
-    unique (codigo_cuenta, formato_dian, año_gravable)
+    -- Una cuenta puede tener múltiples reglas en el mismo formato si los conceptos
+    -- son distintos (ej. cuenta 41 → formato 1007 → conceptos 4001, 4014, 4015, 4016).
+    -- Por eso el UNIQUE incluye concepto_dian.
+    unique (codigo_cuenta, formato_dian, concepto_dian, año_gravable)
 );
 create index if not exists idx_puc_gen_codigo on public.exogena_puc_generico(codigo_cuenta);
 create index if not exists idx_puc_gen_formato on public.exogena_puc_generico(formato_dian);
