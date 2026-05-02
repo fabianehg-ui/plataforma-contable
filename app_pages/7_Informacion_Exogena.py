@@ -872,18 +872,35 @@ with tab_clasificar:
                     )
 
                     # Cargar opciones desde catálogos DIAN
-                    formatos_dian = sb.table("exogena_formatos").select(
-                        "codigo_dian,nombre"
-                    ).eq("año_gravable", año_gravable).execute().data or []
+                    # Robusto: prueba primero con año_gravable, si falla intenta sin filtro
+                    def _cargar_catalogo(tabla, columnas):
+                        """Carga un catálogo intentando con año_gravable, anio_gravable, o sin filtro."""
+                        try:
+                            return sb.table(tabla).select(columnas).eq(
+                                "año_gravable", año_gravable
+                            ).execute().data or []
+                        except Exception:
+                            try:
+                                return sb.table(tabla).select(columnas).eq(
+                                    "anio_gravable", año_gravable
+                                ).execute().data or []
+                            except Exception:
+                                try:
+                                    return sb.table(tabla).select(columnas).execute().data or []
+                                except Exception as e:
+                                    st.warning(f"No se pudo cargar {tabla}: {e}")
+                                    return []
+
+                    formatos_dian = _cargar_catalogo("exogena_formatos", "codigo_dian,nombre")
                     formatos_options = {
                         f["codigo_dian"]: f"{f['codigo_dian']} - {f['nombre'][:40]}"
                         for f in sorted(formatos_dian, key=lambda x: x["codigo_dian"])
                     }
                     formatos_options["__ignorar__"] = "❌ No aplica (ignorar)"
 
-                    conceptos_dian = sb.table("exogena_conceptos").select(
-                        "codigo_dian,formato_dian,descripcion"
-                    ).eq("año_gravable", año_gravable).execute().data or []
+                    conceptos_dian = _cargar_catalogo(
+                        "exogena_conceptos", "codigo_dian,formato_dian,descripcion"
+                    )
                     conceptos_por_formato = {}
                     for c in conceptos_dian:
                         conceptos_por_formato.setdefault(c["formato_dian"], []).append(c)
