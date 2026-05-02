@@ -901,9 +901,6 @@ with tab_clasificar:
                     conceptos_dian = _cargar_catalogo(
                         "exogena_cat_conceptos", "codigo,descripcion"
                     )
-                    conceptos_por_formato = {}
-                    for c in conceptos_dian:
-                        conceptos_por_formato.setdefault(c["formato_dian"], []).append(c)
 
                     # Ordenar cuentas huérfanas por valor descendente (más impactantes primero)
                     cuentas_orden = sorted(
