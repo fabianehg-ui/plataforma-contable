@@ -1553,6 +1553,139 @@ with tab_conciliacion:
                             "(corresponde a: parte trabajador de seguridad social + 50% no deducible de GMF)."
                         )
 
+                    # ============================================================
+                    # 6. EXCEL BORRADOR COMPLETO DE AUDITORÍA
+                    # ============================================================
+                    st.markdown("---")
+                    st.markdown("#### 📊 Excel borrador completo (auditoría tributaria)")
+                    st.caption(
+                        "Genera un Excel con: hoja resumen + una hoja por cada formato "
+                        "(detalle por NIT + conciliación) + hoja de cuentas no reportadas. "
+                        "Documento maestro de auditoría tributaria."
+                    )
+
+                    if st.button("📊 Generar Excel borrador completo",
+                                  key="btn_excel_borrador", type="primary"):
+                        with st.spinner("Generando Excel borrador completo..."):
+                            from core.exogena.excel_borrador_formatos import (
+                                generar_excel_borrador_completo
+                            )
+                            
+                            # Cargar terceros del periodo
+                            try:
+                                terceros_data = sb.table("exogena_terceros").select(
+                                    "nit,tipo_documento,dv,razon_social,nombre_completo"
+                                ).eq("periodo_id", periodo_actual["id"]).execute().data or []
+                            except Exception:
+                                terceros_data = []
+                            
+                            terceros_dict = {}
+                            for t in terceros_data:
+                                nit_clean = str(t.get('nit', '')).strip().replace('.', '').replace(' ', '')
+                                if '-' in nit_clean:
+                                    nit_clean = nit_clean.split('-')[0]
+                                if nit_clean:
+                                    terceros_dict[nit_clean] = t
+
+                            # Cargar TODOS los movimientos del balance (para no reportadas)
+                            try:
+                                todos_movs_data = sb.table("exogena_balance").select("*").eq(
+                                    "periodo_id", periodo_actual["id"]
+                                ).eq("es_totalizador", False).execute().data or []
+                            except Exception:
+                                todos_movs_data = []
+
+                            # Re-clasificar para obtener movs con formato/concepto
+                            from core.exogena.motor_clasificacion import (
+                                MotorClasificacion, Movimiento,
+                                ReglaCapa1, ReglaCapa2, ReglaCapa3
+                            )
+                            
+                            capa1_data = sb.table("exogena_puc_generico").select("*").eq(
+                                "año_gravable", año_gravable
+                            ).execute().data or []
+                            capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
+                                "empresa_id", empresa["id"]
+                            ).eq("año_gravable", año_gravable).execute().data or []
+                            capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
+                                "empresa_id", empresa["id"]
+                            ).eq("año_gravable", año_gravable).execute().data or []
+
+                            reglas_c1 = [ReglaCapa1(codigo_cuenta=r["codigo_cuenta"],
+                                formato_dian=r["formato_dian"], concepto_dian=r.get("concepto_dian"),
+                                nombre_cuenta=r.get("nombre_cuenta", "")) for r in capa1_data]
+                            reglas_c2 = [ReglaCapa2(formato_dian=r["formato_dian"],
+                                concepto_dian=r["concepto_dian"], cuenta_inicial=r["cuenta_inicial"],
+                                cuenta_final=r["cuenta_final"]) for r in capa2_data]
+                            reglas_c3 = [ReglaCapa3(codigo_cuenta=r["codigo_cuenta"],
+                                nit=r.get("nit"), formato_dian=r["formato_dian"],
+                                concepto_dian=r.get("concepto_dian")) for r in capa3_data]
+
+                            movimientos = [Movimiento(
+                                codigo_cuenta=m["codigo_cuenta"], nit=m.get("nit"),
+                                debitos=float(m.get("debitos", 0) or 0),
+                                creditos=float(m.get("creditos", 0) or 0),
+                                saldo_final=float(m.get("saldo_final", 0) or 0),
+                                nombre_cuenta=m.get("nombre_cuenta", ""),
+                                nombre_tercero=m.get("nombre_tercero", ""),
+                            ) for m in todos_movs_data]
+
+                            motor = MotorClasificacion(reglas_c1, reglas_c2, reglas_c3)
+                            resultado = motor.clasificar_balance(movimientos)
+
+                            movs_clasif = []
+                            for mc in resultado.movimientos:
+                                if mc.capa_resolucion == 'sin_resolver':
+                                    continue
+                                mov_orig = next((m for m in movimientos
+                                                 if m.codigo_cuenta == mc.codigo_cuenta
+                                                 and m.nit == mc.nit), None)
+                                movs_clasif.append({
+                                    'codigo_cuenta': mc.codigo_cuenta,
+                                    'nombre_cuenta': mov_orig.nombre_cuenta if mov_orig else '',
+                                    'nit': mc.nit,
+                                    'nombre_tercero': mov_orig.nombre_tercero if mov_orig else '',
+                                    'debitos': mov_orig.debitos if mov_orig else 0,
+                                    'creditos': mov_orig.creditos if mov_orig else 0,
+                                    'formato_dian': mc.formato_dian,
+                                    'concepto_dian': mc.concepto_dian,
+                                })
+
+                            # Convertir todos_movs a dict simple
+                            todos_movs_dict = [{
+                                'codigo_cuenta': m["codigo_cuenta"],
+                                'nombre_cuenta': m.get("nombre_cuenta", ""),
+                                'nit': m.get("nit"),
+                                'debitos': float(m.get("debitos", 0) or 0),
+                                'creditos': float(m.get("creditos", 0) or 0),
+                            } for m in todos_movs_data]
+
+                            cabecera = {
+                                'razon_social': empresa.get('razon_social', ''),
+                                'nit': empresa.get('nit', ''),
+                                'año_gravable': año_gravable,
+                            }
+
+                            excel_buf = generar_excel_borrador_completo(
+                                movimientos_clasificados=movs_clasif,
+                                todos_movimientos_balance=todos_movs_dict,
+                                cuadre=cuadre,
+                                terceros_dict=terceros_dict,
+                                cabecera=cabecera,
+                            )
+
+                            st.session_state["exo_excel_borrador"] = excel_buf.getvalue()
+                            st.success("✅ Excel generado correctamente.")
+
+                    if "exo_excel_borrador" in st.session_state:
+                        st.download_button(
+                            "📥 Descargar Excel borrador completo",
+                            data=st.session_state["exo_excel_borrador"],
+                            file_name=f"borrador_exogena_{empresa.get('nit','empresa').replace('-','')}_{año_gravable}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=False,
+                        )
+
 
 # ============================================================
 # Tab: Generar XML
