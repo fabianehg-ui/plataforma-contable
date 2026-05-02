@@ -500,143 +500,24 @@ with tab_terceros:
 
 
 # ============================================================
-# Tab: Balance / Equilibrio
+# Tab: Balance
 # ============================================================
 
 with tab_balance:
-    st.markdown("### 📥 Balance auxiliar por NIT")
-    st.caption(
-        "Sube el balance de prueba con movimientos por NIT exportado del software "
-        "contable. El parser limpia automáticamente: cuentas con guiones, NITs con "
-        "puntos y dígito de verificación pegado."
+    render_proximamente(
+        titulo="Carga del balance auxiliar",
+        descripcion=(
+            "Subir el balance de prueba con movimientos por NIT exportado del software "
+            "contable. El sistema cruza cada movimiento con el mapeo nativo + el maestro "
+            "de terceros para clasificarlo en formatos DIAN."
+        ),
+        fases=[
+            "Parser para los formatos típicos del balance (cuenta, NIT, débitos, créditos, saldo)",
+            "Detección automática de filas resumen vs movimientos por tercero",
+            "Validación de cuadre Db = Cr antes de aceptar la carga",
+            "Vista previa antes de persistir en BD",
+        ],
     )
-
-    archivo_balance = st.file_uploader(
-        "Archivo de balance (xlsx)",
-        type=["xlsx", "xls"],
-        key="exo_archivo_balance",
-        help="Estructura esperada: Cuenta | Equivalencia | Nombre | NIT | Nombre NIT | Saldo Anterior | Débitos | Créditos | Nuevo Saldo",
-    )
-
-    if archivo_balance:
-        from core.exogena.cargador_balance import cargar_balance
-        try:
-            res_bal = cargar_balance(archivo_balance, año_gravable=año_gravable)
-
-            # Mostrar cabecera detectada
-            with st.expander("📋 Cabecera detectada", expanded=True):
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    st.text(f"Empresa: {res_bal.cabecera.empresa}")
-                    st.text(f"NIT empresa: {res_bal.cabecera.nit_empresa}")
-                with col_b2:
-                    st.text(f"Período: {res_bal.cabecera.periodo}")
-                    st.text(f"Fecha corte: {res_bal.cabecera.fecha_corte}")
-
-                # Validar coincidencia de NIT
-                if res_bal.cabecera.nit_empresa and empresa.get('nit'):
-                    nit_empresa_limpio = ''.join(c for c in str(empresa['nit']) if c.isdigit())
-                    nit_balance = res_bal.cabecera.nit_empresa
-                    if nit_balance and nit_balance != nit_empresa_limpio.rstrip('0123456789')[:9] and not nit_empresa_limpio.startswith(nit_balance):
-                        if not (nit_empresa_limpio.startswith(nit_balance) or nit_balance.startswith(nit_empresa_limpio[:9])):
-                            st.warning(
-                                f"⚠️ El NIT del balance ({nit_balance}) parece distinto al de la empresa activa "
-                                f"({nit_empresa_limpio}). Verifica que estás cargando el archivo correcto."
-                            )
-
-            # Resumen
-            col_a, col_b, col_c, col_d = st.columns(4)
-            with col_a:
-                st.metric("Movimientos", f"{len(res_bal.movimientos):,}")
-            with col_b:
-                st.metric("NITs únicos", f"{len(res_bal.nits_unicos):,}")
-            with col_c:
-                st.metric("Cuentas únicas", f"{len(res_bal.cuentas_unicas):,}")
-            with col_d:
-                st.metric("Totalizadores", f"{len(res_bal.totalizadores):,}")
-
-            if res_bal.errores:
-                st.error(f"❌ {len(res_bal.errores)} errores:")
-                for e in res_bal.errores[:10]:
-                    st.text(f"  - {e}")
-
-            if res_bal.advertencias:
-                with st.expander(f"⚠️ {len(res_bal.advertencias)} advertencias"):
-                    for a in res_bal.advertencias:
-                        st.text(a)
-
-            # Vista previa
-            if res_bal.movimientos:
-                st.markdown("**Vista previa de movimientos (primeros 50):**")
-                df_mov = pd.DataFrame([{
-                    "Cuenta": m.codigo_cuenta,
-                    "NIT": m.nit,
-                    "Tercero": m.nombre_tercero,
-                    "Saldo Anterior": float(m.saldo_anterior),
-                    "Débitos": float(m.debitos),
-                    "Créditos": float(m.creditos),
-                    "Saldo Final": float(m.saldo_final),
-                } for m in res_bal.movimientos[:50]])
-                st.dataframe(df_mov, use_container_width=True, hide_index=True, height=400)
-
-            # Botón guardar
-            require_rol(["admin", "operador"])
-            if res_bal.movimientos and st.button(
-                "💾 Guardar balance en la base de datos",
-                type="primary",
-                key="btn_guardar_balance",
-            ):
-                sb = get_supabase()
-                # 1. Crear o usar periodo
-                periodo = crear_periodo_si_no_existe(empresa["id"], año_gravable)
-                
-                # 2. Limpiar balance previo del periodo (si lo hubiera)
-                sb.table("exogena_balance").delete().eq(
-                    "periodo_id", periodo["id"]
-                ).execute()
-
-                # 3. Insertar movimientos en lotes
-                LOTE = 200
-                registros = [{
-                    "periodo_id": periodo["id"],
-                    "codigo_cuenta": m.codigo_cuenta,
-                    "nombre_cuenta": m.nombre_cuenta,
-                    "nit": m.nit,
-                    "nombre_tercero": m.nombre_tercero,
-                    "saldo_anterior": float(m.saldo_anterior),
-                    "debitos": float(m.debitos),
-                    "creditos": float(m.creditos),
-                    "saldo_final": float(m.saldo_final),
-                    "es_totalizador": False,
-                    "fila_origen": m.fila_origen,
-                } for m in res_bal.movimientos]
-                
-                # También guardar totalizadores de nivel alto (1, 2 dígitos) para validación
-                registros += [{
-                    "periodo_id": periodo["id"],
-                    "codigo_cuenta": t.codigo_cuenta,
-                    "nombre_cuenta": t.nombre_cuenta,
-                    "nit": None,
-                    "nombre_tercero": None,
-                    "saldo_anterior": float(t.saldo_anterior),
-                    "debitos": float(t.debitos),
-                    "creditos": float(t.creditos),
-                    "saldo_final": float(t.saldo_final),
-                    "es_totalizador": True,
-                    "fila_origen": t.fila_origen,
-                } for t in res_bal.totalizadores if t.nivel <= 4]
-
-                for i in range(0, len(registros), LOTE):
-                    sb.table("exogena_balance").insert(registros[i:i+LOTE]).execute()
-
-                obtener_periodo.clear()
-                st.success(f"✅ Balance guardado: {len(res_bal.movimientos)} movimientos + "
-                           f"{sum(1 for r in registros if r['es_totalizador'])} totalizadores")
-                st.rerun()
-
-        except Exception as e:
-            st.error(f"❌ Error procesando balance: {e}")
-            st.exception(e)
 
 
 # ============================================================
