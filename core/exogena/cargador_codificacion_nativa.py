@@ -65,8 +65,13 @@ def _limpiar_cuenta(c) -> str:
     return s
 
 
-def cargar_codificacion_nativa(archivo: str | Path) -> ResultadoCargaMapeo:
+def cargar_codificacion_nativa(archivo) -> ResultadoCargaMapeo:
     """Lee el Excel de codificación nativa y devuelve la lista de reglas.
+
+    Acepta:
+      - str / Path: ruta del archivo en disco
+      - UploadedFile / BytesIO / file-like: objeto de archivo en memoria
+        (típico cuando viene de Streamlit st.file_uploader)
 
     El parser asume:
       - Hoja 'Datos' (o primera hoja)
@@ -74,10 +79,13 @@ def cargar_codificacion_nativa(archivo: str | Path) -> ResultadoCargaMapeo:
       - Fila con '#N/A' marca el final
     """
     res = ResultadoCargaMapeo()
-    archivo = Path(archivo)
-    if not archivo.exists():
-        res.errores.append(f"Archivo no existe: {archivo}")
-        return res
+
+    # Si es ruta (str/Path), validar que existe. Si es file-like, dejarlo pasar.
+    if isinstance(archivo, (str, Path)):
+        archivo = Path(archivo)
+        if not archivo.exists():
+            res.errores.append(f"Archivo no existe: {archivo}")
+            return res
 
     wb = openpyxl.load_workbook(archivo, data_only=True, read_only=True)
     ws = wb['Datos'] if 'Datos' in wb.sheetnames else wb.active
@@ -160,13 +168,17 @@ def cuenta_en_rango(cuenta: str, inicial: str, final: str) -> bool:
 
 
 def cargar_a_supabase(
-    archivo_xlsx: str | Path,
-    empresa_id: int,
+    archivo_xlsx,
+    empresa_id,
     año_gravable: int,
     supabase_client,
     reemplazar_existente: bool = True,
 ) -> ResultadoCargaMapeo:
-    """Carga el archivo nativo a la tabla exogena_mapeo_empresa de Supabase."""
+    """Carga el archivo nativo a la tabla exogena_mapeo_empresa de Supabase.
+
+    archivo_xlsx puede ser ruta (str/Path) o file-like (UploadedFile de Streamlit).
+    empresa_id puede ser int o str (UUID).
+    """
     res = cargar_codificacion_nativa(archivo_xlsx)
     if not res.reglas:
         return res
