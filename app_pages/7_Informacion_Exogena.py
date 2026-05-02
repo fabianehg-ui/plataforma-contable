@@ -900,6 +900,7 @@ with tab_clasificar:
 
                     conceptos_dian = _cargar_catalogo(
                         "exogena_cat_conceptos", "codigo,descripcion"
+                    todos_conceptos = sorted(conceptos_dian, key=lambda x: x.get("codigo", 0))
                     )
 
                     # Ordenar cuentas huérfanas por valor descendente (más impactantes primero)
