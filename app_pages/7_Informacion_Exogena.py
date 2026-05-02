@@ -898,10 +898,19 @@ with tab_clasificar:
                     }
                     formatos_options["__ignorar__"] = "❌ No aplica (ignorar)"
 
-                    conceptos_dian = _cargar_catalogo(
-                        "exogena_cat_conceptos", "codigo,descripcion"
-                    )
-                    todos_conceptos = sorted(conceptos_dian, key=lambda x: x.get("codigo", 0))
+                    # Cargar relación concepto ↔ formato (para filtrar dropdowns)
+                    try:
+                        conceptos_rel = sb.table("exogena_cat_concepto_formato").select(
+                            "formato_dian,codigo_concepto,descripcion"
+                        ).eq("año_gravable", año_gravable).execute().data or []
+                    except Exception:
+                        conceptos_rel = []
+                    # Agrupar por formato
+                    conceptos_por_formato = {}
+                    for c in conceptos_rel:
+                        conceptos_por_formato.setdefault(c["formato_dian"], []).append(c)
+                    for fmt in conceptos_por_formato:
+                        conceptos_por_formato[fmt].sort(key=lambda x: x["codigo_concepto"])
 
                     # Ordenar cuentas huérfanas por valor descendente (más impactantes primero)
                     cuentas_orden = sorted(
@@ -918,9 +927,19 @@ with tab_clasificar:
 
                     require_rol(["admin", "operador"])
 
+                    # Inicializar storage de decisiones en session_state
+                    if "exo_decisiones" not in st.session_state:
+                        st.session_state["exo_decisiones"] = {}
+
+                    # Reset si se pidió
+                    if st.button("🔄 Limpiar selecciones", key="reset_decisiones"):
+                        st.session_state["exo_decisiones"] = {}
+                        st.rerun()
+
+                    # Loop de cuentas con dropdowns sin botón individual
                     for idx, ch in enumerate(cuentas_orden[:LIMIT]):
                         with st.container():
-                            cols = st.columns([1.5, 3, 1.2, 1.5, 2, 2, 1.5])
+                            cols = st.columns([1.5, 3, 1.2, 1.5, 2, 2])
                             with cols[0]:
                                 st.text(ch["cuenta"])
                             with cols[1]:
@@ -931,84 +950,110 @@ with tab_clasificar:
                                 st.text(f"${ch['saldo_total']:,.0f}")
                             with cols[4]:
                                 fmt_key = f"fmt_{ch['cuenta']}_{idx}"
+                                # Opción "(sin asignar)" para no obligar
+                                fmt_opts = {None: "— Sin asignar —", "999999": "❌ No aplica (ignorar)"}
+                                fmt_opts.update(formatos_options)
+                                # Quitar el __ignorar__ duplicado de formatos_options
+                                fmt_opts.pop("__ignorar__", None)
                                 fmt = st.selectbox(
                                     "Formato",
-                                    options=list(formatos_options.keys()),
-                                    format_func=lambda k: formatos_options[k],
+                                    options=list(fmt_opts.keys()),
+                                    format_func=lambda k: fmt_opts.get(k, "— Sin asignar —"),
                                     key=fmt_key,
                                     label_visibility="collapsed",
                                 )
                             with cols[5]:
                                 cpt_key = f"cpt_{ch['cuenta']}_{idx}"
-                                if fmt and fmt != "__ignorar__":
-                                    # conceptos viene de todos_conceptos
+                                if fmt and fmt not in (None, "999999"):
+                                    # Cargar conceptos solo del formato seleccionado
+                                    conceptos_disp = conceptos_por_formato.get(fmt, [])
                                     cpt_options = {
-                                        c["codigo"]: f"{c['codigo']} - {c['descripcion'][:30]}"
-                                        for c in todos_conceptos
+                                        c["codigo_concepto"]: f"{c['codigo_concepto']} - {c['descripcion'][:40]}"
+                                        for c in conceptos_disp
                                     }
-                                    cpt_options[None] = "(sin concepto)"
+                                    if not cpt_options:
+                                        cpt_options = {None: "(sin conceptos para este formato)"}
                                     cpt = st.selectbox(
                                         "Concepto",
                                         options=list(cpt_options.keys()),
-                                        format_func=lambda k: cpt_options[k] if k else "(sin concepto)",
+                                        format_func=lambda k: cpt_options.get(k, "(sin concepto)"),
                                         key=cpt_key,
                                         label_visibility="collapsed",
                                     )
                                 else:
                                     cpt = None
                                     st.text("—")
-                            with cols[6]:
-                                if st.button(
-                                    "💾 Aplicar",
-                                    key=f"apply_{ch['cuenta']}_{idx}",
-                                    use_container_width=True,
-                                ):
-                                    if fmt == "__ignorar__":
-                                        # Marcar como ignorada (regla con formato vacío)
-                                        # Eliminar regla previa si existe y crear nueva
-                                        sb.table("exogena_mapeo_manual").delete().eq(
-                                            "empresa_id", empresa["id"]
-                                        ).eq("año_gravable", año_gravable).eq(
-                                            "codigo_cuenta", ch["cuenta"]
-                                        ).is_("nit", "null").execute()
-                                        sb.table("exogena_mapeo_manual").insert({
-                                            "empresa_id": empresa["id"],
-                                            "año_gravable": año_gravable,
-                                            "codigo_cuenta": ch["cuenta"],
-                                            "nit": None,
-                                            "formato_dian": "999999",
-                                            "concepto_dian": None,
-                                            "nota": "Marcada como no aplica por usuario",
-                                        }).execute()
-                                        st.success(f"✓ Cuenta {ch['cuenta']} ignorada")
-                                    elif fmt:
-                                        # Eliminar regla previa si existe y crear nueva
-                                        sb.table("exogena_mapeo_manual").delete().eq(
-                                            "empresa_id", empresa["id"]
-                                        ).eq("año_gravable", año_gravable).eq(
-                                            "codigo_cuenta", ch["cuenta"]
-                                        ).is_("nit", "null").execute()
-                                        sb.table("exogena_mapeo_manual").insert({
-                                            "empresa_id": empresa["id"],
-                                            "año_gravable": año_gravable,
-                                            "codigo_cuenta": ch["cuenta"],
-                                            "nit": None,
-                                            "formato_dian": fmt,
-                                            "concepto_dian": cpt,
-                                            "nota": "",
-                                        }).execute()
-                                        st.success(f"✓ {ch['cuenta']} → {fmt}")
-                                    # Limpiar dictamen para que se reejecute
-                                    if "exo_dictamen" in st.session_state:
-                                        del st.session_state["exo_dictamen"]
-                                    st.rerun()
 
-                            # Mostrar ejemplos de NITs en esta cuenta (en una línea aparte)
+                            # Guardar selección actual en session_state
+                            if fmt is not None:
+                                st.session_state["exo_decisiones"][ch["cuenta"]] = {
+                                    "cuenta": ch["cuenta"],
+                                    "formato": fmt,
+                                    "concepto": cpt,
+                                }
+                            elif ch["cuenta"] in st.session_state["exo_decisiones"]:
+                                del st.session_state["exo_decisiones"][ch["cuenta"]]
+
+                            # Mostrar ejemplos de NITs
                             if ch["ejemplos_nits"]:
                                 st.caption(
-                                    f"  Ejemplos: " + " | ".join(ch["ejemplos_nits"][:3])
+                                    "  Ejemplos: " + " | ".join(ch["ejemplos_nits"][:3])
                                 )
                             st.markdown("")  # separador
+
+                    # Botón unico "Aplicar TODAS las decisiones" al final
+                    n_decisiones = len(st.session_state.get("exo_decisiones", {}))
+                    if n_decisiones > 0:
+                        st.markdown("---")
+                        col_btn1, col_btn2 = st.columns([1, 3])
+                        with col_btn1:
+                            aplicar_todo = st.button(
+                                f"💾 Guardar {n_decisiones} decisiones",
+                                type="primary",
+                                use_container_width=True,
+                                key="btn_aplicar_todo",
+                            )
+                        with col_btn2:
+                            st.caption(
+                                f"Se guardarán {n_decisiones} reglas en la base de datos. "
+                                "Las cuentas marcadas como 'Sin asignar' no se persistirán."
+                            )
+
+                        if aplicar_todo:
+                            decisiones = list(st.session_state["exo_decisiones"].values())
+                            errores_guardado = []
+                            for dec in decisiones:
+                                try:
+                                    # Eliminar regla previa si existe
+                                    sb.table("exogena_mapeo_manual").delete().eq(
+                                        "empresa_id", empresa["id"]
+                                    ).eq("año_gravable", año_gravable).eq(
+                                        "codigo_cuenta", dec["cuenta"]
+                                    ).is_("nit", "null").execute()
+                                    # Insertar nueva
+                                    sb.table("exogena_mapeo_manual").insert({
+                                        "empresa_id": empresa["id"],
+                                        "año_gravable": año_gravable,
+                                        "codigo_cuenta": dec["cuenta"],
+                                        "nit": None,
+                                        "formato_dian": dec["formato"],
+                                        "concepto_dian": dec["concepto"],
+                                        "nota": "Asignado manualmente desde dictamen" if dec["formato"] != "999999" else "No aplica",
+                                    }).execute()
+                                except Exception as e:
+                                    errores_guardado.append(f"{dec['cuenta']}: {str(e)[:80]}")
+
+                            if errores_guardado:
+                                st.error(f"❌ {len(errores_guardado)} errores al guardar:")
+                                for e in errores_guardado[:5]:
+                                    st.text(e)
+                            else:
+                                st.success(f"✅ {len(decisiones)} decisiones guardadas. Re-ejecuta clasificación para ver el nuevo dictamen.")
+                                st.session_state["exo_decisiones"] = {}
+                                if "exo_dictamen" in st.session_state:
+                                    del st.session_state["exo_dictamen"]
+                                st.rerun()
+
                 else:
                     if d["n_clasif"] > 0:
                         st.success("🎉 **¡Todas las cuentas están clasificadas!** Puedes pasar a generar XMLs.")
