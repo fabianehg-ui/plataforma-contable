@@ -1,0 +1,554 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:complexType name="CabType">
+		<xs:sequence>
+			<xs:element name="Ano" type="xs:gYear" nillable="false">
+				<xs:annotation>
+					<xs:documentation>AÃ±o de envio</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="CodCpt" nillable="false">
+				<xs:annotation>
+					<xs:documentation>Concepto</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:minInclusive value="0"/>
+						<xs:maxInclusive value="99"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Formato" fixed="2276">
+				<xs:simpleType>
+					<xs:restriction base="xs:positiveInteger"/>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Version" type="xs:positiveInteger" fixed="4"/>
+			<xs:element name="NumEnvio">
+				<xs:annotation>
+					<xs:documentation>Numero de envio</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:positiveInteger">
+						<xs:totalDigits value="8"/>
+						<xs:maxInclusive value="99999999"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="FecEnvio" type="xs:dateTime">
+				<xs:annotation>
+					<xs:documentation>Fecha de envio</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="FecInicial" type="xs:date">
+				<xs:annotation>
+					<xs:documentation>Fecha inicial</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="FecFinal" type="xs:date">
+				<xs:annotation>
+					<xs:documentation>Fecha Final</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="ValorTotal" type="xs:double">
+				<xs:annotation>
+					<xs:documentation>Valor Total</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="CantReg">
+				<xs:annotation>
+					<xs:documentation>Cantidad de registros</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:positiveInteger">
+						<xs:totalDigits value="4"/>
+						<xs:maxInclusive value="9999"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:element name="mas">
+		<xs:annotation>
+			<xs:documentation>Elemento raiz del xml de carga masiva</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="Cab" type="CabType"/>
+				<xs:element ref="rentra" maxOccurs="unbounded"/>
+			</xs:sequence>
+		</xs:complexType>
+		<xs:unique name="rentraUnico">
+			<xs:selector xpath="rentra"/>
+			<xs:field xpath="@rentra"/>
+		</xs:unique>
+	</xs:element>
+	<xs:element name="rentra">
+		<xs:annotation>
+			<xs:documentation>InformaciÃ³n de rentas de trabajo y pensiones - Formato 2276v4</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>	
+			<xs:attribute name="entinfo" use="required">
+				<xs:annotation>
+					<xs:documentation>Entidad Informante</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{1,2}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="tdocb" use="required">
+				<xs:annotation>
+					<xs:documentation>Tipo de documento del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{1,2}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="nitb" use="required">
+				<xs:annotation>
+					<xs:documentation>NÃºmero de identificaciÃ³n del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:pattern value="[a-zA-Z0-9]+"/>
+						<xs:minLength value="1"/>
+						<xs:maxLength value="20"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pap" use="required">
+				<xs:annotation>
+					<xs:documentation>Primer apellido del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:minLength value="1"/>
+						<xs:maxLength value="60"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="sap" use="optional">
+				<xs:annotation>
+					<xs:documentation>Segundo apellido del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:minLength value="0"/>
+						<xs:maxLength value="60"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pno" use="required">
+				<xs:annotation>
+					<xs:documentation>Primer nombre del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:minLength value="1"/>
+						<xs:maxLength value="60"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="ono" use="optional">
+				<xs:annotation>
+					<xs:documentation>Otros nombres del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:minLength value="0"/>
+						<xs:maxLength value="60"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="dir" use="optional">
+				<xs:annotation>
+					<xs:documentation>DirecciÃ³n del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:minLength value="0"/>
+						<xs:maxLength value="200"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="dpto" use="optional">
+				<xs:annotation>
+					<xs:documentation>Departamentodel beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{0,2}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="mun" use="optional">
+				<xs:annotation>
+					<xs:documentation>Municipio del beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{0,3}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pais" use="required">
+				<xs:annotation>
+					<xs:documentation>PaÃ­s del Beneficiario</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{1,4}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pasa" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por salarios</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="paec" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por emolumentos eclesiÃ¡sticos </xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pabop" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos realizados con bonos electrÃ³nicos o de papel de servicio, cheques, tarjetas, vales, etc.</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="vaex" use="required">
+				<xs:annotation>
+					<xs:documentation>Valor del exceso de los pagos por alimentaciÃ³n mayores a 41 UVT, art. 387-1 E.T.</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>			
+			<xs:attribute name="paho" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por honorarios </xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pase" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por servicios</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="paco" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por comisiones </xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="papre" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por prestaciones sociales</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pavia" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por viÃ¡ticos</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="paga" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por gastos de representaciÃ³n</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="patra" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por compensaciones trabajo asociado cooperativo</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="vapo" use="required">
+				<xs:annotation>
+					<xs:documentation>Valor apoyos econÃ³micos no reembolsables o condonados, entregados por el Estado o financiados con recursos pÃºblicos, para financiar programas educativos.</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>					
+			<xs:attribute name="potro" use="required">
+				<xs:annotation>
+					<xs:documentation>Otros pagos</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="cein" use="required">
+				<xs:annotation>
+					<xs:documentation>CesantÃ­as e intereses de cesantÃ­as efectivamente pagadas al empleado</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="ceco" use="required">
+				<xs:annotation>
+					<xs:documentation>CesantÃ­as consignadas al fondo de cesantÃ­as</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>	
+			<xs:attribute name="auce" use="required">
+				<xs:annotation>
+					<xs:documentation>Auxilio de cesantÃ­as reconocido a trabajadores del rÃ©gimen tradicional del CÃ³digo Sustantivo del Trabajo, CapÃ­tulo VII, TÃ­tulo VIII Parte Primera</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>				
+			<xs:attribute name="peju" use="required">
+				<xs:annotation>
+					<xs:documentation>Pensiones de jubilaciÃ³n vejez o invalidez</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="tingbtp" use="required">
+				<xs:annotation>
+					<xs:documentation>Total Ingresos brutos por rentas de trabajo y pensiÃ³n</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="apos" use="required">
+				<xs:annotation>
+					<xs:documentation>Aportes Obligatorios por Salud a cargo del trabajador</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="apof" use="required">
+				<xs:annotation>
+					<xs:documentation>Aportes obligatorios a fondos de pensiones y solidaridad pensional a cargo del trabajador</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="aprais" use="required">
+				<xs:annotation>
+					<xs:documentation>Aportes voluntarios al rÃ©gimen de ahorro individual con solidaridad - RAIS</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="apov" use="required">
+				<xs:annotation>
+					<xs:documentation>Aportes voluntarios a fondos de pensiones voluntarias</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="apafc" use="required">
+				<xs:annotation>
+					<xs:documentation>Aportes a cuentas AFC </xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="apavc" use="required">
+				<xs:annotation>
+					<xs:documentation>Aportes a cuentas AVC</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="vare" use="required">
+				<xs:annotation>
+					<xs:documentation>Valor de las Retenciones en la fuente por pagos de rentas de trabajo o pensiones</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="ivav" use="required">
+				<xs:annotation>
+					<xs:documentation>Impuesto sobre las ventas â IVA, mayor valor del costo o gasto</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="rfiva" use="required">
+				<xs:annotation>
+					<xs:documentation>RetenciÃ³n en la fuente a tÃ­tulo de impuesto sobre las ventas â IVA.</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="pagahuvt" use="required">
+				<xs:annotation>
+					<xs:documentation>Pagos por alimentaciÃ³n hasta a 41 UVT</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="vilap" use="required">
+				<xs:annotation>
+					<xs:documentation>Valor ingreso laboral promedio de los Ãºltimos seis meses.</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:long">
+						<xs:pattern value="[0-9]{1,18}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="tdocde" use="optional">
+				<xs:annotation>
+					<xs:documentation>Tipo de documento del dependiente econÃ³mico</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{0,2}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="nitde" use="optional">
+				<xs:annotation>
+					<xs:documentation>NÃºmero de IdentificaciÃ³n del dependiente econÃ³mico</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:pattern value="[a-zA-Z0-9]*"/>
+						<xs:minLength value="0"/>
+						<xs:maxLength value="20"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>			
+			<xs:attribute name="identfc" use="optional">
+				<xs:annotation>
+					<xs:documentation>IdentificaciÃ³n del fideicomiso o contrato</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:pattern value="[0-9]{0,14}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="tdocpcc" use="optional">
+				<xs:annotation>
+					<xs:documentation>Tipo documento participante en contrato de colaboraciÃ³n</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:int">
+						<xs:pattern value="[0-9]{0,2}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+			<xs:attribute name="nitpcc" use="optional">
+				<xs:annotation>
+					<xs:documentation>IdentificaciÃ³n participante en contrato colaboraciÃ³n</xs:documentation>
+				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:pattern value="[a-zA-Z0-9]*"/>
+						<xs:minLength value="0"/>
+						<xs:maxLength value="20"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:attribute>
+		</xs:complexType>
+	</xs:element>
+</xs:schema>
