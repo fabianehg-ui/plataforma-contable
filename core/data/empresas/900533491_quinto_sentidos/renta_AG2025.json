@@ -1,0 +1,121 @@
+{
+  "empresa_id": "900533491_quinto_sentidos",
+  "ano_gravable": 2025,
+  "fecha_actualizacion": "2026-05-04",
+  "fuente": "Validado al peso contra Excel modelo del contador",
+
+  "patrimonio_ano_anterior": {
+    "patrimonio_liquido": 170219000,
+    "fuente": "Form 110 AG 2024 presentado"
+  },
+
+  "saldo_favor_ano_anterior": 37906000,
+  "impuesto_neto_renta_ano_anterior": 31507000,
+  "anticipo_ano_siguiente_pagado_anterior": 0,
+
+  "datos_informativos": {
+    "casilla_33_total_costos_gastos_nomina": 257729000,
+    "casilla_34_aportes_seguridad_social": 30395000,
+    "casilla_35_aportes_sena_icbf_caja": 8235000
+  },
+
+  "patrimonio": {
+    "casilla_36_efectivo_y_equivalentes": 72243000,
+    "casilla_37_inversiones": 0,
+    "casilla_38_cuentas_por_cobrar": 70875000,
+    "casilla_39_inventarios": 1256039000,
+    "casilla_40_intangibles": 0,
+    "casilla_41_biologicos": 0,
+    "casilla_42_propiedades_planta_equipo": 281570000,
+    "casilla_43_otros_activos": 102682000,
+    "casilla_44_total_patrimonio_bruto": 1783409000,
+    "casilla_45_pasivos": 1534040000,
+    "casilla_46_total_patrimonio_liquido": 249369000
+  },
+
+  "ingresos": {
+    "casilla_47_ingresos_ordinarios": 1082118000,
+    "casilla_48_ingresos_financieros": 3194000,
+    "casilla_57_otros_ingresos": 12832000,
+    "casilla_58_total_ingresos_brutos": 1098144000,
+    "casilla_59_devoluciones": 0,
+    "casilla_60_ingresos_no_constitutivos_renta": 0,
+    "casilla_61_total_ingresos_netos": 1098144000
+  },
+
+  "costos_y_gastos": {
+    "casilla_62_costos": 341324000,
+    "casilla_63_gastos_administracion": 60298000,
+    "casilla_64_gastos_distribucion_ventas": 569933000,
+    "casilla_65_gastos_financieros": 3262000,
+    "casilla_66_otros_gastos": 0,
+    "casilla_67_total_costos_gastos_deducibles": 974817000,
+    "_nota_ajuste": "Cas. 64 = 596,932,913 (balance Siigo) - 27,000,000 (exceso depreciación contable sobre límite fiscal Art. 137 ET) = 569,932,913"
+  },
+
+  "conciliacion_fiscal": {
+    "utilidad_contable_antes_impuestos": 79150862,
+    "fuente_utilidad": "Estado de Resultados antes de provisión 5405",
+    "partidas_aumentan": [
+      {
+        "codigo": "IMP_RENTA_NO_DEDUC",
+        "nombre": "Impuesto de renta no deducible (cuenta 5405)",
+        "valor": 42849000,
+        "base_legal": "Art. 115 ET"
+      },
+      {
+        "codigo": "GMF_NO_DEDUC",
+        "nombre": "GMF 50% no deducible",
+        "valor": 1327506,
+        "base_legal": "Art. 115 ET",
+        "_nota": "Total GMF certificado año: $2,655,013 — 50% deducible se mantuvo en gastos financieros, 50% se suma como no deducible"
+      }
+    ],
+    "renta_liquida_fiscal_calculada": 123327368,
+    "renta_liquida_fiscal_form110": 123327000
+  },
+
+  "liquidacion_impuesto": {
+    "casilla_72_renta_liquida_ordinaria": 123327000,
+    "casilla_75_renta_liquida": 123327000,
+    "casilla_76_renta_presuntiva": 0,
+    "casilla_77_renta_exenta": 0,
+    "casilla_78_rentas_gravables": 0,
+    "casilla_79_renta_liquida_gravable": 123327000,
+    "tarifa_aplicada": 0.35,
+    "casilla_84_impuesto_rentas_liquidas": 43164000,
+    "casilla_91_total_impuesto_rentas_liquidas": 43164000,
+    "casilla_99_total_impuesto_a_cargo": 43164000
+  },
+
+  "retenciones_que_le_practicaron": {
+    "casilla_104_saldo_favor_ano_anterior": 37906000,
+    "casilla_105_autorretenciones": 10201000,
+    "casilla_106_otras_retenciones": 22968000,
+    "casilla_107_total_retenciones": 33169000,
+    "detalle_certificados": [
+      {"nombre": "IQ INTERQUIROFANOS S.A.S.",            "nit": "900071466", "concepto": "Servicios", "monto": 3258789},
+      {"nombre": "ASPAEN",                                "nit": "860019021", "concepto": "Servicios", "monto": 517178},
+      {"nombre": "BANCOLOMBIA - rendimientos",            "nit": "890903938", "concepto": "Financieros", "monto": 86000},
+      {"nombre": "SILLA TRES S.A.S.",                     "nit": "900451388", "concepto": "Servicios", "monto": 2508297},
+      {"nombre": "PROMOTORA MEDICA LAS AMERICAS",         "nit": "800067065", "concepto": "Servicios", "monto": 11290274},
+      {"nombre": "CLINICA OFTALMOLOGICA DE MEDELLIN",     "nit": "900054989", "concepto": "Servicios", "monto": 79999},
+      {"nombre": "FIDUCIARIA BANCOLOMBIA",                "nit": "800180687", "concepto": "Fiduciaria", "monto": 143692},
+      {"nombre": "AUTOLARTE",                             "nit": "(empresa)", "concepto": "Servicios", "monto": 5083928}
+    ],
+    "_nota_total": "Suma exacta certificados: $22,968,026 → redondeado en Form 110: $22,968,000"
+  },
+
+  "saldo_final": {
+    "casilla_111_saldo_pagar_impuesto": 0,
+    "casilla_113_total_saldo_a_pagar": 0,
+    "casilla_114_total_saldo_a_favor": 27911000,
+    "_nota": "Saldo a favor: 43,164,000 (impuesto) - 33,169,000 (retenciones) - 37,906,000 (saldo favor anterior) = -27,911,000 → SALDO A FAVOR"
+  },
+
+  "plazo_presentacion": {
+    "ultimo_digito_nit": 1,
+    "fecha_limite": "(consultar PLAZOS_PJ_AG2025 vigente)",
+    "decreto": "Decreto 2229/2023 modificado por Resolución DIAN 000022/2026"
+  }
+}
