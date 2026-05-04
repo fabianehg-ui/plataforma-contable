@@ -1,10 +1,29 @@
 """
-Motor de clasificación de movimientos contables → formatos DIAN.
+Motor de clasificación v2 — Movimientos contables → formatos DIAN.
 
-Aplica las 3 capas de mapeo en orden de prioridad (más específico → más genérico):
-  1. exogena_mapeo_manual    (override por cuenta+NIT específico)
-  2. exogena_mapeo_empresa   (codificación nativa por rangos)
-  3. exogena_puc_generico    (PUC genérico compartido)
+Aplica reglas en este orden de prioridad:
+
+  Pre-procesamiento:
+    P1. Validación de conciliación cuenta 6 ↔ cuentas 72/73 (cierre/traslado al costo)
+        → marca cuentas 6 conciliadas como EXCLUIDAS de F1001
+    P2. Indexación de retenciones cuenta 2365 por NIT
+        → para asociar como columna del F1001 / F2276 después
+
+  Por cada movimiento:
+    1. exogena_mapeo_manual    (override por cuenta+NIT específico)
+    2. Reglas especiales:
+         - Activos fijos (15xx)        → F5008
+         - Inventarios (14xx)          → F5007
+         - Cartera clientes (1305-1315)→ F1008
+         - Cuenta 6 conciliada         → EXCLUIDA
+         - Cuentas F1003 (135515,
+           195515, 2408)               → F1003 (con columna correcta)
+         - Cuenta 2365 (no salarios)   → NO reporta (se asocia como columna)
+         - Cuenta 236525/236505/236510 → NO reporta (asocia a F2276)
+         - Cuenta 236555 (exceso)      → resta al F1001 del NIT
+         - Cuenta 236599 (traslados)   → NO reporta
+    3. exogena_mapeo_empresa   (codificación nativa por rangos)
+    4. exogena_puc_generico    (PUC genérico compartido)
 
 Uso típico:
     motor = MotorClasificacion(
@@ -13,12 +32,23 @@ Uso típico:
         reglas_capa3=mapeo_manual,
     )
     resultado = motor.clasificar_balance(movimientos_balance)
+    
+    # Acceder a resultados:
+    resultado.movimientos          # MovimientoClasificado[]
+    resultado.sin_resolver         # Movimiento[]
+    resultado.conciliacion_costos  # ConciliacionCostos
+    resultado.retenciones_por_nit  # dict[nit] -> RetencionAcumulada
+    resultado.estadisticas         # dict
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+
+# ================================================================
+# UTILIDADES
+# ================================================================
 
 def cuenta_en_rango(cuenta: str, inicial: str, final: str) -> bool:
     """Cuenta dentro del rango [inicial, final] con padding a 10 chars (0/9)."""
@@ -27,6 +57,21 @@ def cuenta_en_rango(cuenta: str, inicial: str, final: str) -> bool:
     fin = str(final).strip().ljust(10, '9')
     return ini <= c <= fin
 
+
+def _normalize_text(s) -> str:
+    """Normaliza texto: minúsculas + sin tildes."""
+    if s is None:
+        return ''
+    s = str(s).strip().lower()
+    repl = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n'}
+    for k, v in repl.items():
+        s = s.replace(k, v)
+    return s
+
+
+# ================================================================
+# DATACLASSES
+# ================================================================
 
 @dataclass
 class ReglaCapa1:
@@ -70,7 +115,7 @@ class Movimiento:
     saldo_final: float = 0.0
     nombre_cuenta: str = ''
     nombre_tercero: str = ''
-    balance_id: Optional[int] = None  # FK a la tabla exogena_balance
+    balance_id: Optional[int] = None
 
 
 @dataclass
@@ -81,8 +126,8 @@ class MovimientoClasificado:
     formato_dian: str
     concepto_dian: Optional[int]
     valor: float
-    base_aplicable: str                     # 'debitos', 'creditos', 'saldo_final'
-    capa_resolucion: str                    # 'puc_generico' | 'mapeo_empresa' | 'mapeo_manual' | 'sin_resolver'
+    base_aplicable: str
+    capa_resolucion: str
     regla_id: Optional[int] = None
     requiere_revision: bool = False
     nota: str = ''
@@ -90,40 +135,89 @@ class MovimientoClasificado:
 
 
 @dataclass
+class RetencionAcumulada:
+    """Retención (cuenta 2365) acumulada por NIT, para asociar como columna del F1001/F2276."""
+    nit: str
+    f1001_retencion_practicada: float = 0.0   # Cr de 2365 (excepto salarios y excepciones)
+    f2276_retencion_salarios: float = 0.0     # Cr de 236505/236510 (salarios)
+    exceso_periodos_anteriores: float = 0.0   # Db de 236555 (concepto 5028 aparte)
+    detalles: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ConciliacionCostos:
+    """Resultado de validar la conciliación cuenta 6 ↔ cuentas 72/73."""
+    concilia: bool
+    db_cuenta_6: float
+    cr_traslado_72_73: float
+    diferencia: float
+    mayor_72_en_cero: bool
+    mayor_73_en_cero: bool
+    mayor_72_existe: bool
+    mayor_73_existe: bool
+    cuentas_6_excluidas: set[str] = field(default_factory=set)
+    cuentas_6_con_compras: set[str] = field(default_factory=set)
+    detalles_72_73: list[dict] = field(default_factory=list)
+    mensaje: str = ''
+
+
+@dataclass
 class ResultadoClasificacion:
     movimientos: list[MovimientoClasificado] = field(default_factory=list)
     sin_resolver: list[Movimiento] = field(default_factory=list)
     estadisticas: dict = field(default_factory=dict)
+    conciliacion_costos: Optional[ConciliacionCostos] = None
+    retenciones_por_nit: dict = field(default_factory=dict)
 
 
 # ================================================================
-# REGLAS ESPECIALES: clasificación con cálculos personalizados
+# CONFIGURACIÓN: REGLAS ESPECIALES
 # ================================================================
-# Algunas familias de cuentas requieren cálculos especiales que no se
-# pueden expresar con las 3 capas de mapeo simples:
-#
-# 1. Activos fijos (15xx): valor = débitos - créditos (movimiento neto del año)
-#    Excluyendo cuentas de depreciación (nombre contiene "depreciacion")
-#    → Formato 1001, concepto 5008 (compra de activos fijos)
-#
-# 2. Inventarios (14xx): valor = débitos - créditos (compras netas)
-#    Excluyendo traslados/transferencias entre bodegas
-#    → Formato 1001, concepto 5007 (compra activos movibles)
-#
-# 3. Cartera clientes (1305xx-1315xx): valor = débitos - créditos (saldo)
-#    → Formato 1008 (saldos cuentas por cobrar)
+
+PALABRAS_CLAVE_TRASLADO = ['CIERRE', 'TRASLADO', 'COSTO TRASLADO', 'TRASLADO AL COSTO']
+TOLERANCIA_CONCILIACION = 1.0  # $1 peso (centavos por redondeo)
+
+# Subcuentas 2365 que NO reportan (van como columna o no reportan)
+SUBCUENTAS_2365_SALARIOS = ['236505', '236510']  # → columna retención F2276
+SUBCUENTAS_2365_EXCESO = '236555'                 # → resta del F1001 del NIT
+SUBCUENTAS_2365_TRASLADOS = '236599'              # → NO reporta (pago a DIAN)
+CONCEPTO_DIAN_EXCESO_AÑO_ANTERIOR = 5028          # F1001 concepto especial
+
+# Cuentas que generan registro propio en F1003 (retenciones a favor)
+CUENTAS_F1003 = {
+    '135515': {'columna': 'debitos_netos', 'descripcion': 'Retefuente activo'},
+    '195515': {'columna': 'debitos_netos', 'descripcion': 'Retefuente diferido (Db - Cr)'},
+    '240810': {'columna': 'creditos', 'descripcion': 'ReteIVA pasivo'},
+    '2408':   {'columna': 'creditos', 'descripcion': 'ReteIVA pasivo'},
+}
+
+# Por formato, qué columna del balance se usa para el valor
+BASE_POR_FORMATO = {
+    '1001': 'debitos',
+    '1003': 'creditos',
+    '1004': 'saldo_final',
+    '1005': 'debitos',
+    '1006': 'creditos',
+    '1007': 'creditos',
+    '1008': 'saldo_final',
+    '1009': 'saldo_final',
+    '1010': 'saldo_final',
+    '1011': 'debitos',
+    '1012': 'saldo_final',
+    '1056': 'debitos',
+    '1647': 'creditos',
+    '2275': 'creditos',
+    '2276': 'debitos',
+    '2278': 'debitos',
+    '5253': 'saldo_final',
+    '5007': 'debitos_netos',
+    '5008': 'debitos_netos',
+}
 
 
-def _normalize_text(s) -> str:
-    """Normaliza texto: minúsculas + sin tildes."""
-    if s is None:
-        return ''
-    s = str(s).strip().lower()
-    repl = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n'}
-    for k, v in repl.items():
-        s = s.replace(k, v)
-    return s
-
+# ================================================================
+# DETECTORES DE FAMILIAS DE CUENTAS
+# ================================================================
 
 def _es_cuenta_activos_fijos(codigo_cuenta: str, nombre_cuenta: str) -> bool:
     """Detecta cuentas de activos fijos (15xx) excluyendo depreciación."""
@@ -131,12 +225,8 @@ def _es_cuenta_activos_fijos(codigo_cuenta: str, nombre_cuenta: str) -> bool:
     if not cuenta.startswith('15'):
         return False
     nombre_norm = _normalize_text(nombre_cuenta)
-    # Excluir depreciación, amortización, agotamiento (contracuentas)
     palabras_excluir = ['depreciacion', 'amortizacion', 'agotamiento', 'desvalorizacion', 'provision']
-    for palabra in palabras_excluir:
-        if palabra in nombre_norm:
-            return False
-    return True
+    return not any(p in nombre_norm for p in palabras_excluir)
 
 
 def _es_cuenta_inventario_compra(codigo_cuenta: str, nombre_cuenta: str) -> bool:
@@ -145,21 +235,14 @@ def _es_cuenta_inventario_compra(codigo_cuenta: str, nombre_cuenta: str) -> bool
     if not cuenta.startswith('14'):
         return False
     nombre_norm = _normalize_text(nombre_cuenta)
-    # Excluir traslados, transferencias, bodegas (movimientos internos)
     palabras_excluir = ['traslado', 'transferencia', 'bodega']
-    for palabra in palabras_excluir:
-        if palabra in nombre_norm:
-            return False
-    return True
+    return not any(p in nombre_norm for p in palabras_excluir)
 
 
 def _es_cuenta_cartera_1008(codigo_cuenta: str) -> bool:
     """Detecta cuentas de cartera que van al formato 1008 (1305 a 1315)."""
     cuenta = str(codigo_cuenta).strip()
-    if not cuenta.startswith('13'):
-        return False
-    # Solo 1305 a 1315 inclusive
-    if len(cuenta) < 4:
+    if not cuenta.startswith('13') or len(cuenta) < 4:
         return False
     try:
         prefijo = int(cuenta[:4])
@@ -168,22 +251,321 @@ def _es_cuenta_cartera_1008(codigo_cuenta: str) -> bool:
         return False
 
 
-def aplicar_regla_especial(mov: 'Movimiento') -> Optional['MovimientoClasificado']:
-    """Aplica las reglas especiales de cálculo si la cuenta corresponde.
-    
+def _es_cuenta_f1003(codigo_cuenta: str) -> Optional[dict]:
+    """Detecta si una cuenta genera registro propio en F1003. Retorna config o None."""
+    cuenta = str(codigo_cuenta).strip()
+    for prefijo, config in CUENTAS_F1003.items():
+        if cuenta.startswith(prefijo):
+            return {'prefijo': prefijo, **config}
+    return None
+
+
+def _es_cuenta_2365(codigo_cuenta: str) -> bool:
+    """Cualquier subcuenta 2365 (retenciones que practicó la empresa)."""
+    return str(codigo_cuenta).strip().startswith('2365')
+
+
+def _es_2365_salarios(codigo_cuenta: str) -> bool:
+    """Subcuentas de retefuente sobre salarios."""
+    cuenta = str(codigo_cuenta).strip()
+    return any(cuenta.startswith(s) for s in SUBCUENTAS_2365_SALARIOS)
+
+
+def _es_2365_exceso(codigo_cuenta: str) -> bool:
+    return str(codigo_cuenta).strip().startswith(SUBCUENTAS_2365_EXCESO)
+
+
+def _es_2365_traslados(codigo_cuenta: str) -> bool:
+    return str(codigo_cuenta).strip().startswith(SUBCUENTAS_2365_TRASLADOS)
+
+
+def _nombre_dice_compras(nombre_cuenta: str) -> bool:
+    """Detecta si el nombre de una cuenta menciona explícitamente 'compras'."""
+    return 'compra' in _normalize_text(nombre_cuenta)
+
+
+def _nombre_dice_traslado_costo(nombre_cuenta: str) -> bool:
+    """Detecta si el nombre contiene CIERRE / TRASLADO / COSTO TRASLADO / TRASLADO AL COSTO."""
+    n = (nombre_cuenta or '').upper().strip()
+    return any(p in n for p in PALABRAS_CLAVE_TRASLADO)
+
+
+# ================================================================
+# CONCILIACIÓN CUENTA 6 ↔ CUENTAS 72/73
+# ================================================================
+
+def validar_conciliacion_costos_traslado(movimientos: list[Movimiento]) -> ConciliacionCostos:
+    """
+    Valida que las cuentas mayores 72 y 73 estén en cero y que sus créditos de
+    cierre/traslado al costo concilien con los débitos de la cuenta 6 (no compras).
+
+    Cuando concilia, las cuentas 6 (que no digan "compra") se EXCLUYEN del F1001
+    porque son resultado de traslado interno desde 7xxx/14xx — sus terceros
+    reales ya están en las cuentas 7xxx.
+    """
+    # 1. Validar mayor 72 y mayor 73 en cero
+    db_72 = sum(m.debitos for m in movimientos if str(m.codigo_cuenta).strip() == '72')
+    cr_72 = sum(m.creditos for m in movimientos if str(m.codigo_cuenta).strip() == '72')
+    db_73 = sum(m.debitos for m in movimientos if str(m.codigo_cuenta).strip() == '73')
+    cr_73 = sum(m.creditos for m in movimientos if str(m.codigo_cuenta).strip() == '73')
+
+    mayor_72_existe = any(str(m.codigo_cuenta).strip() == '72' for m in movimientos)
+    mayor_73_existe = any(str(m.codigo_cuenta).strip() == '73' for m in movimientos)
+    mayor_72_en_cero = (not mayor_72_existe) or (abs(db_72 - cr_72) <= TOLERANCIA_CONCILIACION)
+    mayor_73_en_cero = (not mayor_73_existe) or (abs(db_73 - cr_73) <= TOLERANCIA_CONCILIACION)
+
+    # 2. Identificar cuentas 6 (SOLO hojas — sin doble conteo entre agregadores y detalle)
+    codigos_existentes = {str(m.codigo_cuenta).strip() for m in movimientos}
+
+    def es_hoja(codigo: str) -> bool:
+        """Una cuenta es hoja si no hay otra que la prefije."""
+        return not any(
+            c != codigo and c.startswith(codigo) and len(c) > len(codigo)
+            for c in codigos_existentes
+        )
+
+    db_cuenta_6 = 0.0
+    cuentas_6_excluibles = set()
+    cuentas_6_con_compras = set()
+    cuentas_6_procesadas_para_suma = set()
+
+    for m in movimientos:
+        cta = str(m.codigo_cuenta).strip()
+        if not cta.startswith('6') or len(cta) <= 1:
+            continue
+        if not es_hoja(cta):
+            continue  # saltar agregadores (no son movimientos reales)
+        nombre = m.nombre_cuenta or ''
+        if _nombre_dice_compras(nombre):
+            cuentas_6_con_compras.add(cta)
+        else:
+            cuentas_6_excluibles.add(cta)
+            # Sumar la cuenta solo una vez. Para evitar doble conteo entre
+            # totalizador (sin NIT) y movimientos (con NIT) del mismo código,
+            # preferimos los movimientos con NIT. Si no hay, usamos los sin NIT.
+            if cta not in cuentas_6_procesadas_para_suma:
+                cuentas_6_procesadas_para_suma.add(cta)
+                con_nit = [mm for mm in movimientos
+                           if str(mm.codigo_cuenta).strip() == cta and mm.nit]
+                sin_nit = [mm for mm in movimientos
+                           if str(mm.codigo_cuenta).strip() == cta and not mm.nit]
+                if con_nit:
+                    db_cuenta_6 += sum(mm.debitos for mm in con_nit)
+                else:
+                    db_cuenta_6 += sum(mm.debitos for mm in sin_nit)
+
+    # 3. Sumar Cr de cuentas 72/73 con palabras clave (sin doble conteo)
+
+    cr_traslado = 0.0
+    detalles_72_73 = []
+    cuentas_traslado_procesadas = set()
+
+    for m in movimientos:
+        cta = str(m.codigo_cuenta).strip()
+        if not (cta.startswith('72') or cta.startswith('73')) or len(cta) <= 2:
+            continue
+        if not _nombre_dice_traslado_costo(m.nombre_cuenta):
+            continue
+        if not es_hoja(cta):
+            continue
+        # Una vez por cuenta (sumando solo el primer movimiento que la representa)
+        if cta in cuentas_traslado_procesadas:
+            continue
+        cuentas_traslado_procesadas.add(cta)
+        # Para evitar doble conteo: preferir filas con NIT, si no hay usar sin NIT
+        con_nit = [mm for mm in movimientos
+                   if str(mm.codigo_cuenta).strip() == cta and mm.nit]
+        sin_nit = [mm for mm in movimientos
+                   if str(mm.codigo_cuenta).strip() == cta and not mm.nit]
+        if con_nit:
+            cr_codigo = sum(mm.creditos for mm in con_nit)
+        else:
+            cr_codigo = sum(mm.creditos for mm in sin_nit)
+        cr_traslado += cr_codigo
+        detalles_72_73.append({
+            'codigo': cta,
+            'nombre': m.nombre_cuenta,
+            'creditos': cr_codigo,
+        })
+
+    # 4. Determinar conciliación
+    diferencia = abs(db_cuenta_6 - cr_traslado)
+    concilia = (
+        diferencia <= TOLERANCIA_CONCILIACION
+        and mayor_72_en_cero
+        and mayor_73_en_cero
+        and len(cuentas_6_excluibles) > 0
+    )
+
+    if concilia:
+        mensaje = (
+            f'✅ Cuentas 6 trasladadas internamente desde 72/73 — excluidas de F1001 '
+            f'(${cr_traslado:,.2f}). Cuentas excluidas: {len(cuentas_6_excluibles)}'
+        )
+    elif len(cuentas_6_excluibles) == 0:
+        mensaje = '✅ No hay cuentas 6 sin "compras" — todo va a F1001'
+        cuentas_6_excluibles = set()
+    else:
+        mensaje = (
+            f'❌ NO concilia: Db cuenta 6 ${db_cuenta_6:,.2f} ≠ Cr traslado ${cr_traslado:,.2f}. '
+            f'Mayor 72 cero: {mayor_72_en_cero}, Mayor 73 cero: {mayor_73_en_cero}. '
+            f'Las cuentas 6 se mantienen en F1001 — REVISAR MANUALMENTE.'
+        )
+        cuentas_6_excluibles = set()  # No excluir si no concilia
+
+    return ConciliacionCostos(
+        concilia=concilia,
+        db_cuenta_6=db_cuenta_6,
+        cr_traslado_72_73=cr_traslado,
+        diferencia=diferencia,
+        mayor_72_en_cero=mayor_72_en_cero,
+        mayor_73_en_cero=mayor_73_en_cero,
+        mayor_72_existe=mayor_72_existe,
+        mayor_73_existe=mayor_73_existe,
+        cuentas_6_excluidas=cuentas_6_excluibles,
+        cuentas_6_con_compras=cuentas_6_con_compras,
+        detalles_72_73=detalles_72_73,
+        mensaje=mensaje,
+    )
+
+
+# ================================================================
+# INDEXACIÓN DE RETENCIONES (cuenta 2365)
+# ================================================================
+
+def indexar_retenciones_2365(movimientos: list[Movimiento]) -> dict[str, RetencionAcumulada]:
+    """
+    Indexa las retenciones de la cuenta 2365 por NIT del tercero retenido.
+
+    La cuenta 2365 NO genera registro propio. Su valor se asocia como columna
+    al pago/salario correspondiente del mismo NIT en F1001 / F2276.
+
+    Reglas:
+      - 236505 / 236510 (salarios)        → suma a f2276_retencion_salarios
+      - 236555 (exceso)                   → débitos van a exceso_periodos_anteriores
+                                            (concepto 5028 en F1001)
+      - 236599 (traslados a DIAN)         → NO se acumula (es pago)
+      - resto (236520, 236525, etc.)      → suma a f1001_retencion_practicada
+    """
+    indice: dict[str, RetencionAcumulada] = {}
+
+    for m in movimientos:
+        cta = str(m.codigo_cuenta).strip()
+        if not _es_cuenta_2365(cta) or not m.nit:
+            continue
+
+        # Excluir traslados (pagos a DIAN)
+        if _es_2365_traslados(cta):
+            continue
+
+        nit = str(m.nit).strip()
+        if nit not in indice:
+            indice[nit] = RetencionAcumulada(nit=nit)
+        retenciones = indice[nit]
+
+        if _es_2365_exceso(cta):
+            # 236555 - Retenciones practicadas en exceso (Db netos)
+            retenciones.exceso_periodos_anteriores += (m.debitos - m.creditos)
+            retenciones.detalles.append(
+                f'{cta} {m.nombre_cuenta} (exceso): Db ${m.debitos:,.2f}'
+            )
+        elif _es_2365_salarios(cta):
+            # 236505 / 236510 — retención sobre salarios → F2276
+            retenciones.f2276_retencion_salarios += m.creditos
+            retenciones.detalles.append(
+                f'{cta} {m.nombre_cuenta} (salarios): Cr ${m.creditos:,.2f}'
+            )
+        else:
+            # Resto: 236520, 236525, 236530, 236540, 236545, etc. → F1001
+            retenciones.f1001_retencion_practicada += m.creditos
+            retenciones.detalles.append(
+                f'{cta} {m.nombre_cuenta}: Cr ${m.creditos:,.2f}'
+            )
+
+    return indice
+
+
+# ================================================================
+# REGLA ESPECIAL: aplicar cálculos especiales por familia de cuenta
+# ================================================================
+
+def aplicar_regla_especial(
+    mov: Movimiento,
+    cuentas_6_excluidas: set[str] = None,
+) -> Optional[MovimientoClasificado]:
+    """
+    Aplica las reglas especiales de cálculo si la cuenta corresponde.
+
     Returns:
         MovimientoClasificado si aplica una regla especial, None en otro caso.
-    
-    Las reglas especiales se aplican ANTES de Capa 1 y 2, pero pueden ser
-    sobrescritas por Capa 3 (manual del usuario).
     """
     cuenta = str(mov.codigo_cuenta).strip()
     nombre = mov.nombre_cuenta or ''
-    
-    # 1. Activos fijos → 1001 / 5008
+    cuentas_6_excluidas = cuentas_6_excluidas or set()
+
+    # 0. Cuenta 6 excluida por conciliación con traslado 72/73
+    if cuenta in cuentas_6_excluidas:
+        return MovimientoClasificado(
+            codigo_cuenta=cuenta, nit=mov.nit,
+            formato_dian='EXCLUIDO',
+            concepto_dian=None,
+            valor=mov.debitos,
+            base_aplicable='ninguna',
+            capa_resolucion='regla_especial_costos_traslado_conciliado',
+            requiere_revision=False,
+            nota='Cuenta 6 conciliada con traslado 72/73 (mayor=0, Cr traslado=Db cuenta 6)',
+            balance_id=mov.balance_id,
+        )
+
+    # 0b. Cuenta 2365 — NO reporta como movimiento (se asocia como columna)
+    if _es_cuenta_2365(cuenta):
+        if _es_2365_traslados(cuenta):
+            nota = 'Cuenta 236599 (traslados a DIAN): pago, no se reporta'
+        elif _es_2365_exceso(cuenta):
+            nota = f'Cuenta 236555 (exceso): se asocia al F1001 del NIT como menor valor o concepto {CONCEPTO_DIAN_EXCESO_AÑO_ANTERIOR}'
+        elif _es_2365_salarios(cuenta):
+            nota = 'Cuenta 2365 (salarios): se asocia como columna retención del F2276 del NIT'
+        else:
+            nota = 'Cuenta 2365 (no salarios): se asocia como columna retención del F1001 del NIT'
+        return MovimientoClasificado(
+            codigo_cuenta=cuenta, nit=mov.nit,
+            formato_dian='COLUMNA_RETENCION',
+            concepto_dian=None,
+            valor=mov.creditos if not _es_2365_exceso(cuenta) else mov.debitos,
+            base_aplicable='ninguna',
+            capa_resolucion='regla_especial_2365_columna',
+            requiere_revision=False,
+            nota=nota,
+            balance_id=mov.balance_id,
+        )
+
+    # 1. F1003 — cuentas que le practicaron retención a la empresa
+    config_f1003 = _es_cuenta_f1003(cuenta)
+    if config_f1003:
+        if config_f1003['columna'] == 'debitos_netos':
+            valor = mov.debitos - mov.creditos
+        elif config_f1003['columna'] == 'creditos':
+            valor = mov.creditos - mov.debitos
+        else:
+            valor = mov.debitos
+        # Solo reportar si hay valor neto positivo
+        if valor > 0:
+            return MovimientoClasificado(
+                codigo_cuenta=cuenta, nit=mov.nit,
+                formato_dian='1003',
+                concepto_dian=None,
+                valor=abs(valor),
+                base_aplicable=config_f1003['columna'],
+                capa_resolucion='regla_especial_f1003',
+                requiere_revision=False,
+                nota=f'F1003 {config_f1003["descripcion"]}: {config_f1003["columna"]} = ${valor:,.2f}',
+                balance_id=mov.balance_id,
+            )
+        return None
+
+    # 2. Activos fijos → F1001 / 5008
     if _es_cuenta_activos_fijos(cuenta, nombre):
         valor = mov.debitos - mov.creditos
-        # Solo reportar si hubo compras netas (valor positivo)
         if valor > 0:
             return MovimientoClasificado(
                 codigo_cuenta=cuenta, nit=mov.nit,
@@ -195,12 +577,11 @@ def aplicar_regla_especial(mov: 'Movimiento') -> Optional['MovimientoClasificado
                 nota='Activos fijos: débitos - créditos (excluye depreciación)',
                 balance_id=mov.balance_id,
             )
-        return None  # No reportar si saldo neto es <= 0
-    
-    # 2. Inventarios → 1001 / 5007
+        return None
+
+    # 3. Inventarios → F1001 / 5007
     if _es_cuenta_inventario_compra(cuenta, nombre):
         valor = mov.debitos - mov.creditos
-        # Reportar solo si hubo compras netas positivas
         if valor > 0:
             return MovimientoClasificado(
                 codigo_cuenta=cuenta, nit=mov.nit,
@@ -213,11 +594,10 @@ def aplicar_regla_especial(mov: 'Movimiento') -> Optional['MovimientoClasificado
                 balance_id=mov.balance_id,
             )
         return None
-    
-    # 3. Cartera clientes (1305-1315) → formato 1008
+
+    # 4. Cartera clientes (1305-1315) → F1008
     if _es_cuenta_cartera_1008(cuenta):
         valor = mov.debitos - mov.creditos
-        # Reportar saldos positivos (cartera por cobrar)
         if valor != 0:
             return MovimientoClasificado(
                 codigo_cuenta=cuenta, nit=mov.nit,
@@ -230,35 +610,13 @@ def aplicar_regla_especial(mov: 'Movimiento') -> Optional['MovimientoClasificado
                 balance_id=mov.balance_id,
             )
         return None
-    
+
     return None
 
 
 # ================================================================
-# CONFIGURACIÓN: cómo determinar qué base usar (débitos/créditos/saldo)
+# MOTOR
 # ================================================================
-# Por formato, cuál columna del balance representa el valor a informar.
-# Esto se basa en la lógica contable de la información exógena DIAN.
-BASE_POR_FORMATO = {
-    '1001': 'debitos',         # Pagos o abonos en cuenta → débitos del gasto
-    '1003': 'creditos',        # Retenciones que le practicaron → créditos de la cta retención
-    '1004': 'saldo_final',     # Descuentos tributarios solicitados
-    '1005': 'debitos',         # IVA descontable
-    '1006': 'creditos',        # IVA generado
-    '1007': 'creditos',        # Ingresos recibidos → créditos de la cta de ingreso
-    '1008': 'saldo_final',     # Saldos cuentas por cobrar al 31-dic
-    '1009': 'saldo_final',     # Saldos cuentas por pagar al 31-dic
-    '1010': 'saldo_final',     # Información socios (saldo aportes)
-    '1011': 'debitos',         # Declaraciones tributarias (movimientos)
-    '1012': 'saldo_final',     # Inversiones, cuentas bancarias al 31-dic
-    '1056': 'debitos',         # Pagos sector público
-    '1647': 'creditos',        # Ingresos para terceros
-    '2275': 'creditos',        # Ingresos no constitutivos
-    '2276': 'debitos',         # Rentas de trabajo (nómina)
-    '2278': 'debitos',         # Bonos electrónicos
-    '5253': 'saldo_final',     # Beneficiarios efectivos
-}
-
 
 class MotorClasificacion:
     def __init__(
@@ -271,14 +629,12 @@ class MotorClasificacion:
         self.reglas_capa2 = reglas_capa2
         self.reglas_capa3 = reglas_capa3 or []
 
-        # Índice de capa 1 por código exacto, para lookup O(1)
+        # Índices para búsqueda O(1)
         self._capa1_por_codigo: dict[str, list[ReglaCapa1]] = {}
         for r in reglas_capa1:
             self._capa1_por_codigo.setdefault(r.codigo_cuenta, []).append(r)
 
-        # Índice de capa 3 por (cuenta, nit)
         self._capa3_por_cuenta_nit: dict[tuple, list[ReglaCapa3]] = {}
-        # Índice de capa 3 por (cuenta, NULL) para reglas globales por cuenta
         self._capa3_por_cuenta: dict[str, list[ReglaCapa3]] = {}
         for r in self.reglas_capa3:
             if r.nit:
@@ -290,55 +646,60 @@ class MotorClasificacion:
     # Búsquedas por capa
     # ----------------------------------------------------------------
     def _buscar_capa3(self, cuenta: str, nit: Optional[str]) -> list[ReglaCapa3]:
-        """Capa 3: busca primero (cuenta, NIT específico), luego (cuenta, NULL)."""
-        if nit and (cuenta, nit) in self._capa3_por_cuenta_nit:
-            return self._capa3_por_cuenta_nit[(cuenta, nit)]
+        """Capa 3: override manual. Prioridad: (cuenta+nit) > (cuenta solo)."""
+        if nit:
+            r = self._capa3_por_cuenta_nit.get((cuenta, nit))
+            if r:
+                return r
         return self._capa3_por_cuenta.get(cuenta, [])
 
     def _buscar_capa2(self, cuenta: str) -> list[ReglaCapa2]:
-        """Capa 2: itera todas las reglas y devuelve las que contienen la cuenta en su rango."""
+        """Capa 2: mapeo nativo por rango. Devuelve todas las que aplican."""
         return [
             r for r in self.reglas_capa2
             if cuenta_en_rango(cuenta, r.cuenta_inicial, r.cuenta_final)
         ]
 
     def _buscar_capa1(self, cuenta: str) -> list[ReglaCapa1]:
-        """Capa 1: coincidencia exacta primero, luego por prefijos decrecientes."""
+        """Capa 1: PUC genérico. Coincidencia exacta o por prefijo más largo."""
+        # Coincidencia exacta
         if cuenta in self._capa1_por_codigo:
             return self._capa1_por_codigo[cuenta]
-        # Buscar por prefijo: 8d → 6d → 4d → 2d
-        for L in (8, 6, 4, 2):
-            if len(cuenta) > L:
-                prefix = cuenta[:L]
-                if prefix in self._capa1_por_codigo:
-                    return self._capa1_por_codigo[prefix]
-        return []
+        # Búsqueda por prefijo (el más largo gana)
+        mejor: list[ReglaCapa1] = []
+        mejor_len = 0
+        for codigo_regla in self._capa1_por_codigo:
+            if cuenta.startswith(codigo_regla) and len(codigo_regla) > mejor_len:
+                mejor = self._capa1_por_codigo[codigo_regla]
+                mejor_len = len(codigo_regla)
+        return mejor
 
-    # ----------------------------------------------------------------
-    # Selección de valor según formato
-    # ----------------------------------------------------------------
-    @staticmethod
-    def _valor_para_formato(mov: Movimiento, formato: str) -> tuple[float, str]:
+    def _valor_para_formato(self, mov: Movimiento, formato: str) -> tuple[float, str]:
+        """Determina qué columna del balance usar según el formato."""
         base = BASE_POR_FORMATO.get(formato, 'debitos')
         if base == 'debitos':
-            return mov.debitos, 'debitos'
+            return (mov.debitos, 'debitos')
         if base == 'creditos':
-            return mov.creditos, 'creditos'
-        return mov.saldo_final, 'saldo_final'
+            return (mov.creditos, 'creditos')
+        if base == 'saldo_final':
+            return (mov.saldo_final, 'saldo_final')
+        if base == 'debitos_netos':
+            return (mov.debitos - mov.creditos, 'debitos_netos')
+        return (mov.debitos, 'debitos')
 
     # ----------------------------------------------------------------
     # Clasificación de un movimiento individual
     # ----------------------------------------------------------------
-    def clasificar_movimiento(self, mov: Movimiento) -> list[MovimientoClasificado]:
-        """Clasifica un movimiento aplicando las 3 capas en orden.
-        
-        Devuelve una lista porque:
-          - Capa 2 puede dar múltiples reglas (ambigüedad) → marca requiere_revision
-          - Capa 1 puede tener una cuenta en varios formatos
-        """
+    def clasificar_movimiento(
+        self,
+        mov: Movimiento,
+        cuentas_6_excluidas: set[str] = None,
+    ) -> list[MovimientoClasificado]:
+        """Clasifica un movimiento aplicando las capas en orden de prioridad."""
         resultados: list[MovimientoClasificado] = []
+        cuentas_6_excluidas = cuentas_6_excluidas or set()
 
-        # CAPA 3: override manual (siempre gana, sea único o múltiple)
+        # CAPA 3: override manual (siempre gana)
         capa3 = self._buscar_capa3(mov.codigo_cuenta, mov.nit)
         if capa3:
             for r in capa3:
@@ -357,27 +718,24 @@ class MotorClasificacion:
                 ))
             return resultados
 
-        # REGLAS ESPECIALES: activos fijos, inventarios, cartera 1008
-        # Se aplican antes de Capa 2 porque son cálculos especiales
-        # (débitos - créditos) que no se pueden expresar con rangos.
-        regla_esp = aplicar_regla_especial(mov)
+        # REGLAS ESPECIALES (incluyen exclusión cuenta 6, 2365, F1003, activos, inventarios, cartera)
+        regla_esp = aplicar_regla_especial(mov, cuentas_6_excluidas)
         if regla_esp is not None:
             return [regla_esp]
-        
-        # Si la cuenta cae en familia 14, 15 o 1305-1315 pero no aplicó la regla
-        # (ej. depreciación, traslado, saldo cero), NO continuar a las otras capas
-        # — porque sabemos que no debe reportarse.
-        cuenta_str = str(mov.codigo_cuenta).strip()
-        if cuenta_str.startswith('15') or cuenta_str.startswith('14'):
-            # Es activo fijo o inventario pero excluido (depreciación, traslado)
-            # No reportar en ningún formato
-            nombre = mov.nombre_cuenta or ''
-            if (cuenta_str.startswith('15') and not _es_cuenta_activos_fijos(cuenta_str, nombre)) or \
-               (cuenta_str.startswith('14') and not _es_cuenta_inventario_compra(cuenta_str, nombre)):
-                # Pasa al flujo normal (capa 2/1) por si el usuario lo mapeó manualmente
-                pass
 
-        # CAPA 2: mapeo nativo
+        # Si la cuenta cae en familia 14, 15, 1305-1315 pero no aplicó la regla
+        # (saldo cero, etc), NO seguir a las otras capas
+        cuenta_str = str(mov.codigo_cuenta).strip()
+        if (cuenta_str.startswith('15') and _es_cuenta_activos_fijos(cuenta_str, mov.nombre_cuenta or '')):
+            return []  # Saldo cero o negativo → no reportar
+        if (cuenta_str.startswith('14') and _es_cuenta_inventario_compra(cuenta_str, mov.nombre_cuenta or '')):
+            return []
+        if _es_cuenta_cartera_1008(cuenta_str):
+            return []
+        if _es_cuenta_f1003(cuenta_str):
+            return []  # Sin valor neto positivo
+
+        # CAPA 2: mapeo nativo por rangos
         capa2 = self._buscar_capa2(mov.codigo_cuenta)
         if capa2:
             ambiguo = len(capa2) > 1
@@ -434,20 +792,52 @@ class MotorClasificacion:
     # Clasificación masiva
     # ----------------------------------------------------------------
     def clasificar_balance(self, movimientos: list[Movimiento]) -> ResultadoClasificacion:
+        """
+        Clasifica todos los movimientos del balance.
+        
+        Pasos:
+          1. Pre-procesa: validar conciliación cuenta 6 ↔ 72/73
+          2. Pre-procesa: indexar retenciones cuenta 2365 por NIT
+          3. Procesa cada movimiento aplicando todas las reglas
+          4. Compila estadísticas
+        """
         res = ResultadoClasificacion()
-        contador = {'capa1': 0, 'capa2_unico': 0, 'capa2_ambiguo': 0,
-                    'capa3': 0, 'regla_especial': 0, 'sin_resolver': 0}
+
+        # 1. CONCILIACIÓN COSTOS (pre-proceso)
+        res.conciliacion_costos = validar_conciliacion_costos_traslado(movimientos)
+        cuentas_6_excluidas = res.conciliacion_costos.cuentas_6_excluidas
+
+        # 2. INDEXAR RETENCIONES 2365 por NIT (pre-proceso)
+        res.retenciones_por_nit = indexar_retenciones_2365(movimientos)
+
+        # 3. CLASIFICAR cada movimiento
+        contador = {
+            'capa1': 0, 'capa2_unico': 0, 'capa2_ambiguo': 0,
+            'capa3': 0, 'regla_especial': 0, 'sin_resolver': 0,
+            'excluido_costo_traslado': 0, 'columna_retencion': 0,
+            'sin_clasificar_filtrado': 0,
+        }
 
         for mov in movimientos:
-            clasificaciones = self.clasificar_movimiento(mov)
-            res.movimientos.extend(clasificaciones)
+            clasificaciones = self.clasificar_movimiento(mov, cuentas_6_excluidas)
 
+            # Caso especial: lista vacía = filtrado intencional (saldo cero, no aplica)
+            if not clasificaciones:
+                contador['sin_clasificar_filtrado'] += 1
+                continue
+
+            res.movimientos.extend(clasificaciones)
             primera = clasificaciones[0]
+
             if primera.capa_resolucion == 'sin_resolver':
                 res.sin_resolver.append(mov)
                 contador['sin_resolver'] += 1
             elif primera.capa_resolucion == 'mapeo_manual':
                 contador['capa3'] += 1
+            elif primera.capa_resolucion == 'regla_especial_costos_traslado_conciliado':
+                contador['excluido_costo_traslado'] += 1
+            elif primera.capa_resolucion == 'regla_especial_2365_columna':
+                contador['columna_retencion'] += 1
             elif primera.capa_resolucion.startswith('regla_especial'):
                 contador['regla_especial'] += 1
             elif primera.capa_resolucion == 'mapeo_empresa':
@@ -463,5 +853,7 @@ class MotorClasificacion:
             'total_movimientos': len(movimientos),
             'total_clasificaciones': len(res.movimientos),
             'requieren_revision': sum(1 for m in res.movimientos if m.requiere_revision),
+            'conciliacion_concilia': res.conciliacion_costos.concilia,
+            'nits_con_retencion': len(res.retenciones_por_nit),
         }
         return res
