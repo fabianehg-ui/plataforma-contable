@@ -78,6 +78,15 @@ except ImportError:
 # Importador de balance Siigo
 from .importador_siigo import ImportadorBalanceSiigo
 
+# Importador PILA (seguridad social y parafiscales)
+from .importador_pila import (
+    ImportadorPILA,
+    ResumenPILA,
+    PagoPILA,
+    calcular_nomina_desde_balance,
+    validar_pila_vs_balance,
+)
+
 # Exportadores
 from .exportadores import generar_excel_comparativo, generar_dictamen_word
 
@@ -104,6 +113,9 @@ __all__ = [
     'RepositorioRenta',
     # Importador
     'ImportadorBalanceSiigo',
+    # PILA
+    'ImportadorPILA', 'ResumenPILA', 'PagoPILA',
+    'calcular_nomina_desde_balance', 'validar_pila_vs_balance',
     # Exportadores
     'generar_excel_comparativo', 'generar_dictamen_word',
 ]
