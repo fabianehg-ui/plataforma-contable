@@ -378,6 +378,20 @@ with tab_datos:
                         log.warning("No se pudo cruzar PILA con balance: %s", ex)
 
                 # Guardar resumen para mostrar detalle en la UI
+                # Agrupar pagos por administradora para auditoría
+                admins_dict = {}
+                for p in resumen_pila.pagos:
+                    key = (p.subsistema, p.administradora)
+                    if key not in admins_dict:
+                        admins_dict[key] = {"total": 0.0, "ibc": 0.0, "meses": 0}
+                    admins_dict[key]["total"] += p.aporte_empleador
+                    admins_dict[key]["ibc"] += p.ibc
+                    admins_dict[key]["meses"] += 1
+                admins_lista = [
+                    {"subsistema": s, "administradora": a, **v}
+                    for (s, a), v in sorted(admins_dict.items())
+                ]
+
                 datos["_pila_resumen"] = {
                     "pension": resumen_pila.pension,
                     "salud": resumen_pila.salud,
@@ -391,17 +405,27 @@ with tab_datos:
                     "por_mes_salud": resumen_pila.por_mes(["Salud"]),
                     "por_mes_arl": resumen_pila.por_mes(["Riesgos"]),
                     "por_mes_caja": resumen_pila.por_mes(["Cajas de compensación"]),
+                    "administradoras": admins_lista,
+                    "no_clasificadas": resumen_pila.administradoras_no_clasificadas,
                 }
 
                 # Mensaje de éxito persistente
                 cas_34 = resumen_pila.seguridad_social_empleador
                 cas_35 = resumen_pila.parafiscales
-                st.session_state["_renta_pila_msg"] = (
-                    f"✓ PILA importada: {resumen_pila.total_planillas} planillas, "
-                    f"{len(resumen_pila.periodos_cubiertos)} períodos. "
-                    f"Cas. 34 (SS empleador): ${cas_34:,.0f}. "
-                    f"Cas. 35 (parafiscales): ${cas_35:,.0f}."
-                )
+                if resumen_pila.total_planillas == 0:
+                    st.session_state["_renta_pila_msg_warning"] = (
+                        f"⚠️ El archivo PILA se procesó pero no se encontraron "
+                        f"aportes para el año gravable {ano_gravable}. "
+                        f"Verifica que el archivo cubra los períodos 202501 a 202512 "
+                        f"(planillas pagadas entre febrero/{ano_gravable} y enero/{ano_gravable+1})."
+                    )
+                else:
+                    st.session_state["_renta_pila_msg"] = (
+                        f"✓ PILA importada: {resumen_pila.total_planillas} aportes individuales, "
+                        f"{len(resumen_pila.periodos_cubiertos)} períodos. "
+                        f"Cas. 34 (SS empleador): ${cas_34:,.0f}. "
+                        f"Cas. 35 (parafiscales): ${cas_35:,.0f}."
+                    )
                 # Sincronizar widgets de informativos en la pestaña 3
                 st.session_state["_renta_pila_imported"] = True
                 st.rerun()
@@ -410,9 +434,11 @@ with tab_datos:
                 st.error(f"Error importando PILA: {e}")
                 log.exception("Error importando PILA")
 
-    # Mensaje persistente PILA
+    # Mensajes persistentes PILA
     if msg := st.session_state.pop("_renta_pila_msg", None):
         st.success(msg)
+    if msg := st.session_state.pop("_renta_pila_msg_warning", None):
+        st.warning(msg)
 
     # Mostrar resumen + alertas si ya hay PILA cargada
     pila_resumen = datos.get("_pila_resumen")
@@ -434,9 +460,47 @@ with tab_datos:
 
             if pila_resumen['sena'] == 0 and pila_resumen['icbf'] == 0:
                 st.info(
-                    "ℹ️ SENA e ICBF en cero: típico de empresas exoneradas por la "
+                    "ℹ️ SENA e ICBF en cero: empresa exonerada por la "
                     "Ley 1819/2016 (tarifa general de renta + empleados con salario "
                     "menor a 10 SMMLV)."
+                )
+            if pila_resumen.get('salud', 0) == 0 and pila_resumen.get('pension', 0) > 0:
+                st.info(
+                    "ℹ️ Salud en cero: empresa exonerada por la Ley 1819/2016. "
+                    "El trabajador sigue aportando su 4% (descontado del salario), "
+                    "pero ese aporte NO va en Cas. 34 porque no lo paga la empresa."
+                )
+
+            # Desglose por administradora (auditoría)
+            admins = pila_resumen.get("administradoras", [])
+            if admins:
+                st.markdown("---")
+                st.markdown("**Desglose por administradora**")
+                try:
+                    import pandas as pd
+                    tabla_adm = pd.DataFrame([
+                        {
+                            "Subsistema": a["subsistema"],
+                            "Administradora": a["administradora"],
+                            "Meses": a["meses"],
+                            "Aporte empleador": a["total"],
+                        }
+                        for a in admins
+                    ])
+                    fmt_adm = {"Aporte empleador": "${:,.0f}".format}
+                    st.dataframe(
+                        tabla_adm.style.format(fmt_adm),
+                        use_container_width=True, hide_index=True
+                    )
+                except Exception:
+                    pass
+
+            # Administradoras no clasificadas (advertencia)
+            no_clas = pila_resumen.get("no_clasificadas", [])
+            if no_clas:
+                st.warning(
+                    "⚠️ Administradoras no clasificadas (revisar manualmente):\n"
+                    + "\n".join(f"  - {a}" for a in no_clas)
                 )
 
             # Tabla mensual estilo Anexo 21
