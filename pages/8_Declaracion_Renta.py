@@ -35,6 +35,9 @@ from core.procesadores.renta import (
     UVT,
     PLAZOS_PJ_AG2025,
     ImportadorBalanceSiigo,
+    ImportadorPILA,
+    calcular_nomina_desde_balance,
+    validar_pila_vs_balance,
     generar_excel_comparativo,
     generar_dictamen_word,
 )
@@ -280,6 +283,18 @@ with tab_datos:
                         f"Diferencia: ${diferencia:,.0f}. Revisa cuentas no mapeadas."
                     )
 
+                # Marcar balance importado y calcular nómina total (Cas. 33)
+                datos["_balance_importado"] = True
+                try:
+                    nom = calcular_nomina_desde_balance(balance)
+                    datos["informativos"]["nomina_total"] = float(nom["total"])
+                    datos["_nomina_desglose"] = {
+                        "admin": nom["admin"], "ventas": nom["ventas"],
+                        "costos_72": nom["costos_72"], "costos_73": nom["costos_73"],
+                    }
+                except Exception as ex:
+                    log.warning("No se pudo calcular nómina desde balance: %s", ex)
+
                 # Las pestañas siguientes detectarán la flag _renta_just_imported
                 # y reescribirán sus session_state desde datos[] al iniciar el render.
 
@@ -305,6 +320,177 @@ with tab_datos:
     # del usuario no se sobrescriban en el siguiente rerun)
     if st.session_state.get("_renta_just_imported"):
         st.session_state["_renta_just_imported"] = False
+
+    # ========================================================
+    # CARGADOR PILA (Planilla Integrada Liquidación de Aportes)
+    # ========================================================
+    st.divider()
+    st.subheader("Importar PILA (opcional)")
+    st.caption(
+        "Sube el consolidado anual de planillas de seguridad social y "
+        "parafiscales para auto-llenar las casillas 33, 34 y 35 del "
+        "Formulario 110."
+    )
+
+    archivo_pila = st.file_uploader(
+        "Planillas PILA (XLS/XLSX)",
+        type=["xls", "xlsx"],
+        key="pila_uploader",
+        help="Archivo exportado del operador PILA (Aportes en Línea, SOI, etc.) "
+             "con las hojas 'Consolidado, Seguridad Social' y 'Consolidado, Parafiscales'."
+    )
+    if archivo_pila is not None:
+        if st.button("📥 Importar PILA", key="btn_importar_pila"):
+            try:
+                tmp_pila = Path("/tmp") / f"pila_{empresa_id}.{archivo_pila.name.rsplit('.',1)[-1]}"
+                tmp_pila.write_bytes(archivo_pila.getvalue())
+
+                imp_pila = ImportadorPILA()
+                resumen_pila = imp_pila.importar(str(tmp_pila), ano_gravable=ano_gravable)
+
+                # Llenar Cas. 34 y 35 (datos informativos)
+                datos["informativos"]["seguridad_social"] = float(
+                    resumen_pila.seguridad_social_empleador
+                )
+                datos["informativos"]["sena_icbf_caja"] = float(
+                    resumen_pila.parafiscales
+                )
+
+                # Cas. 33: total nómina viene del balance, no de la PILA.
+                # Si ya hay balance importado, lo calculamos automáticamente.
+                # Si no, queda en 0 hasta que el usuario importe el balance.
+                if datos.get("_balance_importado"):
+                    # Re-importar balance para calcular nómina (cache simple)
+                    try:
+                        bal_path = Path("/tmp") / f"balance_{empresa_id}.xlsx"
+                        if bal_path.exists():
+                            bal = ImportadorBalanceSiigo().importar(str(bal_path))
+                            nom = calcular_nomina_desde_balance(bal)
+                            datos["informativos"]["nomina_total"] = float(nom["total"])
+                            datos["_pila_validacion"] = validar_pila_vs_balance(resumen_pila, nom)
+                            datos["_nomina_desglose"] = {
+                                "admin": nom["admin"],
+                                "ventas": nom["ventas"],
+                                "costos_72": nom["costos_72"],
+                                "costos_73": nom["costos_73"],
+                            }
+                    except Exception as ex:
+                        log.warning("No se pudo cruzar PILA con balance: %s", ex)
+
+                # Guardar resumen para mostrar detalle en la UI
+                datos["_pila_resumen"] = {
+                    "pension": resumen_pila.pension,
+                    "salud": resumen_pila.salud,
+                    "riesgos": resumen_pila.riesgos,
+                    "caja": resumen_pila.caja,
+                    "sena": resumen_pila.sena,
+                    "icbf": resumen_pila.icbf,
+                    "total_planillas": resumen_pila.total_planillas,
+                    "periodos": resumen_pila.periodos_cubiertos,
+                    "por_mes_pension": resumen_pila.por_mes(["Pensión"]),
+                    "por_mes_salud": resumen_pila.por_mes(["Salud"]),
+                    "por_mes_arl": resumen_pila.por_mes(["Riesgos"]),
+                    "por_mes_caja": resumen_pila.por_mes(["Cajas de compensación"]),
+                }
+
+                # Mensaje de éxito persistente
+                cas_34 = resumen_pila.seguridad_social_empleador
+                cas_35 = resumen_pila.parafiscales
+                st.session_state["_renta_pila_msg"] = (
+                    f"✓ PILA importada: {resumen_pila.total_planillas} planillas, "
+                    f"{len(resumen_pila.periodos_cubiertos)} períodos. "
+                    f"Cas. 34 (SS empleador): ${cas_34:,.0f}. "
+                    f"Cas. 35 (parafiscales): ${cas_35:,.0f}."
+                )
+                # Sincronizar widgets de informativos en la pestaña 3
+                st.session_state["_renta_pila_imported"] = True
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Error importando PILA: {e}")
+                log.exception("Error importando PILA")
+
+    # Mensaje persistente PILA
+    if msg := st.session_state.pop("_renta_pila_msg", None):
+        st.success(msg)
+
+    # Mostrar resumen + alertas si ya hay PILA cargada
+    pila_resumen = datos.get("_pila_resumen")
+    if pila_resumen:
+        with st.expander("📋 Detalle de la PILA importada", expanded=False):
+            colA, colB = st.columns(2)
+            with colA:
+                st.markdown("**Seguridad social (empleador)**")
+                st.write(f"Pensión: ${pila_resumen['pension']:,.0f}")
+                st.write(f"Salud: ${pila_resumen['salud']:,.0f}")
+                st.write(f"ARL (Riesgos): ${pila_resumen['riesgos']:,.0f}")
+                st.markdown(f"**Total Cas. 34: ${pila_resumen['pension']+pila_resumen['salud']+pila_resumen['riesgos']:,.0f}**")
+            with colB:
+                st.markdown("**Parafiscales**")
+                st.write(f"Caja de Compensación: ${pila_resumen['caja']:,.0f}")
+                st.write(f"SENA: ${pila_resumen['sena']:,.0f}")
+                st.write(f"ICBF: ${pila_resumen['icbf']:,.0f}")
+                st.markdown(f"**Total Cas. 35: ${pila_resumen['caja']+pila_resumen['sena']+pila_resumen['icbf']:,.0f}**")
+
+            if pila_resumen['sena'] == 0 and pila_resumen['icbf'] == 0:
+                st.info(
+                    "ℹ️ SENA e ICBF en cero: típico de empresas exoneradas por la "
+                    "Ley 1819/2016 (tarifa general de renta + empleados con salario "
+                    "menor a 10 SMMLV)."
+                )
+
+            # Tabla mensual estilo Anexo 21
+            st.markdown("---")
+            st.markdown("**Aportes por mes (estilo Anexo 21)**")
+            try:
+                import pandas as pd
+                meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
+                         "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+                tabla = pd.DataFrame({
+                    "Mes": meses,
+                    "Pensión": [pila_resumen['por_mes_pension'].get(m, 0) for m in range(1,13)],
+                    "Salud": [pila_resumen['por_mes_salud'].get(m, 0) for m in range(1,13)],
+                    "ARL": [pila_resumen['por_mes_arl'].get(m, 0) for m in range(1,13)],
+                    "Caja": [pila_resumen['por_mes_caja'].get(m, 0) for m in range(1,13)],
+                })
+                tabla["Total"] = tabla[["Pensión","Salud","ARL","Caja"]].sum(axis=1)
+                # Formatear como pesos
+                fmt = {c: "${:,.0f}".format for c in ["Pensión","Salud","ARL","Caja","Total"]}
+                st.dataframe(tabla.style.format(fmt), use_container_width=True, hide_index=True)
+            except Exception:
+                pass
+
+            # Validación cruzada con balance
+            val = datos.get("_pila_validacion")
+            if val:
+                st.markdown("---")
+                st.markdown("**Validación PILA vs Balance**")
+                for info in val.get("info", []):
+                    st.caption(info)
+                for alerta in val.get("alertas", []):
+                    st.warning(alerta)
+
+    # ========================================================
+    # PLACEHOLDERS: cargadores futuros
+    # ========================================================
+    st.divider()
+    st.subheader("📑 Próximamente")
+    st.caption(
+        "Estos cargadores se habilitarán en próximas iteraciones:"
+    )
+    colP1, colP2 = st.columns(2)
+    with colP1:
+        st.markdown(
+            "**Declaración de renta año anterior**  \n"
+            "Para auto-llenar Cas. 104 (saldo a favor año anterior) "
+            "directamente del Formulario 110 del año pasado."
+        )
+    with colP2:
+        st.markdown(
+            "**Certificados de retención (ZIP)**  \n"
+            "Para conciliar las retenciones contables (cuenta 195515) "
+            "con los certificados físicos y poblar Cas. 105 y 106."
+        )
 
 
 # ============================================================
@@ -432,35 +618,58 @@ with tab_pyg:
 
     st.divider()
     st.markdown("**Datos informativos (33-35)**")
+
+    # Sincronización pre-render (igual patrón que patrimonio/ingresos)
+    _inf_widgets = [
+        ("inf_nomina", "nomina_total"),
+        ("inf_ss", "seguridad_social"),
+        ("inf_para", "sena_icbf_caja"),
+    ]
+    _ret_widgets = [
+        ("r_auto", "autorretenciones"),
+        ("r_otras", "otras_retenciones"),
+        ("r_sfa", "saldo_favor_anterior"),
+    ]
+    pila_imp = st.session_state.pop("_renta_pila_imported", False)
+    just_imp = just_imported or pila_imp
+    for wkey, dkey in _inf_widgets:
+        if just_imp or wkey not in st.session_state:
+            st.session_state[wkey] = float(datos["informativos"][dkey])
+    for wkey, dkey in _ret_widgets:
+        if just_imp or wkey not in st.session_state:
+            st.session_state[wkey] = float(datos["retenciones"].get(dkey, 0))
+
     cI, cII, cIII = st.columns(3)
     with cI:
-        datos["informativos"]["nomina_total"] = st.number_input(
-            "Cas. 33 — Nómina",
-            value=float(datos["informativos"]["nomina_total"]), step=1000.0, format="%.2f", key="inf_nomina")
+        st.number_input("Cas. 33 — Nómina",
+            step=1000.0, format="%.2f", key="inf_nomina")
     with cII:
-        datos["informativos"]["seguridad_social"] = st.number_input(
-            "Cas. 34 — Seguridad social",
-            value=float(datos["informativos"]["seguridad_social"]), step=1000.0, format="%.2f", key="inf_ss")
+        st.number_input("Cas. 34 — Seguridad social",
+            step=1000.0, format="%.2f", key="inf_ss")
     with cIII:
-        datos["informativos"]["sena_icbf_caja"] = st.number_input(
-            "Cas. 35 — SENA, ICBF, Caja",
-            value=float(datos["informativos"]["sena_icbf_caja"]), step=1000.0, format="%.2f", key="inf_para")
+        st.number_input("Cas. 35 — SENA, ICBF, Caja",
+            step=1000.0, format="%.2f", key="inf_para")
+
+    # Copiar de vuelta
+    for wkey, dkey in _inf_widgets:
+        datos["informativos"][dkey] = float(st.session_state[wkey])
 
     st.divider()
     st.markdown("**Retenciones (104-107)**")
     cR1, cR2, cR3 = st.columns(3)
     with cR1:
-        datos["retenciones"]["autorretenciones"] = st.number_input(
-            "Cas. 105 — Autorretenciones",
-            value=float(datos["retenciones"]["autorretenciones"]), step=1000.0, format="%.2f", key="r_auto")
+        st.number_input("Cas. 105 — Autorretenciones",
+            step=1000.0, format="%.2f", key="r_auto")
     with cR2:
-        datos["retenciones"]["otras_retenciones"] = st.number_input(
-            "Cas. 106 — Otras retenciones",
-            value=float(datos["retenciones"]["otras_retenciones"]), step=1000.0, format="%.2f", key="r_otras")
+        st.number_input("Cas. 106 — Otras retenciones",
+            step=1000.0, format="%.2f", key="r_otras")
     with cR3:
-        datos["retenciones"]["saldo_favor_anterior"] = st.number_input(
-            "Cas. 104 — Saldo a favor año anterior",
-            value=float(datos["retenciones"]["saldo_favor_anterior"]), step=1000.0, format="%.2f", key="r_sfa")
+        st.number_input("Cas. 104 — Saldo a favor año anterior",
+            step=1000.0, format="%.2f", key="r_sfa")
+
+    # Copiar de vuelta retenciones
+    for wkey, dkey in _ret_widgets:
+        datos["retenciones"][dkey] = float(st.session_state[wkey])
 
 
 # ============================================================
