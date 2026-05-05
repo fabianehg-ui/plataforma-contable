@@ -182,30 +182,133 @@ with tab_datos:
                 imp = ImportadorBalanceSiigo()
                 balance = imp.importar(str(tmp_path))
 
-                # Auto-llenar (valores absolutos por convención de Siigo)
-                datos["patrimonio"]["efectivo"] = abs(float(balance.saldo_clase("11")))
-                datos["patrimonio"]["cxc"] = abs(float(balance.saldo_clase("13")))
-                datos["patrimonio"]["inventarios"] = abs(float(balance.saldo_clase("14")))
-                datos["patrimonio"]["ppe"] = abs(float(balance.saldo_clase("15")))
-                datos["patrimonio"]["otros_activos"] = abs(float(balance.saldo_clase("19")))
-                datos["patrimonio"]["pasivos"] = abs(float(balance.saldo_clase("2")))
+                # ==== PATRIMONIO (signo absoluto: pasivos vienen como crédito) ====
+                # Cas 36 - Efectivo: cuenta 11 + algunos subgrupos de 12 (CDTs, fiducias)
+                efectivo = balance.saldo_clase("11")
+                # En el PUC oficial 1215, 1220, 1225, 1230, 1235, 1240, 1245, 1255 también
+                # son "equivalentes" pero raramente aparecen en empresas comerciales pequeñas.
+                # Para Quinto Sentidos solo aplica la 11 -> 72,242,897.
 
+                # Cas 37 - Inversiones: solo subgrupos específicos de 12
+                inversiones = balance.saldo_clase("12")
+
+                # Cas 38 - Cuentas por cobrar: clase 13 EXCEPTO 1355 (anticipo impuestos -> Cas 43)
+                cxc_total = balance.saldo_clase("13")
+                anticipo_imptos = balance.saldo_grupo("1355")
+                cxc = cxc_total - anticipo_imptos
+
+                # Cas 39 - Inventarios: clase 14 EXCEPTO 1425, 1428, 1445 (biológicos)
+                inv_total = balance.saldo_clase("14")
+                biol_en_14 = (balance.saldo_grupo("1425")
+                              + balance.saldo_grupo("1428")
+                              + balance.saldo_grupo("1445"))
+                inventarios = inv_total - biol_en_14
+
+                # Cas 40 - Intangibles
+                intangibles = balance.saldo_clase("16")
+
+                # Cas 41 - Activos biológicos: cultivos/plantaciones/semovientes
+                biologicos = (biol_en_14
+                              + balance.saldo_grupo("1564")
+                              + balance.saldo_grupo("1584"))
+
+                # Cas 42 - PP&E: clase 15 EXCEPTO biológicos en 1564, 1584
+                ppe_total = balance.saldo_clase("15")
+                biol_en_15 = balance.saldo_grupo("1564") + balance.saldo_grupo("1584")
+                ppe = ppe_total - biol_en_15
+
+                # Cas 43 - Otros activos: 1355 + 17 + 18 + 19
+                otros_activos = (anticipo_imptos
+                                 + balance.saldo_clase("17")
+                                 + balance.saldo_clase("18")
+                                 + balance.saldo_clase("19"))
+
+                pasivos = balance.saldo_clase("2")
+
+                datos["patrimonio"]["efectivo"]      = abs(float(efectivo))
+                datos["patrimonio"]["inversiones"]   = abs(float(inversiones))
+                datos["patrimonio"]["cxc"]           = abs(float(cxc))
+                datos["patrimonio"]["inventarios"]   = abs(float(inventarios))
+                datos["patrimonio"]["intangibles"]   = abs(float(intangibles))
+                datos["patrimonio"]["biologicos"]    = abs(float(biologicos))
+                datos["patrimonio"]["ppe"]           = abs(float(ppe))
+                datos["patrimonio"]["otros_activos"] = abs(float(otros_activos))
+                datos["patrimonio"]["pasivos"]       = abs(float(pasivos))
+
+                # ==== INGRESOS ====
                 datos["ingresos"]["ingresos_ordinarios"] = abs(float(balance.saldo_clase("41")))
-                datos["ingresos"]["ingresos_financieros"] = abs(float(balance.saldo_grupo("4210")))
+                # Cas 48: ingresos financieros (4210) + 43 si existe
+                ing_fin = balance.saldo_grupo("4210") + balance.saldo_clase("43")
+                datos["ingresos"]["ingresos_financieros"] = abs(float(ing_fin))
+                # Cas 57: otros ingresos (clase 42 menos los financieros 4210)
+                otros_ing = balance.saldo_clase("42") - balance.saldo_grupo("4210")
+                datos["ingresos"]["otros_ingresos"] = abs(float(otros_ing))
+                # Cas 59: devoluciones
+                devs = (balance.saldo_grupo("4175")
+                        + balance.saldo_grupo("4180")
+                        + balance.saldo_grupo("4275"))
+                datos["ingresos"]["devoluciones"] = abs(float(devs))
 
-                datos["costos_gastos"]["costos"] = abs(float(balance.saldo_clase("6")))
+                # ==== COSTOS Y GASTOS ====
+                # Cas 62: costos = clase 6 + clase 7 (costos de producción)
+                costos = balance.saldo_clase("6") + balance.saldo_clase("7")
+                datos["costos_gastos"]["costos"] = abs(float(costos))
                 datos["costos_gastos"]["gastos_administracion"] = abs(float(balance.saldo_clase("51")))
                 datos["costos_gastos"]["gastos_ventas"] = abs(float(balance.saldo_clase("52")))
+                # Cas 65: gastos financieros (5305 son los financieros del PUC)
+                datos["costos_gastos"]["gastos_financieros"] = abs(float(balance.saldo_grupo("5305")))
+                # Cas 66: clase 53 EXCEPTO 5305 (financieros, ya van a Cas 65)
+                otros_gtos = balance.saldo_clase("53") - balance.saldo_grupo("5305")
+                datos["costos_gastos"]["otros_gastos"] = abs(float(otros_gtos))
 
+                # ==== CONCILIACIÓN ====
                 datos["conciliacion"]["provision_renta_5405"] = abs(float(balance.saldo_grupo("5405")))
 
-                st.success(
-                    f"✓ Balance importado: {balance.razon_social} — {len(balance.cuentas)} cuentas. "
-                    "Revisa los valores en las pestañas siguientes y ajusta lo que sea necesario."
+                # ==== Validación cruzada: Cas 44 debe == cuenta 1 ====
+                cuenta_1 = abs(float(balance.saldo_cuenta("1")))
+                suma_36_43 = sum([
+                    datos["patrimonio"]["efectivo"], datos["patrimonio"]["inversiones"],
+                    datos["patrimonio"]["cxc"], datos["patrimonio"]["inventarios"],
+                    datos["patrimonio"]["intangibles"], datos["patrimonio"]["biologicos"],
+                    datos["patrimonio"]["ppe"], datos["patrimonio"]["otros_activos"],
+                ])
+                diferencia = cuenta_1 - suma_36_43
+                if abs(diferencia) > 1:
+                    st.warning(
+                        f"⚠️ La suma de casillas 36–43 (${suma_36_43:,.0f}) no coincide con "
+                        f"el activo total de la cuenta 1 (${cuenta_1:,.0f}). "
+                        f"Diferencia: ${diferencia:,.0f}. Revisa cuentas no mapeadas."
+                    )
+
+                # IMPORTANTE: limpiar las keys de los widgets para que Streamlit
+                # tome los nuevos valores en el próximo render. Sin esto, los
+                # st.number_input siguen mostrando el valor anterior aunque el
+                # session_state base tenga los nuevos.
+                widget_keys = [
+                    "p_efec", "p_inv", "p_cxc", "p_inventarios",
+                    "p_intang", "p_biol", "p_ppe", "p_otros", "p_pasivos",
+                    "i_ord", "i_fin", "i_otros", "i_dev", "i_incrngo",
+                    "cg_costos", "cg_admin", "cg_ventas", "cg_fin", "cg_otros",
+                ]
+                for k in widget_keys:
+                    if k in st.session_state:
+                        del st.session_state[k]
+
+                # Guardar mensaje de éxito en session_state para que sobreviva al rerun
+                st.session_state["_renta_import_msg"] = (
+                    f"✓ Balance importado: {balance.razon_social} — "
+                    f"{len(balance.cuentas)} cuentas. Patrimonio bruto: ${suma_36_43:,.0f}. "
+                    "Revisa los valores en las pestañas siguientes."
                 )
+                st.rerun()
+
             except Exception as e:
                 st.error(f"Error importando balance: {e}")
                 log.exception("Error importando balance Siigo")
+
+    # Mostrar mensaje persistente tras rerun
+    if msg := st.session_state.pop("_renta_import_msg", None):
+        st.success(msg)
 
 
 # ============================================================
