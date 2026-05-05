@@ -87,6 +87,15 @@ from .importador_pila import (
     validar_pila_vs_balance,
 )
 
+# Importador de certificados de retención
+from .importador_certificados import (
+    ImportadorCertificadosZIP,
+    ResumenCertificados,
+    CertificadoRetencion,
+    InventarioPDF,
+    conciliar_certificados_vs_balance,
+)
+
 # Exportadores
 from .exportadores import generar_excel_comparativo, generar_dictamen_word
 
@@ -116,6 +125,10 @@ __all__ = [
     # PILA
     'ImportadorPILA', 'ResumenPILA', 'PagoPILA',
     'calcular_nomina_desde_balance', 'validar_pila_vs_balance',
+    # Certificados de retención
+    'ImportadorCertificadosZIP', 'ResumenCertificados',
+    'CertificadoRetencion', 'InventarioPDF',
+    'conciliar_certificados_vs_balance',
     # Exportadores
     'generar_excel_comparativo', 'generar_dictamen_word',
 ]
