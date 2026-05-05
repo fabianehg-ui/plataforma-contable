@@ -38,6 +38,8 @@ from core.procesadores.renta import (
     ImportadorPILA,
     calcular_nomina_desde_balance,
     validar_pila_vs_balance,
+    ImportadorCertificadosZIP,
+    conciliar_certificados_vs_balance,
     generar_excel_comparativo,
     generar_dictamen_word,
 )
@@ -535,26 +537,269 @@ with tab_datos:
                     st.warning(alerta)
 
     # ========================================================
-    # PLACEHOLDERS: cargadores futuros
+    # CARGADOR ZIP DE CERTIFICADOS DE RETENCIÓN
+    # ========================================================
+    st.divider()
+    st.subheader("Importar certificados de retención (ZIP)")
+    st.caption(
+        "Sube el ZIP con los certificados físicos (PDFs) y el Excel "
+        "consolidado del contador. La app extrae las retenciones, las "
+        "concilia contra la cuenta 195515 del balance y propone valores "
+        "para Cas. 105 y 106 del Formulario 110."
+    )
+
+    archivo_zip = st.file_uploader(
+        "Carpeta de certificados (ZIP)",
+        type=["zip"],
+        key="zip_certs_uploader",
+        help="ZIP con PDFs de certificados de retención y Excel "
+             "'LISTADO Y VALOR CERTIFICADOS'."
+    )
+    if archivo_zip is not None:
+        if st.button("📥 Importar certificados", key="btn_importar_certs"):
+            try:
+                tmp_zip = Path("/tmp") / f"certs_{empresa_id}.zip"
+                tmp_zip.write_bytes(archivo_zip.getvalue())
+
+                imp_certs = ImportadorCertificadosZIP()
+                resumen_certs = imp_certs.importar(str(tmp_zip))
+
+                # Conciliar contra balance si está disponible
+                conciliacion = None
+                if datos.get("_balance_importado"):
+                    bal_path = Path("/tmp") / f"balance_{empresa_id}.xlsx"
+                    if bal_path.exists():
+                        try:
+                            bal = ImportadorBalanceSiigo().importar(str(bal_path))
+                            conciliacion = conciliar_certificados_vs_balance(
+                                resumen_certs, bal
+                            )
+                        except Exception as ex:
+                            log.warning("No se pudo conciliar certificados: %s", ex)
+
+                # Guardar todo en datos
+                datos["_certs_resumen"] = {
+                    "n_pdfs": len(resumen_certs.pdfs),
+                    "n_pdfs_reteiva": len(resumen_certs.pdfs_reteiva),
+                    "excel_encontrado": resumen_certs.excel_encontrado,
+                    "n_certificados": len(resumen_certs.certificados),
+                    "total_excel": resumen_certs.total_excel,
+                    "total_excel_conciliado": resumen_certs.total_excel_conciliado,
+                    "total_autorretencion": resumen_certs.total_autorretencion,
+                    "total_retenciones": resumen_certs.total_retenciones,
+                    "advertencias": resumen_certs.advertencias,
+                    "nits_solo_pdf": sorted(resumen_certs.nits_solo_pdf),
+                    "nits_solo_excel": sorted(resumen_certs.nits_solo_excel),
+                    "certificados": [
+                        {
+                            "nit": c.nit_retenedor,
+                            "retenedor": c.nombre_retenedor,
+                            "concepto": c.concepto,
+                            "valor": c.valor_retencion,
+                            "puc": c.cuenta_puc or "",
+                            "puc_origen": c.cuenta_puc_origen,
+                            "saldo_contable": c.saldo_contable,
+                            "total_certificado": c.total_certificado,
+                            "diferencia": c.diferencia,
+                            "accion": c.accion,
+                        }
+                        for c in resumen_certs.certificados
+                    ],
+                    "pdfs_lista": [
+                        {
+                            "nombre": p.nombre_archivo,
+                            "tamano_kb": p.tamano_bytes / 1024,
+                            "proveedor": p.proveedor_inferido,
+                        }
+                        for p in resumen_certs.pdfs
+                    ],
+                }
+                if conciliacion:
+                    datos["_certs_conciliacion"] = conciliacion
+
+                # Pre-cargar valores sugeridos en datos["retenciones"]
+                # Cas. 105: SIEMPRE del balance (Excel no trae autorretenciones)
+                # Cas. 106: por defecto contable, usuario puede cambiar después
+                if conciliacion:
+                    datos["retenciones"]["autorretenciones"] = float(
+                        conciliacion["total_105_contable"]
+                    )
+                    if "_cas_106_origen" not in datos:
+                        datos["retenciones"]["otras_retenciones"] = float(
+                            conciliacion["total_106_contable"]
+                        )
+                        datos["_cas_106_origen"] = "contable"
+
+                # Mensaje de éxito
+                cas_106 = conciliacion["total_106_contable"] if conciliacion else resumen_certs.total_retenciones
+                cas_105 = conciliacion["total_105_contable"] if conciliacion else 0
+                st.session_state["_renta_certs_msg"] = (
+                    f"✓ Certificados importados: {len(resumen_certs.pdfs)} PDFs, "
+                    f"{len(resumen_certs.certificados)} en Excel. "
+                    f"Cas. 105 (autorretenciones, contable): ${cas_105:,.0f}. "
+                    f"Cas. 106 (retenciones, contable): ${cas_106:,.0f}."
+                )
+                st.session_state["_renta_certs_imported"] = True
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Error importando certificados: {e}")
+                log.exception("Error importando certificados")
+
+    # Mensajes persistentes certificados
+    if msg := st.session_state.pop("_renta_certs_msg", None):
+        st.success(msg)
+
+    # Mostrar detalle si hay certificados cargados
+    certs_data = datos.get("_certs_resumen")
+    if certs_data:
+        with st.expander("📑 Detalle de certificados de retención", expanded=False):
+            colA, colB = st.columns(2)
+            colA.metric("PDFs retención fuente", certs_data["n_pdfs"])
+            colB.metric("PDFs reteIVA (excluidos)", certs_data["n_pdfs_reteiva"])
+            if not certs_data["excel_encontrado"]:
+                st.error(
+                    "❌ No se encontró el Excel 'LISTADO Y VALOR CERTIFICADOS' "
+                    "en el ZIP. Sin él no hay conciliación automática."
+                )
+            else:
+                st.caption(f"✓ Excel del contador detectado con "
+                           f"{certs_data['n_certificados']} certificados.")
+
+            # Advertencias
+            for a in certs_data.get("advertencias", []):
+                st.warning(a)
+
+            # Lista de certificados
+            if certs_data.get("certificados"):
+                st.markdown("**Certificados leídos del Excel**")
+                try:
+                    import pandas as pd
+                    df_certs = pd.DataFrame(certs_data["certificados"])
+                    df_certs["puc_display"] = df_certs.apply(
+                        lambda r: f"{r['puc']} ({r['puc_origen']})" if r['puc'] else "Sin clasificar",
+                        axis=1
+                    )
+                    df_show = df_certs[["nit", "retenedor", "concepto", "valor", "puc_display", "accion"]].copy()
+                    df_show.columns = ["NIT", "Retenedor", "Concepto", "Valor", "Cuenta PUC", "Acción"]
+                    st.dataframe(
+                        df_show.style.format({"Valor": "${:,.0f}".format}),
+                        use_container_width=True, hide_index=True,
+                    )
+                except Exception:
+                    pass
+
+            # Conciliación contra balance
+            concil = datos.get("_certs_conciliacion")
+            if concil:
+                st.markdown("---")
+                st.markdown("### 🔍 Conciliación contable vs certificados")
+
+                # Tabla 106
+                st.markdown("**Cas. 106 — Otras retenciones (cuenta 195515)**")
+                try:
+                    import pandas as pd
+                    df_106 = pd.DataFrame(concil["conciliacion_106"])
+                    df_106.columns = ["Cuenta PUC", "Saldo contable", "Suma certificados", "Diferencia"]
+                    st.dataframe(
+                        df_106.style.format({
+                            "Saldo contable": "${:,.0f}".format,
+                            "Suma certificados": "${:,.0f}".format,
+                            "Diferencia": "${:,.0f}".format,
+                        }),
+                        use_container_width=True, hide_index=True,
+                    )
+                except Exception:
+                    pass
+
+                # Tres opciones para Cas. 106
+                st.markdown("**Selecciona qué valor usar para Cas. 106:**")
+                opciones_106 = {
+                    "contable": (
+                        "📊 Contable (balance 195515)",
+                        concil["total_106_contable"],
+                        "Suma directa del balance. Lo que dice tu contabilidad."
+                    ),
+                    "certificados": (
+                        "📑 Certificados (Excel)",
+                        concil["total_106_certificados"],
+                        "Suma de los certificados físicos digitados en el Excel."
+                    ),
+                    "excel_conciliado": (
+                        "✏️ Excel-conciliado (Total_Cert)",
+                        concil["total_106_excel_conciliado"],
+                        "Lo que el contador propone tras revisar los soportes."
+                    ),
+                }
+                origen_actual = datos.get("_cas_106_origen", "contable")
+                col_op = st.columns(3)
+                for i, (key, (label, valor, descr)) in enumerate(opciones_106.items()):
+                    with col_op[i]:
+                        seleccionado = origen_actual == key
+                        if st.button(
+                            f"{label}\n${valor:,.0f}",
+                            key=f"btn_106_{key}",
+                            type="primary" if seleccionado else "secondary",
+                            use_container_width=True,
+                        ):
+                            datos["retenciones"]["otras_retenciones"] = float(valor)
+                            datos["_cas_106_origen"] = key
+                            st.session_state["_renta_just_imported"] = True
+                            st.rerun()
+                        st.caption(descr)
+                st.caption(f"Valor actualmente seleccionado: **{opciones_106[origen_actual][0]}** "
+                           f"= ${opciones_106[origen_actual][1]:,.0f}")
+
+                # Tabla 105 (autorretenciones)
+                st.markdown("**Cas. 105 — Autorretenciones (cuenta 195519)**")
+                try:
+                    import pandas as pd
+                    df_105 = pd.DataFrame(concil["conciliacion_105"])
+                    if not df_105.empty:
+                        df_105.columns = ["Cuenta PUC", "Saldo contable", "Suma certificados", "Diferencia"]
+                        st.dataframe(
+                            df_105.style.format({
+                                "Saldo contable": "${:,.0f}".format,
+                                "Suma certificados": "${:,.0f}".format,
+                                "Diferencia": "${:,.0f}".format,
+                            }),
+                            use_container_width=True, hide_index=True,
+                        )
+                except Exception:
+                    pass
+                st.info(
+                    f"ℹ️ Cas. 105 se carga directo del balance: "
+                    f"**${concil['total_105_contable']:,.0f}**. "
+                    "Las autorretenciones especiales rara vez se certifican externamente — "
+                    "vienen del cálculo propio de la empresa."
+                )
+
+            # Inventario de PDFs
+            if certs_data.get("pdfs_lista"):
+                st.markdown("---")
+                st.markdown(f"**Inventario de PDFs ({len(certs_data['pdfs_lista'])} archivos)**")
+                try:
+                    import pandas as pd
+                    df_pdfs = pd.DataFrame(certs_data["pdfs_lista"])
+                    df_pdfs.columns = ["Archivo", "Tamaño (KB)", "Proveedor inferido"]
+                    st.dataframe(
+                        df_pdfs.style.format({"Tamaño (KB)": "{:.1f}".format}),
+                        use_container_width=True, hide_index=True,
+                    )
+                except Exception:
+                    pass
+
+    # ========================================================
+    # PRÓXIMAMENTE: declaración año anterior
     # ========================================================
     st.divider()
     st.subheader("📑 Próximamente")
-    st.caption(
-        "Estos cargadores se habilitarán en próximas iteraciones:"
+    st.caption("Esta funcionalidad se habilitará en próximas iteraciones:")
+    st.markdown(
+        "**Declaración de renta año anterior**  \n"
+        "Para auto-llenar Cas. 104 (saldo a favor año anterior) "
+        "directamente del Formulario 110 del año pasado."
     )
-    colP1, colP2 = st.columns(2)
-    with colP1:
-        st.markdown(
-            "**Declaración de renta año anterior**  \n"
-            "Para auto-llenar Cas. 104 (saldo a favor año anterior) "
-            "directamente del Formulario 110 del año pasado."
-        )
-    with colP2:
-        st.markdown(
-            "**Certificados de retención (ZIP)**  \n"
-            "Para conciliar las retenciones contables (cuenta 195515) "
-            "con los certificados físicos y poblar Cas. 105 y 106."
-        )
 
 
 # ============================================================
@@ -695,7 +940,8 @@ with tab_pyg:
         ("r_sfa", "saldo_favor_anterior"),
     ]
     pila_imp = st.session_state.pop("_renta_pila_imported", False)
-    just_imp = just_imported or pila_imp
+    certs_imp = st.session_state.pop("_renta_certs_imported", False)
+    just_imp = just_imported or pila_imp or certs_imp
     for wkey, dkey in _inf_widgets:
         if just_imp or wkey not in st.session_state:
             st.session_state[wkey] = float(datos["informativos"][dkey])
