@@ -280,19 +280,8 @@ with tab_datos:
                         f"Diferencia: ${diferencia:,.0f}. Revisa cuentas no mapeadas."
                     )
 
-                # IMPORTANTE: limpiar las keys de los widgets para que Streamlit
-                # tome los nuevos valores en el próximo render. Sin esto, los
-                # st.number_input siguen mostrando el valor anterior aunque el
-                # session_state base tenga los nuevos.
-                widget_keys = [
-                    "p_efec", "p_inv", "p_cxc", "p_inventarios",
-                    "p_intang", "p_biol", "p_ppe", "p_otros", "p_pasivos",
-                    "i_ord", "i_fin", "i_otros", "i_dev", "i_incrngo",
-                    "cg_costos", "cg_admin", "cg_ventas", "cg_fin", "cg_otros",
-                ]
-                for k in widget_keys:
-                    if k in st.session_state:
-                        del st.session_state[k]
+                # Las pestañas siguientes detectarán la flag _renta_just_imported
+                # y reescribirán sus session_state desde datos[] al iniciar el render.
 
                 # Guardar mensaje de éxito en session_state para que sobreviva al rerun
                 st.session_state["_renta_import_msg"] = (
@@ -300,6 +289,9 @@ with tab_datos:
                     f"{len(balance.cuentas)} cuentas. Patrimonio bruto: ${suma_36_43:,.0f}. "
                     "Revisa los valores en las pestañas siguientes."
                 )
+                # Flag para que las pestañas siguientes sepan que deben tomar
+                # los valores nuevos de datos[] en vez de session_state
+                st.session_state["_renta_just_imported"] = True
                 st.rerun()
 
             except Exception as e:
@@ -309,6 +301,10 @@ with tab_datos:
     # Mostrar mensaje persistente tras rerun
     if msg := st.session_state.pop("_renta_import_msg", None):
         st.success(msg)
+    # Limpiar flag tras un render exitoso (para que próximas ediciones manuales
+    # del usuario no se sobrescriban en el siguiente rerun)
+    if st.session_state.get("_renta_just_imported"):
+        st.session_state["_renta_just_imported"] = False
 
 
 # ============================================================
@@ -318,40 +314,52 @@ with tab_balance:
     st.subheader("Patrimonio al cierre")
     st.caption("Casillas 36 a 46 del Formulario 110")
 
+    # Mapeo (widget_key, datos_key). Sincronizamos session_state desde datos[]
+    # ANTES de renderizar los widgets, para que tras un import los inputs
+    # muestren los valores nuevos en lugar de los anteriores cacheados.
+    _pat_widgets = [
+        ("p_efec", "efectivo"), ("p_inv", "inversiones"),
+        ("p_cxc", "cxc"), ("p_inventarios", "inventarios"),
+        ("p_intang", "intangibles"), ("p_biol", "biologicos"),
+        ("p_ppe", "ppe"), ("p_otros", "otros_activos"),
+        ("p_pasivos", "pasivos"),
+    ]
+    for wkey, dkey in _pat_widgets:
+        if st.session_state.get("_renta_just_imported"):
+            st.session_state[wkey] = float(datos["patrimonio"][dkey])
+        elif wkey not in st.session_state:
+            st.session_state[wkey] = float(datos["patrimonio"][dkey])
+
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Activos corrientes**")
-        datos["patrimonio"]["efectivo"] = st.number_input(
-            "Cas. 36 — Efectivo y equivalentes",
-            value=float(datos["patrimonio"]["efectivo"]), step=1000.0, format="%.2f", key="p_efec")
-        datos["patrimonio"]["inversiones"] = st.number_input(
-            "Cas. 37 — Inversiones",
-            value=float(datos["patrimonio"]["inversiones"]), step=1000.0, format="%.2f", key="p_inv")
-        datos["patrimonio"]["cxc"] = st.number_input(
-            "Cas. 38 — Cuentas y documentos por cobrar",
-            value=float(datos["patrimonio"]["cxc"]), step=1000.0, format="%.2f", key="p_cxc")
-        datos["patrimonio"]["inventarios"] = st.number_input(
-            "Cas. 39 — Inventarios",
-            value=float(datos["patrimonio"]["inventarios"]), step=1000.0, format="%.2f", key="p_inventarios")
+        st.number_input("Cas. 36 — Efectivo y equivalentes",
+            step=1000.0, format="%.2f", key="p_efec")
+        st.number_input("Cas. 37 — Inversiones",
+            step=1000.0, format="%.2f", key="p_inv")
+        st.number_input("Cas. 38 — Cuentas y documentos por cobrar",
+            step=1000.0, format="%.2f", key="p_cxc")
+        st.number_input("Cas. 39 — Inventarios",
+            step=1000.0, format="%.2f", key="p_inventarios")
     with col2:
         st.markdown("**Activos no corrientes**")
-        datos["patrimonio"]["intangibles"] = st.number_input(
-            "Cas. 40 — Intangibles",
-            value=float(datos["patrimonio"]["intangibles"]), step=1000.0, format="%.2f", key="p_intang")
-        datos["patrimonio"]["biologicos"] = st.number_input(
-            "Cas. 41 — Activos biológicos",
-            value=float(datos["patrimonio"]["biologicos"]), step=1000.0, format="%.2f", key="p_biol")
-        datos["patrimonio"]["ppe"] = st.number_input(
-            "Cas. 42 — Propiedades, planta y equipo",
-            value=float(datos["patrimonio"]["ppe"]), step=1000.0, format="%.2f", key="p_ppe")
-        datos["patrimonio"]["otros_activos"] = st.number_input(
-            "Cas. 43 — Otros activos",
-            value=float(datos["patrimonio"]["otros_activos"]), step=1000.0, format="%.2f", key="p_otros")
+        st.number_input("Cas. 40 — Intangibles",
+            step=1000.0, format="%.2f", key="p_intang")
+        st.number_input("Cas. 41 — Activos biológicos",
+            step=1000.0, format="%.2f", key="p_biol")
+        st.number_input("Cas. 42 — Propiedades, planta y equipo",
+            step=1000.0, format="%.2f", key="p_ppe")
+        st.number_input("Cas. 43 — Otros activos",
+            step=1000.0, format="%.2f", key="p_otros")
 
     st.divider()
-    datos["patrimonio"]["pasivos"] = st.number_input(
-        "Cas. 45 — Pasivos",
-        value=float(datos["patrimonio"]["pasivos"]), step=1000.0, format="%.2f", key="p_pasivos")
+    st.number_input("Cas. 45 — Pasivos",
+        step=1000.0, format="%.2f", key="p_pasivos")
+
+    # Después de renderizar, copiar valores desde session_state a datos[]
+    # para que persistan entre tabs y reruns.
+    for wkey, dkey in _pat_widgets:
+        datos["patrimonio"][dkey] = float(st.session_state[wkey])
 
     p = datos["patrimonio"]
     total_pb = (p["efectivo"] + p["inversiones"] + p["cxc"] + p["inventarios"] +
@@ -367,41 +375,60 @@ with tab_balance:
 # TAB 3: INGRESOS Y GASTOS
 # ============================================================
 with tab_pyg:
+    # Sincronización pre-render para que tras un import los inputs se actualicen
+    _ing_widgets = [
+        ("i_ord", "ingresos_ordinarios"), ("i_fin", "ingresos_financieros"),
+        ("i_otros", "otros_ingresos"), ("i_dev", "devoluciones"),
+        ("i_incrngo", "incrngo"),
+    ]
+    _cg_widgets = [
+        ("cg_costos", "costos"), ("cg_admin", "gastos_administracion"),
+        ("cg_vtas", "gastos_ventas"), ("cg_fin", "gastos_financieros"),
+        ("cg_otros", "otros_gastos"),
+    ]
+    just_imported = st.session_state.get("_renta_just_imported", False)
+    for wkey, dkey in _ing_widgets:
+        if just_imported:
+            st.session_state[wkey] = float(datos["ingresos"][dkey])
+        elif wkey not in st.session_state:
+            st.session_state[wkey] = float(datos["ingresos"][dkey])
+    for wkey, dkey in _cg_widgets:
+        if just_imported:
+            st.session_state[wkey] = float(datos["costos_gastos"][dkey])
+        elif wkey not in st.session_state:
+            st.session_state[wkey] = float(datos["costos_gastos"][dkey])
+
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Ingresos**")
-        datos["ingresos"]["ingresos_ordinarios"] = st.number_input(
-            "Cas. 47 — Ingresos brutos actividades ordinarias",
-            value=float(datos["ingresos"]["ingresos_ordinarios"]), step=1000.0, format="%.2f", key="i_ord")
-        datos["ingresos"]["ingresos_financieros"] = st.number_input(
-            "Cas. 48 — Ingresos financieros",
-            value=float(datos["ingresos"]["ingresos_financieros"]), step=1000.0, format="%.2f", key="i_fin")
-        datos["ingresos"]["otros_ingresos"] = st.number_input(
-            "Cas. 57 — Otros ingresos",
-            value=float(datos["ingresos"]["otros_ingresos"]), step=1000.0, format="%.2f", key="i_otros")
-        datos["ingresos"]["devoluciones"] = st.number_input(
-            "Cas. 59 — Devoluciones, rebajas y descuentos",
-            value=float(datos["ingresos"]["devoluciones"]), step=1000.0, format="%.2f", key="i_dev")
-        datos["ingresos"]["incrngo"] = st.number_input(
-            "Cas. 60 — Ingresos no constitutivos de renta",
-            value=float(datos["ingresos"]["incrngo"]), step=1000.0, format="%.2f", key="i_incrngo")
+        st.number_input("Cas. 47 — Ingresos brutos actividades ordinarias",
+            step=1000.0, format="%.2f", key="i_ord")
+        st.number_input("Cas. 48 — Ingresos financieros",
+            step=1000.0, format="%.2f", key="i_fin")
+        st.number_input("Cas. 57 — Otros ingresos",
+            step=1000.0, format="%.2f", key="i_otros")
+        st.number_input("Cas. 59 — Devoluciones, rebajas y descuentos",
+            step=1000.0, format="%.2f", key="i_dev")
+        st.number_input("Cas. 60 — Ingresos no constitutivos de renta",
+            step=1000.0, format="%.2f", key="i_incrngo")
     with col2:
         st.markdown("**Costos y deducciones**")
-        datos["costos_gastos"]["costos"] = st.number_input(
-            "Cas. 62 — Costos",
-            value=float(datos["costos_gastos"]["costos"]), step=1000.0, format="%.2f", key="cg_costos")
-        datos["costos_gastos"]["gastos_administracion"] = st.number_input(
-            "Cas. 63 — Gastos de administración",
-            value=float(datos["costos_gastos"]["gastos_administracion"]), step=1000.0, format="%.2f", key="cg_admin")
-        datos["costos_gastos"]["gastos_ventas"] = st.number_input(
-            "Cas. 64 — Gastos de distribución y ventas",
-            value=float(datos["costos_gastos"]["gastos_ventas"]), step=1000.0, format="%.2f", key="cg_vtas")
-        datos["costos_gastos"]["gastos_financieros"] = st.number_input(
-            "Cas. 65 — Gastos financieros",
-            value=float(datos["costos_gastos"]["gastos_financieros"]), step=1000.0, format="%.2f", key="cg_fin")
-        datos["costos_gastos"]["otros_gastos"] = st.number_input(
-            "Cas. 66 — Otros gastos",
-            value=float(datos["costos_gastos"]["otros_gastos"]), step=1000.0, format="%.2f", key="cg_otros")
+        st.number_input("Cas. 62 — Costos",
+            step=1000.0, format="%.2f", key="cg_costos")
+        st.number_input("Cas. 63 — Gastos de administración",
+            step=1000.0, format="%.2f", key="cg_admin")
+        st.number_input("Cas. 64 — Gastos de distribución y ventas",
+            step=1000.0, format="%.2f", key="cg_vtas")
+        st.number_input("Cas. 65 — Gastos financieros",
+            step=1000.0, format="%.2f", key="cg_fin")
+        st.number_input("Cas. 66 — Otros gastos",
+            step=1000.0, format="%.2f", key="cg_otros")
+
+    # Copiar de vuelta a datos[] tras el render
+    for wkey, dkey in _ing_widgets:
+        datos["ingresos"][dkey] = float(st.session_state[wkey])
+    for wkey, dkey in _cg_widgets:
+        datos["costos_gastos"][dkey] = float(st.session_state[wkey])
 
     st.divider()
     st.markdown("**Datos informativos (33-35)**")
