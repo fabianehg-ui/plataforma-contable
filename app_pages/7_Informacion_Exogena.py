@@ -734,10 +734,12 @@ with tab_clasificar:
                         ReglaCapa3(
                             codigo_cuenta=r["codigo_cuenta"],
                             nit=r.get("nit"),
-                            formato_dian=r["formato_dian"],
+                            formato_dian=r.get("formato_dian"),
                             concepto_dian=r.get("concepto_dian"),
                             nota=r.get("nota", ""),
                             id=r.get("id"),
+                            excluir=bool(r.get("excluir", False)),
+                            motivo_exclusion=r.get("motivo_exclusion"),
                         ) for r in capa3_data
                     ]
 
@@ -1118,8 +1120,10 @@ with tab_conciliacion:
                     concepto_dian=r["concepto_dian"], cuenta_inicial=r["cuenta_inicial"],
                     cuenta_final=r["cuenta_final"]) for r in capa2_data]
                 reglas_c3 = [ReglaCapa3(codigo_cuenta=r["codigo_cuenta"],
-                    nit=r.get("nit"), formato_dian=r["formato_dian"],
-                    concepto_dian=r.get("concepto_dian")) for r in capa3_data]
+                    nit=r.get("nit"), formato_dian=r.get("formato_dian"),
+                    concepto_dian=r.get("concepto_dian"),
+                    excluir=bool(r.get("excluir", False)),
+                    motivo_exclusion=r.get("motivo_exclusion")) for r in capa3_data]
 
                 # Cargar movimientos clasificados
                 movs_data = sb.table("exogena_balance").select("*").eq(
@@ -1399,8 +1403,10 @@ with tab_conciliacion:
                         concepto_dian=r["concepto_dian"], cuenta_inicial=r["cuenta_inicial"],
                         cuenta_final=r["cuenta_final"]) for r in capa2_data]
                     reglas_c3 = [ReglaCapa3(codigo_cuenta=r["codigo_cuenta"],
-                        nit=r.get("nit"), formato_dian=r["formato_dian"],
-                        concepto_dian=r.get("concepto_dian")) for r in capa3_data]
+                        nit=r.get("nit"), formato_dian=r.get("formato_dian"),
+                        concepto_dian=r.get("concepto_dian"),
+                        excluir=bool(r.get("excluir", False)),
+                        motivo_exclusion=r.get("motivo_exclusion")) for r in capa3_data]
 
                     # Cargar movimientos
                     movs_data = sb.table("exogena_balance").select("*").eq(
@@ -1618,8 +1624,10 @@ with tab_conciliacion:
                                 concepto_dian=r["concepto_dian"], cuenta_inicial=r["cuenta_inicial"],
                                 cuenta_final=r["cuenta_final"]) for r in capa2_data]
                             reglas_c3 = [ReglaCapa3(codigo_cuenta=r["codigo_cuenta"],
-                                nit=r.get("nit"), formato_dian=r["formato_dian"],
-                                concepto_dian=r.get("concepto_dian")) for r in capa3_data]
+                                nit=r.get("nit"), formato_dian=r.get("formato_dian"),
+                                concepto_dian=r.get("concepto_dian"),
+                                excluir=bool(r.get("excluir", False)),
+                                motivo_exclusion=r.get("motivo_exclusion")) for r in capa3_data]
 
                             movimientos = [Movimiento(
                                 codigo_cuenta=m["codigo_cuenta"], nit=m.get("nit"),
