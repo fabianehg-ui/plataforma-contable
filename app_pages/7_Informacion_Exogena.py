@@ -778,9 +778,15 @@ with tab_clasificar:
                     for mc in movs_clasif:
                         por_capa[mc.capa_resolucion] = por_capa.get(mc.capa_resolucion, 0) + 1
 
-                    # Distribución por formato
+                    # Distribución por formato (sin contar exclusiones)
                     por_formato = {}
                     for mc in movs_clasif:
+                        # Exclusiones manuales (capa 3 con excluir=TRUE) y "999999" legacy
+                        # no se cuentan como un formato; van en su propia métrica.
+                        if mc.capa_resolucion == 'excluido_manual':
+                            continue
+                        if mc.formato_dian == '999999':
+                            continue
                         if mc.formato_dian:
                             por_formato.setdefault(mc.formato_dian, {"movs": 0, "valor": 0.0})
                             por_formato[mc.formato_dian]["movs"] += 1
@@ -1033,15 +1039,22 @@ with tab_clasificar:
                                     ).eq("año_gravable", año_gravable).eq(
                                         "codigo_cuenta", dec["cuenta"]
                                     ).is_("nit", "null").execute()
-                                    # Insertar nueva
+                                    # Construir el registro: si "999999" ⇒ exclusión con convención nueva
+                                    es_excluida = dec["formato"] == "999999"
+                                    motivo = (
+                                        "🚫 Marcada como 'No aplica' desde dictamen"
+                                        if es_excluida else None
+                                    )
                                     sb.table("exogena_mapeo_manual").insert({
                                         "empresa_id": empresa["id"],
                                         "año_gravable": año_gravable,
                                         "codigo_cuenta": dec["cuenta"],
                                         "nit": None,
-                                        "formato_dian": dec["formato"],
-                                        "concepto_dian": dec["concepto"],
-                                        "nota": "Asignado manualmente desde dictamen" if dec["formato"] != "999999" else "No aplica",
+                                        "formato_dian": None if es_excluida else dec["formato"],
+                                        "concepto_dian": None if es_excluida else dec["concepto"],
+                                        "excluir": es_excluida,
+                                        "motivo_exclusion": motivo,
+                                        "nota": motivo if es_excluida else "Asignado manualmente desde dictamen",
                                     }).execute()
                                 except Exception as e:
                                     errores_guardado.append(f"{dec['cuenta']}: {str(e)[:80]}")
