@@ -1455,6 +1455,8 @@ with tab_conciliacion:
                             'creditos': mov_orig.creditos if mov_orig else 0,
                             'formato_dian': mc.formato_dian,
                             'concepto_dian': mc.concepto_dian,
+                            'capa_resolucion': mc.capa_resolucion,
+                            'nota': mc.nota,
                         })
 
                     # Cargar PILA consolidada (si existe)
@@ -1670,6 +1672,8 @@ with tab_conciliacion:
                                     'creditos': mov_orig.creditos if mov_orig else 0,
                                     'formato_dian': mc.formato_dian,
                                     'concepto_dian': mc.concepto_dian,
+                                    'capa_resolucion': mc.capa_resolucion,
+                                    'nota': mc.nota,
                                 })
 
                             # Convertir todos_movs a dict simple
