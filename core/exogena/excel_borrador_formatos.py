@@ -71,8 +71,8 @@ NOMBRES_FORMATOS = {
     '1001': '1001 - Pagos o abonos en cuenta y retenciones practicadas',
     '1003': '1003 - Retenciones en la fuente que le practicaron',
     '1004': '1004 - Descuentos tributarios solicitados',
-    '1005': '1005 - Impuesto a las ventas por pagar',
-    '1006': '1006 - Impuesto a las ventas por pagar - generado',
+    '1005': '1005 - IVA descontable',
+    '1006': '1006 - IVA generado',
     '1007': '1007 - Ingresos recibidos',
     '1008': '1008 - Saldos de cuentas por cobrar',
     '1009': '1009 - Saldos de cuentas por pagar',
@@ -533,9 +533,18 @@ def _construir_hoja_no_reportadas(wb, todos_movimientos, movs_clasificados):
     
     # Identificar cuentas no reportadas
     cuentas_reportadas = set()
+    # Mapeo cuenta → motivo legible cuando hay exclusión manual explícita (capa 3, excluir=True)
+    motivos_exclusion_manual: dict = {}
     for m in movs_clasificados:
-        if m.get('formato_dian') and m.get('formato_dian') != '999999':
+        fmt = m.get('formato_dian')
+        capa = m.get('capa_resolucion', '')
+        if fmt and fmt != '999999':
             cuentas_reportadas.add(str(m.get('codigo_cuenta', '')).strip())
+        elif capa == 'excluido_manual':
+            cta = str(m.get('codigo_cuenta', '')).strip()
+            nota = (m.get('nota') or '').strip()
+            if cta and nota and cta not in motivos_exclusion_manual:
+                motivos_exclusion_manual[cta] = nota
     
     # Agrupar todos los movimientos por cuenta (los que no están reportados)
     no_reportadas = defaultdict(lambda: {
@@ -561,7 +570,13 @@ def _construir_hoja_no_reportadas(wb, todos_movimientos, movs_clasificados):
         if m.get('nit'):
             c['nits'].add(m['nit'])
         if not c['motivo']:
-            c['motivo'], c['orden'] = _clasificar_motivo_no_reporte(cuenta, nombre)
+            # Prioridad 1: regla manual de capa 3 con excluir=TRUE y motivo legible
+            if cuenta in motivos_exclusion_manual:
+                c['motivo'] = motivos_exclusion_manual[cuenta]
+                c['orden'] = 1   # mismo grupo de "excluida explícita"
+            else:
+                # Prioridad 2: clasificación automática por patrón de cuenta
+                c['motivo'], c['orden'] = _clasificar_motivo_no_reporte(cuenta, nombre)
     
     # Agrupar por motivo
     grupos = defaultdict(list)
