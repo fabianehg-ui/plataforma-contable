@@ -1752,7 +1752,15 @@ with tab_envios:
     )
 
 
-with tab_mapeo:
-    st.subheader("🗂️ Mapeo nativo")
-    # ... código existente del upload del archivo de Codificación ...
-    # ... botón "Guardar reglas en BD" ...
+# ============================================================
+    # Editor de Reglas — agregado en sesión del 7 mayo 2026
+    # ============================================================
+    from core.exogena.ui_editor_reglas import render_editor
+    render_editor(
+        sb=sb,
+        empresa_id=empresa['id'],
+        empresa_nombre=empresa['razon_social'],
+        usuario=user.get('email', 'desconocido'),
+        año_gravable=2025,
+    )
+    
