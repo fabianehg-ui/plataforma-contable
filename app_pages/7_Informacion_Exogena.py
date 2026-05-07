@@ -620,13 +620,68 @@ with tab_balance:
                 sb = get_supabase()
                 # 1. Crear o usar periodo
                 periodo = crear_periodo_si_no_existe(empresa["id"], año_gravable)
-                
-                # 2. Limpiar balance previo del periodo (si lo hubiera)
-                sb.table("exogena_balance").delete().eq(
-                    "periodo_id", periodo["id"]
-                ).execute()
 
-                # 3. Insertar movimientos en lotes
+                # ============================================================
+                # 2. Limpieza en cascada del periodo
+                #    Importante: borrar las tablas dependientes ANTES del balance
+                #    para evitar referencias colgadas. Orden:
+                #      a) Movimientos clasificados (apuntan a balance_id)
+                #      b) Decisiones manuales pendientes (si las hubiera)
+                #      c) Conciliaciones (PILA, GMF) si existen
+                #      d) Por último, exogena_balance
+                # ============================================================
+                try:
+                    # Contar lo que vamos a borrar para feedback
+                    n_balance_old = sb.table("exogena_balance").select(
+                        "id", count="exact"
+                    ).eq("periodo_id", periodo["id"]).execute().count or 0
+
+                    n_movs_old = 0
+                    try:
+                        n_movs_old = sb.table("exogena_movimientos_clasificados").select(
+                            "id", count="exact"
+                        ).eq("periodo_id", periodo["id"]).execute().count or 0
+                    except Exception:
+                        # Si la tabla no existe o no tiene esa columna, ignorar
+                        pass
+
+                    # 2a. Movimientos clasificados (clasificación se reinicia)
+                    try:
+                        sb.table("exogena_movimientos_clasificados").delete().eq(
+                            "periodo_id", periodo["id"]
+                        ).execute()
+                    except Exception as e_cls:
+                        st.warning(f"⚠️ No se pudieron borrar movimientos clasificados: {e_cls}")
+
+                    # 2b. Conciliaciones PILA/GMF si existen
+                    for tabla_dep in ["exogena_conciliacion_pila",
+                                      "exogena_conciliacion_gmf",
+                                      "exogena_conciliacion_ajustes"]:
+                        try:
+                            sb.table(tabla_dep).delete().eq(
+                                "periodo_id", periodo["id"]
+                            ).execute()
+                        except Exception:
+                            pass  # Tabla puede no existir, OK
+
+                    # 2c. Balance previo
+                    sb.table("exogena_balance").delete().eq(
+                        "periodo_id", periodo["id"]
+                    ).execute()
+
+                    if n_balance_old > 0 or n_movs_old > 0:
+                        st.info(
+                            f"🧹 Limpieza previa: {n_balance_old:,} filas de balance "
+                            f"y {n_movs_old:,} movimientos clasificados borrados."
+                        )
+
+                except Exception as e_clean:
+                    st.error(f"❌ Error en limpieza previa: {e_clean}")
+                    st.stop()
+
+                # ============================================================
+                # 3. Insertar movimientos en lotes — con manejo de errores
+                # ============================================================
                 LOTE = 200
                 registros = [{
                     "periodo_id": periodo["id"],
@@ -641,7 +696,7 @@ with tab_balance:
                     "es_totalizador": False,
                     "fila_origen": m.fila_origen,
                 } for m in res_bal.movimientos]
-                
+
                 # También guardar totalizadores de nivel alto (1, 2 dígitos) para validación
                 registros += [{
                     "periodo_id": periodo["id"],
@@ -657,12 +712,49 @@ with tab_balance:
                     "fila_origen": t.fila_origen,
                 } for t in res_bal.totalizadores if t.nivel <= 4]
 
-                for i in range(0, len(registros), LOTE):
-                    sb.table("exogena_balance").insert(registros[i:i+LOTE]).execute()
+                # Insertar con manejo de errores por lote
+                total_lotes = (len(registros) + LOTE - 1) // LOTE
+                lotes_ok = 0
+                errores_insert = []
+                progress = st.progress(0, text="Guardando balance...")
 
+                for i in range(0, len(registros), LOTE):
+                    try:
+                        sb.table("exogena_balance").insert(registros[i:i+LOTE]).execute()
+                        lotes_ok += 1
+                    except Exception as e_ins:
+                        errores_insert.append(f"Lote {i//LOTE + 1}: {str(e_ins)[:200]}")
+                    progress.progress(
+                        min(1.0, (i + LOTE) / max(1, len(registros))),
+                        text=f"Guardando lote {lotes_ok}/{total_lotes}...",
+                    )
+
+                progress.empty()
                 obtener_periodo.clear()
-                st.success(f"✅ Balance guardado: {len(res_bal.movimientos)} movimientos + "
-                           f"{sum(1 for r in registros if r['es_totalizador'])} totalizadores")
+
+                # ============================================================
+                # 4. Feedback al usuario — claro y verificable
+                # ============================================================
+                if errores_insert:
+                    st.error(
+                        f"❌ Hubo errores al guardar {len(errores_insert)} de {total_lotes} lotes."
+                    )
+                    with st.expander(f"Ver {len(errores_insert)} errores"):
+                        for err in errores_insert[:20]:
+                            st.text(err)
+                else:
+                    n_movs = len(res_bal.movimientos)
+                    n_tot = sum(1 for r in registros if r['es_totalizador'])
+                    st.success(
+                        f"✅ Balance guardado correctamente: "
+                        f"{n_movs:,} movimientos + {n_tot:,} totalizadores "
+                        f"({len(registros):,} filas en {total_lotes} lotes)."
+                    )
+                    if n_balance_old > 0 or n_movs_old > 0:
+                        st.caption(
+                            f"♻️ Reemplazó {n_balance_old:,} filas de balance anterior "
+                            f"y {n_movs_old:,} movimientos clasificados (clasificación reiniciada)."
+                        )
                 st.rerun()
 
         except Exception as e:
