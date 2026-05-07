@@ -287,6 +287,36 @@ with tab_mapeo:
         except Exception as e:
             st.error(f"❌ Error parseando archivo: {e}")
 
+    # ============================================================
+    # Editor de Reglas — agregado en sesión del 7 mayo 2026
+    # Permite editar Capa 1 (global) y Capa 3 (override por empresa)
+    # ============================================================
+    try:
+        from core.exogena.ui_editor_reglas import render_editor
+
+        # Obtener email del usuario autenticado desde Supabase Auth
+        sb_local = get_supabase()
+        try:
+            _user_resp = sb_local.auth.get_user()
+            _user_email = (
+                _user_resp.user.email
+                if _user_resp and getattr(_user_resp, "user", None)
+                else "desconocido"
+            )
+        except Exception:
+            _user_email = "desconocido"
+
+        render_editor(
+            sb=sb_local,
+            empresa_id=empresa["id"],
+            empresa_nombre=empresa.get("razon_social", "Empresa"),
+            usuario=_user_email,
+            año_gravable=año_gravable,
+        )
+    except Exception as e:
+        st.error(f"⚠️ Error cargando el Editor de Reglas: {e}")
+        st.caption("Si persiste, revisar logs de Railway.")
+
 
 # ============================================================
 # Tab: Terceros
@@ -1745,16 +1775,4 @@ with tab_envios:
             "UI de descarga individual y ZIP completo",
             "Marca de envío aceptado por DIAN con número de radicado",
         ],
-    )
-
-# ============================================================
-    # Editor de Reglas — agregado en sesión del 7 mayo 2026
-    # ============================================================
-    from core.exogena.ui_editor_reglas import render_editor
-    render_editor(
-        sb=sb,
-        empresa_id=empresa['id'],
-        empresa_nombre=empresa['razon_social'],
-        usuario=user.get('email', 'desconocido'),
-        año_gravable=2025,
     )
