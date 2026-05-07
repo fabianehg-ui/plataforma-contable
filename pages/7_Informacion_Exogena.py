@@ -1750,3 +1750,9 @@ with tab_envios:
             "Marca de envío aceptado por DIAN con número de radicado",
         ],
     )
+
+
+with tab_mapeo:
+    st.subheader("🗂️ Mapeo nativo")
+    # ... código existente del upload del archivo de Codificación ...
+    # ... botón "Guardar reglas en BD" ...
