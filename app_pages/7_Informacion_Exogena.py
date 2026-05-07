@@ -735,27 +735,56 @@ with tab_balance:
                 # ============================================================
                 # 4. Feedback al usuario — claro y verificable
                 # ============================================================
+                # Verificar lo que QUEDÓ realmente en BD (la prueba definitiva)
+                try:
+                    n_real_bd = sb.table("exogena_balance").select(
+                        "id", count="exact"
+                    ).eq("periodo_id", periodo["id"]).execute().count or 0
+                except Exception:
+                    n_real_bd = -1  # No se pudo verificar
+
+                obtener_periodo.clear()
+
                 if errores_insert:
                     st.error(
                         f"❌ Hubo errores al guardar {len(errores_insert)} de {total_lotes} lotes."
                     )
+                    st.caption(
+                        f"Se guardaron {len(registros) - len(errores_insert)*LOTE} de "
+                        f"{len(registros)} registros previstos. "
+                        f"En BD quedaron {n_real_bd:,} filas."
+                    )
                     with st.expander(f"Ver {len(errores_insert)} errores"):
                         for err in errores_insert[:20]:
                             st.text(err)
+                elif n_real_bd == 0:
+                    # Lotes_ok dice que sí, pero BD dice que no — error silencioso
+                    st.error(
+                        "❌ Algo raro pasó: la BD no recibió ningún registro aunque "
+                        "los lotes parecían procesarse. Posible RLS bloqueando inserts. "
+                        "Revisar permisos en Supabase."
+                    )
+                elif n_real_bd != len(registros):
+                    # Hay desfase — guardó parcial
+                    st.warning(
+                        f"⚠️ Guardado parcial: se intentaron insertar {len(registros):,} filas "
+                        f"pero en BD quedaron {n_real_bd:,}. Diferencia: {len(registros) - n_real_bd:,}."
+                    )
                 else:
                     n_movs = len(res_bal.movimientos)
                     n_tot = sum(1 for r in registros if r['es_totalizador'])
                     st.success(
                         f"✅ Balance guardado correctamente: "
                         f"{n_movs:,} movimientos + {n_tot:,} totalizadores "
-                        f"({len(registros):,} filas en {total_lotes} lotes)."
+                        f"({n_real_bd:,} filas en BD)."
                     )
                     if n_balance_old > 0 or n_movs_old > 0:
                         st.caption(
                             f"♻️ Reemplazó {n_balance_old:,} filas de balance anterior "
                             f"y {n_movs_old:,} movimientos clasificados (clasificación reiniciada)."
                         )
-                st.rerun()
+                # NOTA: NO hacer st.rerun() aquí — borraría el mensaje verde.
+                # El usuario verá el resultado y puede navegar a otro tab cuando quiera.
 
         except Exception as e:
             st.error(f"❌ Error procesando balance: {e}")
