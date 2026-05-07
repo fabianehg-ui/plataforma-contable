@@ -104,18 +104,22 @@ def listar_conceptos_de_formato(
     """
     Lista los conceptos DIAN disponibles para un formato dado, desde el catálogo oficial.
     Útil para los dropdowns de edición.
+
+    Nota: la columna real en BD se llama 'codigo_concepto' pero la mapeamos
+    a 'concepto_dian' en la salida para que el resto del código sea consistente.
+
     Devuelve: [{concepto_dian, descripcion}, ...]
     """
     res = sb.table('exogena_cat_concepto_formato') \
-        .select('concepto_dian, descripcion') \
+        .select('codigo_concepto, descripcion') \
         .eq('formato_dian', formato_dian) \
         .eq('año_gravable', año_gravable) \
-        .order('concepto_dian') \
+        .order('codigo_concepto') \
         .execute()
 
     return [
         {
-            'concepto_dian': r['concepto_dian'],
+            'concepto_dian': r['codigo_concepto'],
             'descripcion': r.get('descripcion', ''),
         }
         for r in (res.data or [])
