@@ -1737,6 +1737,23 @@ with tab_conciliacion:
                             use_container_width=False,
                         )
 
+    # ============================================================
+    # Conciliación Enriquecida — agregada en sesión del 7 mayo 2026
+    # Tabla detallada por (formato, concepto) con balance vs reportado
+    # ============================================================
+    try:
+        from core.exogena.ui_conciliacion_enriquecida import render_conciliacion_enriquecida
+
+        sb_local_cce = get_supabase()
+        render_conciliacion_enriquecida(
+            sb=sb_local_cce,
+            empresa_id=empresa["id"],
+            empresa_nombre=empresa.get("razon_social", "Empresa"),
+            año_gravable=año_gravable,
+        )
+    except Exception as e:
+        st.error(f"⚠️ Error cargando Conciliación Enriquecida: {e}")
+
 
 # ============================================================
 # Tab: Generar XML
