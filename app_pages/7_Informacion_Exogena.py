@@ -1746,3 +1746,15 @@ with tab_envios:
             "Marca de envío aceptado por DIAN con número de radicado",
         ],
     )
+
+# ============================================================
+    # Editor de Reglas — agregado en sesión del 7 mayo 2026
+    # ============================================================
+    from core.exogena.ui_editor_reglas import render_editor
+    render_editor(
+        sb=sb,
+        empresa_id=empresa['id'],
+        empresa_nombre=empresa['razon_social'],
+        usuario=user.get('email', 'desconocido'),
+        año_gravable=2025,
+    )
