@@ -18,9 +18,14 @@ Requiere: pdfplumber
 from __future__ import annotations
 import io
 import re
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    # Solo se importa para chequeo de tipos; no afecta runtime ni
+    # requiere streamlit instalado para que el módulo se pueda importar.
+    from streamlit.runtime.uploaded_file_manager import UploadedFile  # noqa: F401
 
 
 def extraer_pila(archivo_pdf: Union[bytes, io.BytesIO, "UploadedFile"]) -> dict:
