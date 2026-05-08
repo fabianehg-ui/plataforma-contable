@@ -96,13 +96,20 @@ class ReglaCapa2:
 
 @dataclass
 class ReglaCapa3:
-    """Override manual (capa 3): cuenta + NIT específico."""
+    """Override manual (capa 3): cuenta + NIT específico.
+
+    Si excluir=True, la cuenta NO se reporta. En ese caso formato_dian y
+    concepto_dian son None y motivo_exclusion debe traer el texto legible
+    que aparecerá en la hoja "Cuentas no reportadas" del borrador.
+    """
     codigo_cuenta: str
     nit: Optional[str]
-    formato_dian: str
+    formato_dian: Optional[str]
     concepto_dian: Optional[int]
     nota: str = ''
     id: Optional[int] = None
+    excluir: bool = False
+    motivo_exclusion: Optional[str] = None
 
 
 @dataclass
@@ -184,11 +191,18 @@ SUBCUENTAS_2365_TRASLADOS = '236599'              # → NO reporta (pago a DIAN)
 CONCEPTO_DIAN_EXCESO_AÑO_ANTERIOR = 5028          # F1001 concepto especial
 
 # Cuentas que generan registro propio en F1003 (retenciones a favor)
+# IMPORTANTE: estas reglas son fallback genérico cuando no hay regla en capa 2 o 3.
+# La capa 2 (mapeo por rangos) y capa 3 (manual) tienen prioridad.
+#
+# Nota conceptual:
+#   - 135515 / 195515: Retefuente que le practicaron a la empresa
+#   - 240825: RETEIVA practicado a la empresa (concepto 1309 según Res. DIAN AG 2025)
+#   - 240810 NO va aquí: es IVA DESCONTABLE → F1005 (lo manejan capa 1/2)
+#   - 2408 (raíz) se quitó porque es ambiguo con 240810 / 240815 / 240825 etc.
 CUENTAS_F1003 = {
     '135515': {'columna': 'debitos_netos', 'descripcion': 'Retefuente activo'},
     '195515': {'columna': 'debitos_netos', 'descripcion': 'Retefuente diferido (Db - Cr)'},
-    '240810': {'columna': 'creditos', 'descripcion': 'ReteIVA pasivo'},
-    '2408':   {'columna': 'creditos', 'descripcion': 'ReteIVA pasivo'},
+    '240825': {'columna': 'creditos', 'descripcion': 'ReteIVA practicado a la empresa'},
 }
 
 # Por formato, qué columna del balance se usa para el valor
@@ -702,7 +716,31 @@ class MotorClasificacion:
         # CAPA 3: override manual (siempre gana)
         capa3 = self._buscar_capa3(mov.codigo_cuenta, mov.nit)
         if capa3:
+            # Si alguna regla dice "excluir", se omite el reporte y se documenta el motivo.
+            # La exclusión gana sobre cualquier override positivo concurrente.
+            regla_excluyente = next((r for r in capa3 if r.excluir), None)
+            if regla_excluyente is not None:
+                motivo = (regla_excluyente.motivo_exclusion
+                          or regla_excluyente.nota
+                          or '🚫 Excluida por regla manual')
+                resultados.append(MovimientoClasificado(
+                    codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                    formato_dian='', concepto_dian=None,
+                    valor=abs(mov.debitos or mov.creditos or mov.saldo_final),
+                    base_aplicable='',
+                    capa_resolucion='excluido_manual',
+                    regla_id=regla_excluyente.id,
+                    requiere_revision=False,
+                    nota=motivo,
+                    balance_id=mov.balance_id,
+                ))
+                return resultados
+
             for r in capa3:
+                if not r.formato_dian:
+                    # Defensa: regla mal formada (sin formato y sin marca de exclusión).
+                    # Se trata como exclusión silenciosa para no romper el motor.
+                    continue
                 valor, base = self._valor_para_formato(mov, r.formato_dian)
                 resultados.append(MovimientoClasificado(
                     codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
@@ -716,24 +754,36 @@ class MotorClasificacion:
                     nota=f'Override manual: {r.nota}' if r.nota else 'Override manual',
                     balance_id=mov.balance_id,
                 ))
-            return resultados
+            if resultados:
+                return resultados
 
-        # REGLAS ESPECIALES (incluyen exclusión cuenta 6, 2365, F1003, activos, inventarios, cartera)
-        regla_esp = aplicar_regla_especial(mov, cuentas_6_excluidas)
-        if regla_esp is not None:
-            return [regla_esp]
+        # REGLAS ESPECIALES (incluyen exclusión cuenta 6, 2365, activos, inventarios, cartera)
+        # Nota: las reglas especiales F1003 (240825, 135515, 195515) cedan paso si
+        # hay una regla específica en capa 2 con el concepto correcto. Esto permite
+        # que la BD (capa 2) sea la fuente de verdad del concepto DIAN sin perder
+        # la lógica de "valor neto" que aplica para esas cuentas.
+        cuenta_str_pre = str(mov.codigo_cuenta).strip()
+        config_f1003_pre = _es_cuenta_f1003(cuenta_str_pre)
+        capa2_existe = bool(self._buscar_capa2(mov.codigo_cuenta)) if config_f1003_pre else False
+        if not (config_f1003_pre and capa2_existe):
+            regla_esp = aplicar_regla_especial(mov, cuentas_6_excluidas)
+            if regla_esp is not None:
+                return [regla_esp]
 
         # Si la cuenta cae en familia 14, 15, 1305-1315 pero no aplicó la regla
-        # (saldo cero, etc), NO seguir a las otras capas
-        cuenta_str = str(mov.codigo_cuenta).strip()
-        if (cuenta_str.startswith('15') and _es_cuenta_activos_fijos(cuenta_str, mov.nombre_cuenta or '')):
-            return []  # Saldo cero o negativo → no reportar
-        if (cuenta_str.startswith('14') and _es_cuenta_inventario_compra(cuenta_str, mov.nombre_cuenta or '')):
-            return []
+        # especial (saldo cero, depreciación, traslado, etc), NO seguir a las
+        # otras capas. Las cuentas 14 (inventarios) y 15 (activos fijos) son
+        # resorte EXCLUSIVO de la regla especial: si esta dijo "no reportar",
+        # capa 2 / capa 1 no deben darles otra ruta.
+        cuenta_str = cuenta_str_pre
+        if cuenta_str.startswith('15'):
+            return []  # Activos fijos: solo regla especial decide; depreciaciones se descartan
+        if cuenta_str.startswith('14'):
+            return []  # Inventarios: solo regla especial decide; traslados se descartan
         if _es_cuenta_cartera_1008(cuenta_str):
             return []
-        if _es_cuenta_f1003(cuenta_str):
-            return []  # Sin valor neto positivo
+        if _es_cuenta_f1003(cuenta_str) and not capa2_existe:
+            return []  # Sin valor neto positivo y sin regla en capa 2
 
         # CAPA 2: mapeo nativo por rangos
         capa2 = self._buscar_capa2(mov.codigo_cuenta)
@@ -816,6 +866,7 @@ class MotorClasificacion:
             'capa3': 0, 'regla_especial': 0, 'sin_resolver': 0,
             'excluido_costo_traslado': 0, 'columna_retencion': 0,
             'sin_clasificar_filtrado': 0,
+            'excluido_manual': 0,
         }
 
         for mov in movimientos:
@@ -832,6 +883,8 @@ class MotorClasificacion:
             if primera.capa_resolucion == 'sin_resolver':
                 res.sin_resolver.append(mov)
                 contador['sin_resolver'] += 1
+            elif primera.capa_resolucion == 'excluido_manual':
+                contador['excluido_manual'] += 1
             elif primera.capa_resolucion == 'mapeo_manual':
                 contador['capa3'] += 1
             elif primera.capa_resolucion == 'regla_especial_costos_traslado_conciliado':
