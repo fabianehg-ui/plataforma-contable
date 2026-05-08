@@ -293,6 +293,36 @@ def _es_2365_traslados(codigo_cuenta: str) -> bool:
     return str(codigo_cuenta).strip().startswith(SUBCUENTAS_2365_TRASLADOS)
 
 
+def _es_cuenta_traslado_excluida(codigo_cuenta: str, nombre_cuenta: str) -> bool:
+    """
+    Detecta cuentas de traslado interno que NO se reportan en NINGÚN formato.
+
+    Aplica únicamente a los grupos donde un traslado interno carece de tercero
+    real (movimiento contable entre cuentas de la propia empresa):
+      - 14xxxx  Inventarios
+      - 2408xx  IVA descontable / generado
+      - 2365xx  Retenciones practicadas
+
+    En esos grupos, si el nombre contiene la palabra "traslado" (insensible a
+    mayúsculas y acentos), el movimiento se descarta del reporte.
+
+    No aplica a cuentas de gasto/costo (5xxx/6xxx/7xxx), cartera (13xx),
+    proveedores (22xx, 23xx) ni activos fijos (15xx) aunque mencionen
+    "traslado" — esas suelen referirse a servicios reales prestados por
+    terceros y deben conservarse.
+    """
+    cuenta = str(codigo_cuenta).strip()
+    en_grupo = (
+        cuenta.startswith('14')
+        or cuenta.startswith('2408')
+        or cuenta.startswith('2365')
+    )
+    if not en_grupo:
+        return False
+    nombre_norm = _normalize_text(nombre_cuenta)
+    return 'traslado' in nombre_norm
+
+
 def _nombre_dice_compras(nombre_cuenta: str) -> bool:
     """Detecta si el nombre de una cuenta menciona explícitamente 'compras'."""
     return 'compra' in _normalize_text(nombre_cuenta)
@@ -712,6 +742,23 @@ class MotorClasificacion:
         """Clasifica un movimiento aplicando las capas en orden de prioridad."""
         resultados: list[MovimientoClasificado] = []
         cuentas_6_excluidas = cuentas_6_excluidas or set()
+
+        # GUARD UNIVERSAL: cuentas de traslado interno (inventarios, IVA, ret.
+        # practicadas) NO se reportan en ningún formato. Se documentan como
+        # excluidas por regla universal para que aparezcan en el dictamen
+        # con su motivo, sin contar contra ningún concepto DIAN.
+        if _es_cuenta_traslado_excluida(mov.codigo_cuenta, mov.nombre_cuenta or ''):
+            resultados.append(MovimientoClasificado(
+                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                formato_dian='', concepto_dian=None,
+                valor=abs(mov.debitos or mov.creditos or mov.saldo_final),
+                base_aplicable='',
+                capa_resolucion='excluido_traslado_universal',
+                requiere_revision=False,
+                nota='🚫 Traslado interno (14/2408/2365): no se reporta a la DIAN',
+                balance_id=mov.balance_id,
+            ))
+            return resultados
 
         # CAPA 3: override manual (siempre gana)
         capa3 = self._buscar_capa3(mov.codigo_cuenta, mov.nit)
