@@ -323,6 +323,41 @@ def _es_cuenta_traslado_excluida(codigo_cuenta: str, nombre_cuenta: str) -> bool
     return 'traslado' in nombre_norm
 
 
+def _es_cuenta_provision_excluida(nombre_cuenta: str) -> bool:
+    """
+    Detecta cuentas de PROVISIÓN contable que NO se reportan en ningún formato.
+
+    Las provisiones son causaciones contables (no pagos efectivos a terceros),
+    por lo que no constituyen información reportable a la DIAN.
+
+    Regla:
+      - Si el nombre contiene 'provision' o 'prov' → EXCLUIR
+      - EXCEPCIÓN: si el nombre contiene 'proveedor' → NO excluir
+        (los pagos a proveedores sí se reportan)
+
+    Ejemplos:
+      'PROV CESANTIAS'           → excluir
+      'PROVISION ARL'            → excluir
+      'PROV VACACIONES'          → excluir
+      'PROVEEDORES'              → NO excluir
+      'PROVEEDORES NACIONALES'   → NO excluir
+
+    Aplica a cualquier grupo PUC porque las provisiones contables pueden
+    aparecer en distintos códigos según convención de cada empresa.
+    """
+    nombre_norm = _normalize_text(nombre_cuenta)
+    if not nombre_norm:
+        return False
+    # Si menciona 'proveedor', es cuenta de tercero real, no provisión.
+    if 'proveedor' in nombre_norm:
+        return False
+    # Detectar 'provision' o la abreviatura 'prov' como palabra independiente.
+    # Buscar como token (rodeada de espacios o al inicio) para evitar falsos
+    # positivos de palabras que contengan 'prov' por casualidad.
+    tokens = nombre_norm.split()
+    return any(t == 'prov' or t.startswith('provision') for t in tokens)
+
+
 def _nombre_dice_compras(nombre_cuenta: str) -> bool:
     """Detecta si el nombre de una cuenta menciona explícitamente 'compras'."""
     return 'compra' in _normalize_text(nombre_cuenta)
@@ -756,6 +791,23 @@ class MotorClasificacion:
                 capa_resolucion='excluido_traslado_universal',
                 requiere_revision=False,
                 nota='🚫 Traslado interno (14/2408/2365): no se reporta a la DIAN',
+                balance_id=mov.balance_id,
+            ))
+            return resultados
+
+        # GUARD UNIVERSAL: cuentas de PROVISIÓN contable. Las provisiones son
+        # causaciones, no pagos efectivos a terceros, por lo que no se reportan
+        # a la DIAN. Se excluye si el nombre contiene 'prov' o 'provision',
+        # excepto si contiene 'proveedor' (esos sí son pagos reales).
+        if _es_cuenta_provision_excluida(mov.nombre_cuenta or ''):
+            resultados.append(MovimientoClasificado(
+                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                formato_dian='', concepto_dian=None,
+                valor=abs(mov.debitos or mov.creditos or mov.saldo_final),
+                base_aplicable='',
+                capa_resolucion='excluido_provision_universal',
+                requiere_revision=False,
+                nota='🚫 Provisión contable: causación, no pago efectivo. No se reporta a la DIAN',
                 balance_id=mov.balance_id,
             ))
             return resultados
