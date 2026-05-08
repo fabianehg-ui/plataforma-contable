@@ -236,11 +236,29 @@ def render_conciliacion_enriquecida(
 # ============================================================================
 
 def _generar_excel(dictamen, bloques_filtrados) -> bytes:
-    """Genera Excel multi-hoja con el dictamen completo."""
+    """Genera Excel multi-hoja con el dictamen.
+
+    Estructura:
+        - Resumen ejecutivo
+        - Resumen por formato (totales y conteo de conceptos por formato)
+        - Una hoja por cada formato (F1001, F1003, F1005, ...) con sus
+          conceptos desglosados y filas de subtotal por concepto.
+        - Conceptos con diferencia (solo si hay alguno)
+        - Detalle plano completo (compatibilidad hacia atrás / auditoría)
+    """
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
     buf = io.BytesIO()
 
+    # Filas planas (todos los bloques, no solo los filtrados, para que el
+    # archivo refleje el dictamen completo y no dependa de la vista en pantalla).
+    filas_planas = ce.dictamen_a_filas_excel(dictamen)
+
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        # Hoja 1: Resumen
+        # ────────────────────────────────────────────────────────────────
+        # Hoja 1: Resumen ejecutivo
+        # ────────────────────────────────────────────────────────────────
         resumen = ce.dictamen_a_resumen_dict(dictamen)
         df_resumen = pd.DataFrame([
             {"Métrica": "Año gravable", "Valor": resumen["año_gravable"]},
@@ -252,19 +270,167 @@ def _generar_excel(dictamen, bloques_filtrados) -> bytes:
         ])
         df_resumen.to_excel(writer, sheet_name="Resumen", index=False)
 
-        # Hoja 2: Detalle plano (todas las cuentas con su concepto)
-        filas = ce.dictamen_a_filas_excel(dictamen)
-        df_detalle = pd.DataFrame(filas)
-        df_detalle.to_excel(writer, sheet_name="Detalle por concepto", index=False)
+        # ────────────────────────────────────────────────────────────────
+        # Hoja 2: Resumen por formato (índice navegable)
+        # ────────────────────────────────────────────────────────────────
+        formatos: dict[str, dict] = {}
+        for b in dictamen.bloques:
+            fmt = b.formato_dian or "(sin_formato)"
+            if fmt not in formatos:
+                formatos[fmt] = {
+                    "conceptos": 0,
+                    "cuadrados": 0,
+                    "con_diferencia": 0,
+                    "pendientes": 0,
+                    "total_balance": 0.0,
+                    "total_reportado": 0.0,
+                    "total_diferencia": 0.0,
+                }
+            f_info = formatos[fmt]
+            f_info["conceptos"] += 1
+            if b.estado == "cuadrado":
+                f_info["cuadrados"] += 1
+            elif b.estado == "diferencia_explicada":
+                f_info["con_diferencia"] += 1
+            else:
+                f_info["pendientes"] += 1
+            f_info["total_balance"] += float(b.total_balance)
+            f_info["total_reportado"] += float(b.total_reportado)
+            f_info["total_diferencia"] += float(b.diferencia)
 
-        # Hoja 3: Solo conceptos con diferencias (para revisión rápida)
+        df_por_fmt = pd.DataFrame([
+            {
+                "Formato": f"F{fmt}" if fmt != "(sin_formato)" else fmt,
+                "Conceptos": v["conceptos"],
+                "Cuadrados": v["cuadrados"],
+                "Con diferencia": v["con_diferencia"],
+                "Pendientes": v["pendientes"],
+                "Total balance": v["total_balance"],
+                "Total reportado": v["total_reportado"],
+                "Diferencia": v["total_diferencia"],
+            }
+            for fmt, v in sorted(formatos.items())
+        ])
+        df_por_fmt.to_excel(writer, sheet_name="Resumen por formato", index=False)
+
+        # ────────────────────────────────────────────────────────────────
+        # Hoja 3+: Una hoja por cada formato
+        # ────────────────────────────────────────────────────────────────
+        # Agrupar bloques por formato manteniendo el orden ya establecido
+        # en dictamen.bloques (formato, concepto).
+        bloques_por_fmt: dict[str, list] = {}
+        for b in dictamen.bloques:
+            bloques_por_fmt.setdefault(b.formato_dian or "(sin_formato)", []).append(b)
+
+        # Estilos compartidos
+        header_font = Font(bold=True, color="FFFFFF", name="Arial")
+        header_fill = PatternFill("solid", start_color="305496")
+        subtotal_font = Font(bold=True, name="Arial")
+        subtotal_fill = PatternFill("solid", start_color="DDEBF7")
+        excluida_fill = PatternFill("solid", start_color="FCE4D6")
+
+        for fmt in sorted(bloques_por_fmt.keys()):
+            sheet_name = _nombre_hoja_formato(fmt)
+            bloques_fmt = bloques_por_fmt[fmt]
+
+            filas_hoja = []
+            for bloque in bloques_fmt:
+                for c in bloque.cuentas:
+                    filas_hoja.append({
+                        "Concepto": bloque.concepto_dian,
+                        "Descripción": bloque.descripcion_concepto,
+                        "Cuenta": c.codigo_cuenta,
+                        "Nombre cuenta": c.nombre_cuenta,
+                        "Capa": c.capa_nombre,
+                        "Saldo balance": float(c.saldo_balance),
+                        "Valor reportado": float(c.valor_reportado),
+                        "Diferencia": float(c.diferencia),
+                        "NITs": c.nits_distintos,
+                        "Estado": "🚫 Excluida" if c.excluida else "✓ Activa",
+                        "Motivo": c.motivo_diferencia or "",
+                    })
+                # Subtotal por concepto
+                filas_hoja.append({
+                    "Concepto": bloque.concepto_dian,
+                    "Descripción": bloque.descripcion_concepto,
+                    "Cuenta": "TOTAL CONCEPTO",
+                    "Nombre cuenta": "",
+                    "Capa": "",
+                    "Saldo balance": float(bloque.total_balance),
+                    "Valor reportado": float(bloque.total_reportado),
+                    "Diferencia": float(bloque.diferencia),
+                    "NITs": "",
+                    "Estado": bloque.estado.upper(),
+                    "Motivo": "",
+                })
+
+            df_fmt = pd.DataFrame(filas_hoja)
+            df_fmt.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Aplicar formato a la hoja recién creada
+            ws = writer.sheets[sheet_name]
+
+            # Header
+            for cell in ws[1]:
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Anchos de columna
+            anchos = {
+                "A": 10, "B": 35, "C": 14, "D": 38, "E": 16,
+                "F": 16, "G": 16, "H": 14, "I": 8, "J": 14, "K": 35,
+            }
+            for col, w in anchos.items():
+                ws.column_dimensions[col].width = w
+
+            # Formato numérico (col F=Saldo, G=Reportado, H=Diferencia)
+            for row in range(2, ws.max_row + 1):
+                for col_letter in ("F", "G", "H"):
+                    ws[f"{col_letter}{row}"].number_format = '#,##0;(#,##0);-'
+
+            # Resaltar filas de subtotal y de exclusiones
+            for row_idx, fila in enumerate(filas_hoja, start=2):
+                if fila["Cuenta"] == "TOTAL CONCEPTO":
+                    for col_idx in range(1, len(df_fmt.columns) + 1):
+                        cell = ws.cell(row=row_idx, column=col_idx)
+                        cell.font = subtotal_font
+                        cell.fill = subtotal_fill
+                elif fila.get("Estado", "").startswith("🚫"):
+                    for col_idx in range(1, len(df_fmt.columns) + 1):
+                        ws.cell(row=row_idx, column=col_idx).fill = excluida_fill
+
+            # Congelar primera fila para navegación cómoda
+            ws.freeze_panes = "A2"
+
+        # ────────────────────────────────────────────────────────────────
+        # Hoja: Conceptos con diferencia (solo si hay alguno)
+        # ────────────────────────────────────────────────────────────────
         filas_diff = [
-            f for f in filas
+            f for f in filas_planas
             if f["Cuenta"] == "TOTAL CONCEPTO" and f["Diferencia"] != 0
         ]
         if filas_diff:
             df_diff = pd.DataFrame(filas_diff)
             df_diff.to_excel(writer, sheet_name="Conceptos con diferencia", index=False)
 
+        # ────────────────────────────────────────────────────────────────
+        # Hoja final: Detalle plano completo (compatibilidad / auditoría)
+        # ────────────────────────────────────────────────────────────────
+        df_detalle = pd.DataFrame(filas_planas)
+        df_detalle.to_excel(writer, sheet_name="Detalle por concepto", index=False)
+
     buf.seek(0)
     return buf.getvalue()
+
+
+def _nombre_hoja_formato(fmt: str) -> str:
+    """Genera un nombre de hoja válido para Excel (≤31 chars, sin caracteres
+    prohibidos: : \\ / ? * [ ])."""
+    if not fmt or fmt == "(sin_formato)":
+        return "Sin formato"
+    base = f"F{fmt}" if not fmt.startswith("F") else fmt
+    # Excel no permite ciertos caracteres en nombres de hoja
+    for char in [":", "\\", "/", "?", "*", "[", "]"]:
+        base = base.replace(char, "_")
+    return base[:31]
