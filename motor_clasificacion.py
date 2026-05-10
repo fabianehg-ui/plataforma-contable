@@ -1037,11 +1037,15 @@ class MotorClasificacion:
             mov.codigo_cuenta, mov.nombre_cuenta or ''
         )
         if concepto_deduccion is not None:
-            # F2276 reporta el valor neto. Estas cuentas se acreditan cuando se
-            # descuenta del salario y se debitan cuando se gira a EPS/Fondo,
-            # quedando el saldo aproximadamente en cero al cierre. Reportamos
-            # el monto efectivamente girado en el periodo, que es el lado débito.
-            valor_reportar = abs(mov.debitos or mov.creditos or mov.saldo_final)
+            # F2276 reporta el monto efectivamente girado a EPS / Fondo, que es
+            # el lado DÉBITO de la cuenta (cuando la empresa paga al sistema).
+            # Si por alguna razón los débitos vienen en cero, usamos créditos
+            # como aproximación (lo descontado al empleado), pero NUNCA el
+            # saldo final, que daría valores incorrectos al cierre.
+            valor_reportar = abs(mov.debitos) if mov.debitos else abs(mov.creditos)
+            if valor_reportar <= 0:
+                # Sin valor del periodo: no se reporta a F2276
+                return resultados
             resultados.append(MovimientoClasificado(
                 codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
                 formato_dian='2276',
@@ -1217,6 +1221,27 @@ class MotorClasificacion:
             balance_id=mov.balance_id,
         )]
 
+    def _filtrar_f2276_negativos(
+        self, clasificaciones: list[MovimientoClasificado]
+    ) -> list[MovimientoClasificado]:
+        """
+        Filtro defensivo: en F2276 (pagos al empleado) NO pueden haber valores
+        negativos. Si una cuenta termina con valor ≤ 0 en F2276, se descarta
+        ese movimiento (puede que la cuenta solo aparezca en F1009).
+
+        Esto previene casos donde alguna capa reporta saldo final del pasivo
+        (que es negativo, Cr) en F2276 en lugar de los débitos del año.
+        """
+        out = []
+        for c in clasificaciones:
+            if c.formato_dian == '2276' and (c.valor is None or c.valor <= 0):
+                continue  # descartar
+            # Asegurar valor positivo para F2276 incluso si vino con signo
+            if c.formato_dian == '2276' and c.valor < 0:
+                c.valor = abs(c.valor)
+            out.append(c)
+        return out
+
     # ----------------------------------------------------------------
     # Clasificación masiva
     # ----------------------------------------------------------------
@@ -1256,6 +1281,9 @@ class MotorClasificacion:
             clasificaciones = self.clasificar_movimiento(
                 mov, cuentas_6_excluidas, mayores_cerrados
             )
+
+            # Filtro defensivo: descartar movimientos F2276 con valor ≤ 0
+            clasificaciones = self._filtrar_f2276_negativos(clasificaciones)
 
             # Caso especial: lista vacía = filtrado intencional (saldo cero, no aplica)
             if not clasificaciones:
