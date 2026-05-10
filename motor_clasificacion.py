@@ -293,6 +293,21 @@ def _es_2365_traslados(codigo_cuenta: str) -> bool:
     return str(codigo_cuenta).strip().startswith(SUBCUENTAS_2365_TRASLADOS)
 
 
+def _es_cuenta_2273_excluida(codigo_cuenta: str) -> bool:
+    """
+    Excluye cualquier cuenta 2273xx (Obligaciones laborales / Provisiones
+    para obligaciones laborales) del reporte a la DIAN.
+
+    El grupo 2273 del PUC corresponde a provisiones para obligaciones
+    laborales (cesantías por pagar consolidadas, etc.). Por su naturaleza
+    son causaciones contables, no pagos efectivos a terceros, y por
+    convención de Quinto Sentido NO se reportan a la DIAN.
+
+    Cualquier subcuenta de 2273xx queda excluida sin revisar el nombre.
+    """
+    return str(codigo_cuenta).strip().startswith('2273')
+
+
 def _es_cuenta_traslado_excluida(codigo_cuenta: str, nombre_cuenta: str) -> bool:
     """
     Detecta cuentas de traslado interno que NO se reportan en NINGÚN formato.
@@ -667,6 +682,52 @@ def indexar_retenciones_2365(movimientos: list[Movimiento]) -> dict[str, Retenci
     return indice
 
 
+def detectar_mayores_pasivos_cerrados(
+    movimientos: list[Movimiento],
+) -> set[str]:
+    """
+    Detecta los códigos de mayor de pasivos (4 dígitos) que CIERRAN EN CERO
+    al final del año, mirando la suma de saldos finales de TODAS las
+    subcuentas que comparten ese prefijo.
+
+    Aplica solamente a los grupos `2365`, `2367` y `2369` del PUC. Si la
+    suma de saldos finales de las subcuentas suma aproximadamente cero
+    (dentro de la tolerancia de conciliación), todas esas subcuentas se
+    excluyen del F1009 porque el pasivo en realidad ya fue cancelado al
+    cierre del periodo.
+
+    Caso típico (Quinto Sentido AG2025):
+        23690199 TRASLADO         +$9,870,000
+        23690101 AUTORRENTA 1.10% -$2,070,000
+        23690102 AUTORRETENCION   -$7,800,000
+                                  ───────────
+        Saldo neto del mayor 2369:        $0   →  todas excluidas
+
+    Returns:
+        set[str] con los prefijos de mayor que cierran en cero
+        (p.ej. {'2369'}). Si ningún mayor cierra en cero, set vacío.
+    """
+    prefijos_a_revisar = ('2365', '2367', '2369')
+    saldos_por_mayor: dict[str, float] = {p: 0.0 for p in prefijos_a_revisar}
+    existe: dict[str, bool] = {p: False for p in prefijos_a_revisar}
+
+    for m in movimientos:
+        cta = str(m.codigo_cuenta).strip()
+        for prefijo in prefijos_a_revisar:
+            # Solo subcuentas (más de 4 dígitos), no la raíz misma
+            if cta.startswith(prefijo) and len(cta) > 4:
+                saldos_por_mayor[prefijo] += float(m.saldo_final or 0)
+                existe[prefijo] = True
+                break
+
+    cerrados = set()
+    for prefijo in prefijos_a_revisar:
+        if existe[prefijo] and abs(saldos_por_mayor[prefijo]) <= TOLERANCIA_CONCILIACION:
+            cerrados.add(prefijo)
+
+    return cerrados
+
+
 # ================================================================
 # REGLA ESPECIAL: aplicar cálculos especiales por familia de cuenta
 # ================================================================
@@ -876,10 +937,41 @@ class MotorClasificacion:
         self,
         mov: Movimiento,
         cuentas_6_excluidas: set[str] = None,
+        mayores_cerrados: set[str] = None,
     ) -> list[MovimientoClasificado]:
         """Clasifica un movimiento aplicando las capas en orden de prioridad."""
         resultados: list[MovimientoClasificado] = []
         cuentas_6_excluidas = cuentas_6_excluidas or set()
+        mayores_cerrados = mayores_cerrados or set()
+
+        # GUARD: cuentas de pasivos cuyo MAYOR (2365/2367/2369) cierra en
+        # cero al final del año. Por convención contable, si el saldo neto
+        # del mayor es cero, las subcuentas se entienden ya canceladas y
+        # no se reportan en F1009 (saldo final del pasivo).
+        # No aplica a 2365/2367/2369 que tienen otras reglas especiales
+        # (retenciones que se asocian como columna), pero esas reglas se
+        # ejecutan más adelante. Aquí solo aplicamos para el reporte F1009.
+        cuenta_str_inicio = str(mov.codigo_cuenta).strip()
+        prefijo_4 = cuenta_str_inicio[:4] if len(cuenta_str_inicio) >= 4 else ''
+        if prefijo_4 in mayores_cerrados and len(cuenta_str_inicio) > 4:
+            # La cuenta 2365xx tiene tratamiento especial (columna retención)
+            # que NO debe ser bloqueado por este guard. Solo bloqueamos para
+            # 2367 y 2369 que sí van a F1009 normalmente.
+            if prefijo_4 in ('2367', '2369'):
+                resultados.append(MovimientoClasificado(
+                    codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                    formato_dian='', concepto_dian=None,
+                    valor=abs(mov.saldo_final or 0),
+                    base_aplicable='',
+                    capa_resolucion='excluido_mayor_cerrado',
+                    requiere_revision=False,
+                    nota=(
+                        f'🚫 Mayor {prefijo_4} cierra en cero al final del año: '
+                        f'subcuenta no se reporta en F1009'
+                    ),
+                    balance_id=mov.balance_id,
+                ))
+                return resultados
 
         # GUARD UNIVERSAL: cuentas de traslado interno (inventarios, IVA, ret.
         # practicadas) NO se reportan en ningún formato. Se documentan como
@@ -894,6 +986,23 @@ class MotorClasificacion:
                 capa_resolucion='excluido_traslado_universal',
                 requiere_revision=False,
                 nota='🚫 Traslado interno (14/2408/2365): no se reporta a la DIAN',
+                balance_id=mov.balance_id,
+            ))
+            return resultados
+
+        # GUARD UNIVERSAL: cuentas 2273xx (Obligaciones laborales /
+        # provisiones para obligaciones laborales). Por convención, todas
+        # las subcuentas de 2273 se excluyen del reporte a la DIAN, sin
+        # importar el nombre. Son causaciones contables del pasivo laboral.
+        if _es_cuenta_2273_excluida(mov.codigo_cuenta):
+            resultados.append(MovimientoClasificado(
+                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                formato_dian='', concepto_dian=None,
+                valor=abs(mov.debitos or mov.creditos or mov.saldo_final),
+                base_aplicable='',
+                capa_resolucion='excluido_2273_universal',
+                requiere_revision=False,
+                nota='🚫 Cuenta 2273xx (obligaciones laborales / provisiones): no se reporta a la DIAN',
                 balance_id=mov.balance_id,
             ))
             return resultados
@@ -1130,6 +1239,10 @@ class MotorClasificacion:
         # 2. INDEXAR RETENCIONES 2365 por NIT (pre-proceso)
         res.retenciones_por_nit = indexar_retenciones_2365(movimientos)
 
+        # 2b. DETECTAR MAYORES (2365/2367/2369) que cierran en cero
+        # Si suman ≈0, sus subcuentas se excluyen del F1009.
+        mayores_cerrados = detectar_mayores_pasivos_cerrados(movimientos)
+
         # 3. CLASIFICAR cada movimiento
         contador = {
             'capa1': 0, 'capa2_unico': 0, 'capa2_ambiguo': 0,
@@ -1140,7 +1253,9 @@ class MotorClasificacion:
         }
 
         for mov in movimientos:
-            clasificaciones = self.clasificar_movimiento(mov, cuentas_6_excluidas)
+            clasificaciones = self.clasificar_movimiento(
+                mov, cuentas_6_excluidas, mayores_cerrados
+            )
 
             # Caso especial: lista vacía = filtrado intencional (saldo cero, no aplica)
             if not clasificaciones:
