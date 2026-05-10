@@ -293,6 +293,21 @@ def _es_2365_traslados(codigo_cuenta: str) -> bool:
     return str(codigo_cuenta).strip().startswith(SUBCUENTAS_2365_TRASLADOS)
 
 
+def _es_cuenta_2273_excluida(codigo_cuenta: str) -> bool:
+    """
+    Excluye cualquier cuenta 2273xx (Obligaciones laborales / Provisiones
+    para obligaciones laborales) del reporte a la DIAN.
+
+    El grupo 2273 del PUC corresponde a provisiones para obligaciones
+    laborales (cesantías por pagar consolidadas, etc.). Por su naturaleza
+    son causaciones contables, no pagos efectivos a terceros, y por
+    convención de Quinto Sentido NO se reportan a la DIAN.
+
+    Cualquier subcuenta de 2273xx queda excluida sin revisar el nombre.
+    """
+    return str(codigo_cuenta).strip().startswith('2273')
+
+
 def _es_cuenta_traslado_excluida(codigo_cuenta: str, nombre_cuenta: str) -> bool:
     """
     Detecta cuentas de traslado interno que NO se reportan en NINGÚN formato.
@@ -351,11 +366,114 @@ def _es_cuenta_provision_excluida(nombre_cuenta: str) -> bool:
     # Si menciona 'proveedor', es cuenta de tercero real, no provisión.
     if 'proveedor' in nombre_norm:
         return False
+    # Limpiar puntuación pegada al texto (comillas, comas, puntos, etc.).
+    # Algunos exports de balance traen nombres como '"""PROVISION CAJAS, ...'
+    # con comillas o comas pegadas que rompen el split por espacios.
+    nombre_limpio = nombre_norm.translate(str.maketrans('', '', '"\'`,.;:()[]{}'))
     # Detectar 'provision' o la abreviatura 'prov' como palabra independiente.
     # Buscar como token (rodeada de espacios o al inicio) para evitar falsos
     # positivos de palabras que contengan 'prov' por casualidad.
-    tokens = nombre_norm.split()
+    tokens = nombre_limpio.split()
     return any(t == 'prov' or t.startswith('provision') for t in tokens)
+
+
+def _concepto_f2276_pasivo_prestacion(codigo_cuenta: str) -> Optional[int]:
+    """
+    Detecta cuentas de PASIVO POR PRESTACIONES SOCIALES cuyos DÉBITOS del
+    año (los pagos efectivamente realizados al empleado) deben reportarse
+    en F2276, además de su saldo final que va a F1009.
+
+    Esto resuelve el caso de DOBLE REPORTE:
+      - Saldo final del pasivo  → F1009 (cuánto falta pagar al cierre)
+      - Débitos del año         → F2276 (cuánto se pagó al empleado)
+
+    Mapeo según convención de Quinto Sentido (concepto F2276 v4):
+      - 2510xx  Cesantías al fondo            → concepto 26 'ceco'
+      - 2515xx  Intereses sobre cesantías     → concepto 25 'cein'
+      - 2525xx  Vacaciones consolidadas       → concepto 24 'potro'
+      - 253005xx Cesantías por pagar          → concepto 25 'cein'
+      - 253010xx Intereses cesantías por pagar → concepto 25 'cein'
+      - 253015xx Vacaciones por pagar (QS)    → concepto 24 'potro'
+      - 253020xx Prima servicios por pagar (QS) → concepto 19 'papre'
+
+    Nota: la convención QS invierte el PUC estándar (en QS 253015=vacaciones
+    y 253020=prima de servicios). Las reglas en BD ya están alineadas a esa
+    convención. Esta función es solo backup defensivo cuando capa 2 (mapeo
+    nativo) gana sobre capa 1 e impide que la regla F2276 se aplique.
+
+    Retorna el número de concepto F2276 o None si la cuenta no califica.
+    """
+    cuenta = str(codigo_cuenta).strip()
+    if not cuenta:
+        return None
+    # Por prefijo de cuenta (los más específicos primero)
+    if cuenta.startswith('253020'):
+        return 19  # papre - prima de servicios pagada (convención QS)
+    if cuenta.startswith('253015'):
+        return 24  # potro - vacaciones pagadas (convención QS)
+    if cuenta.startswith('253010'):
+        return 25  # cein - intereses cesantías pagados
+    if cuenta.startswith('253005'):
+        return 25  # cein - cesantías pagadas
+    if cuenta.startswith('2525'):
+        return 24  # potro - vacaciones consolidadas pagadas
+    if cuenta.startswith('2515'):
+        return 25  # cein - intereses cesantías consolidados pagados
+    if cuenta.startswith('2510'):
+        return 26  # ceco - cesantías al fondo pagadas
+    return None
+
+
+def _es_deduccion_trabajador_f2276(
+    codigo_cuenta: str, nombre_cuenta: str
+) -> Optional[int]:
+    """
+    Detecta cuentas que representan deducciones del SALARIO DEL TRABAJADOR
+    (la parte que la empresa descuenta y gira a EPS / Fondos de Pensión).
+
+    Estas cuentas reportan en F2276 con concepto:
+      - 30 'apos': aporte salud DEL TRABAJADOR  (rango 25500x — EPS)
+      - 31 'apof': aporte pensión DEL TRABAJADOR (rango 25502x — Fondos)
+
+    Retorna el número de concepto (30 o 31) si aplica, o None si no.
+
+    Detección por nombre (insensible a mayúsculas/acentos/puntuación):
+      - 'DEDUCCION A EMPLEADO' / 'DEDUCCION A EMPLEADOS'
+      - 'DEDUCCION AL TRABAJADOR' / 'DEDUCCION A TRABAJADORES'
+
+    Distinción salud vs pensión por código de cuenta (PUC estándar):
+      - 25500x → salud (EPS)        → concepto 30
+      - 25502x → pensión (Fondos)   → concepto 31
+
+    Si el nombre coincide pero el código no está en los rangos esperados,
+    retorna None y la cuenta sigue su flujo normal (capa 2 / capa 1).
+    """
+    nombre_norm = _normalize_text(nombre_cuenta)
+    if not nombre_norm:
+        return None
+    # Limpiar puntuación pegada al texto.
+    nombre_limpio = nombre_norm.translate(
+        str.maketrans('', '', '"\'`,.;:()[]{}')
+    )
+    # Patrones aceptados (palabras 'a/al' + 'empleado(s)/trabajador(es)')
+    es_deduccion = (
+        'deduccion a empleado' in nombre_limpio
+        or 'deduccion al empleado' in nombre_limpio
+        or 'deduccion a trabajador' in nombre_limpio
+        or 'deduccion al trabajador' in nombre_limpio
+    )
+    if not es_deduccion:
+        return None
+    # Distinguir salud vs pensión por código de cuenta
+    cuenta = str(codigo_cuenta).strip()
+    if cuenta.startswith('255005'):
+        return 30  # apos - salud trabajador
+    if cuenta.startswith('255020'):
+        return 31  # apof - pensión trabajador
+    # Nombre coincide pero código no está en rango — devolver None
+    # para no forzar un mapeo incorrecto. La cuenta seguirá su flujo
+    # normal y caerá en capa 2 / 1 según corresponda.
+    return None
 
 
 def _nombre_dice_compras(nombre_cuenta: str) -> bool:
@@ -562,6 +680,52 @@ def indexar_retenciones_2365(movimientos: list[Movimiento]) -> dict[str, Retenci
             )
 
     return indice
+
+
+def detectar_mayores_pasivos_cerrados(
+    movimientos: list[Movimiento],
+) -> set[str]:
+    """
+    Detecta los códigos de mayor de pasivos (4 dígitos) que CIERRAN EN CERO
+    al final del año, mirando la suma de saldos finales de TODAS las
+    subcuentas que comparten ese prefijo.
+
+    Aplica solamente a los grupos `2365`, `2367` y `2369` del PUC. Si la
+    suma de saldos finales de las subcuentas suma aproximadamente cero
+    (dentro de la tolerancia de conciliación), todas esas subcuentas se
+    excluyen del F1009 porque el pasivo en realidad ya fue cancelado al
+    cierre del periodo.
+
+    Caso típico (Quinto Sentido AG2025):
+        23690199 TRASLADO         +$9,870,000
+        23690101 AUTORRENTA 1.10% -$2,070,000
+        23690102 AUTORRETENCION   -$7,800,000
+                                  ───────────
+        Saldo neto del mayor 2369:        $0   →  todas excluidas
+
+    Returns:
+        set[str] con los prefijos de mayor que cierran en cero
+        (p.ej. {'2369'}). Si ningún mayor cierra en cero, set vacío.
+    """
+    prefijos_a_revisar = ('2365', '2367', '2369')
+    saldos_por_mayor: dict[str, float] = {p: 0.0 for p in prefijos_a_revisar}
+    existe: dict[str, bool] = {p: False for p in prefijos_a_revisar}
+
+    for m in movimientos:
+        cta = str(m.codigo_cuenta).strip()
+        for prefijo in prefijos_a_revisar:
+            # Solo subcuentas (más de 4 dígitos), no la raíz misma
+            if cta.startswith(prefijo) and len(cta) > 4:
+                saldos_por_mayor[prefijo] += float(m.saldo_final or 0)
+                existe[prefijo] = True
+                break
+
+    cerrados = set()
+    for prefijo in prefijos_a_revisar:
+        if existe[prefijo] and abs(saldos_por_mayor[prefijo]) <= TOLERANCIA_CONCILIACION:
+            cerrados.add(prefijo)
+
+    return cerrados
 
 
 # ================================================================
@@ -773,10 +937,41 @@ class MotorClasificacion:
         self,
         mov: Movimiento,
         cuentas_6_excluidas: set[str] = None,
+        mayores_cerrados: set[str] = None,
     ) -> list[MovimientoClasificado]:
         """Clasifica un movimiento aplicando las capas en orden de prioridad."""
         resultados: list[MovimientoClasificado] = []
         cuentas_6_excluidas = cuentas_6_excluidas or set()
+        mayores_cerrados = mayores_cerrados or set()
+
+        # GUARD: cuentas de pasivos cuyo MAYOR (2365/2367/2369) cierra en
+        # cero al final del año. Por convención contable, si el saldo neto
+        # del mayor es cero, las subcuentas se entienden ya canceladas y
+        # no se reportan en F1009 (saldo final del pasivo).
+        # No aplica a 2365/2367/2369 que tienen otras reglas especiales
+        # (retenciones que se asocian como columna), pero esas reglas se
+        # ejecutan más adelante. Aquí solo aplicamos para el reporte F1009.
+        cuenta_str_inicio = str(mov.codigo_cuenta).strip()
+        prefijo_4 = cuenta_str_inicio[:4] if len(cuenta_str_inicio) >= 4 else ''
+        if prefijo_4 in mayores_cerrados and len(cuenta_str_inicio) > 4:
+            # La cuenta 2365xx tiene tratamiento especial (columna retención)
+            # que NO debe ser bloqueado por este guard. Solo bloqueamos para
+            # 2367 y 2369 que sí van a F1009 normalmente.
+            if prefijo_4 in ('2367', '2369'):
+                resultados.append(MovimientoClasificado(
+                    codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                    formato_dian='', concepto_dian=None,
+                    valor=abs(mov.saldo_final or 0),
+                    base_aplicable='',
+                    capa_resolucion='excluido_mayor_cerrado',
+                    requiere_revision=False,
+                    nota=(
+                        f'🚫 Mayor {prefijo_4} cierra en cero al final del año: '
+                        f'subcuenta no se reporta en F1009'
+                    ),
+                    balance_id=mov.balance_id,
+                ))
+                return resultados
 
         # GUARD UNIVERSAL: cuentas de traslado interno (inventarios, IVA, ret.
         # practicadas) NO se reportan en ningún formato. Se documentan como
@@ -791,6 +986,23 @@ class MotorClasificacion:
                 capa_resolucion='excluido_traslado_universal',
                 requiere_revision=False,
                 nota='🚫 Traslado interno (14/2408/2365): no se reporta a la DIAN',
+                balance_id=mov.balance_id,
+            ))
+            return resultados
+
+        # GUARD UNIVERSAL: cuentas 2273xx (Obligaciones laborales /
+        # provisiones para obligaciones laborales). Por convención, todas
+        # las subcuentas de 2273 se excluyen del reporte a la DIAN, sin
+        # importar el nombre. Son causaciones contables del pasivo laboral.
+        if _es_cuenta_2273_excluida(mov.codigo_cuenta):
+            resultados.append(MovimientoClasificado(
+                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                formato_dian='', concepto_dian=None,
+                valor=abs(mov.debitos or mov.creditos or mov.saldo_final),
+                base_aplicable='',
+                capa_resolucion='excluido_2273_universal',
+                requiere_revision=False,
+                nota='🚫 Cuenta 2273xx (obligaciones laborales / provisiones): no se reporta a la DIAN',
                 balance_id=mov.balance_id,
             ))
             return resultados
@@ -811,6 +1023,74 @@ class MotorClasificacion:
                 balance_id=mov.balance_id,
             ))
             return resultados
+
+        # GUARD: DEDUCCION A EMPLEADO/TRABAJADOR → F2276 conceptos 30/31.
+        # Las cuentas que en el balance dicen "DEDUCCION A EMPLEADO/TRABAJADOR"
+        # representan los aportes a salud/pensión que la empresa descuenta del
+        # salario del trabajador para girar al sistema. Estos pagos van al
+        # F2276 (no al F1009 que sería pasivo de la empresa).
+        #   - Subcuenta 25500x (EPS)    → concepto 30 'apos' (salud trabajador)
+        #   - Subcuenta 25502x (Fondos) → concepto 31 'apof' (pensión trabajador)
+        # Se aplica este guard antes de capa 3 / capa 2 para que tenga
+        # precedencia sobre cualquier mapeo amplio que las lleve a F1009.
+        concepto_deduccion = _es_deduccion_trabajador_f2276(
+            mov.codigo_cuenta, mov.nombre_cuenta or ''
+        )
+        if concepto_deduccion is not None:
+            # F2276 reporta el valor neto. Estas cuentas se acreditan cuando se
+            # descuenta del salario y se debitan cuando se gira a EPS/Fondo,
+            # quedando el saldo aproximadamente en cero al cierre. Reportamos
+            # el monto efectivamente girado en el periodo, que es el lado débito.
+            valor_reportar = abs(mov.debitos or mov.creditos or mov.saldo_final)
+            resultados.append(MovimientoClasificado(
+                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                formato_dian='2276',
+                concepto_dian=concepto_deduccion,
+                valor=valor_reportar,
+                base_aplicable='debitos',
+                capa_resolucion='deduccion_trabajador_f2276',
+                requiere_revision=False,
+                nota=(
+                    f'Deducción trabajador → F2276 concepto {concepto_deduccion} '
+                    f'({"salud (apos)" if concepto_deduccion == 30 else "pensión (apof)"})'
+                ),
+                balance_id=mov.balance_id,
+            ))
+            return resultados
+
+        # GUARD DE DOBLE REPORTE: pasivos de prestaciones sociales.
+        # Las cuentas 2510, 2515, 2525, 25300x, 25301x, 25302x se reportan
+        # en DOS formatos:
+        #   - F1009 con su saldo final (lo que falta pagar)
+        #   - F2276 con sus débitos del año (lo efectivamente pagado al empleado)
+        # Este guard se ejecuta a la PAR (sin return) para que capa 2 después
+        # reporte normalmente el saldo final en F1009.
+        # Solo agrega el movimiento F2276 si hay débitos > 0 en el año.
+        concepto_pasivo = _concepto_f2276_pasivo_prestacion(mov.codigo_cuenta)
+        if concepto_pasivo is not None and mov.debitos and mov.debitos > 0:
+            descripcion_concepto = {
+                19: 'papre - prestaciones sociales pagadas',
+                24: 'potro - otros pagos (vacaciones)',
+                25: 'cein - cesantías + intereses pagados al empleado',
+                26: 'ceco - cesantías consignadas al fondo',
+            }.get(concepto_pasivo, f'concepto {concepto_pasivo}')
+            resultados.append(MovimientoClasificado(
+                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                formato_dian='2276',
+                concepto_dian=concepto_pasivo,
+                valor=abs(mov.debitos),
+                base_aplicable='debitos',
+                capa_resolucion='pasivo_prestacion_doble_reporte',
+                requiere_revision=False,
+                nota=(
+                    f'Doble reporte: débitos del año del pasivo prestacional '
+                    f'→ F2276 concepto {concepto_pasivo} ({descripcion_concepto}). '
+                    f'El saldo final se reporta en F1009 por flujo normal.'
+                ),
+                balance_id=mov.balance_id,
+            ))
+            # NO hacemos return: dejamos que capa 2 / capa 1 reporten el
+            # saldo final en F1009 también.
 
         # CAPA 3: override manual (siempre gana)
         capa3 = self._buscar_capa3(mov.codigo_cuenta, mov.nit)
@@ -959,6 +1239,10 @@ class MotorClasificacion:
         # 2. INDEXAR RETENCIONES 2365 por NIT (pre-proceso)
         res.retenciones_por_nit = indexar_retenciones_2365(movimientos)
 
+        # 2b. DETECTAR MAYORES (2365/2367/2369) que cierran en cero
+        # Si suman ≈0, sus subcuentas se excluyen del F1009.
+        mayores_cerrados = detectar_mayores_pasivos_cerrados(movimientos)
+
         # 3. CLASIFICAR cada movimiento
         contador = {
             'capa1': 0, 'capa2_unico': 0, 'capa2_ambiguo': 0,
@@ -969,7 +1253,9 @@ class MotorClasificacion:
         }
 
         for mov in movimientos:
-            clasificaciones = self.clasificar_movimiento(mov, cuentas_6_excluidas)
+            clasificaciones = self.clasificar_movimiento(
+                mov, cuentas_6_excluidas, mayores_cerrados
+            )
 
             # Caso especial: lista vacía = filtrado intencional (saldo cero, no aplica)
             if not clasificaciones:
