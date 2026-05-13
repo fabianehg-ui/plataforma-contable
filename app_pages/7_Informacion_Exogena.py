@@ -27,6 +27,11 @@ from auth.empresas import seleccionar_empresa_sidebar, require_empresa, require_
 from db.supabase_client import get_supabase
 from core.utils.ui_tributarias import render_pagina_tributaria, render_proximamente
 
+# Módulo PILA - flujo unificado de archivos de exógena
+from core.exogena.ui_archivos_exogena import render_tab_archivos
+from core.exogena.detector_pila_requerida import analizar_necesidad_pila
+from core.exogena.integrador_pila import integrar_pila_en_resultado
+
 
 # ============================================================
 # Guardia de autenticación
@@ -154,16 +159,22 @@ st.markdown("---")
 # Tabs principales del módulo
 # ============================================================
 
-tab_resumen, tab_mapeo, tab_terceros, tab_balance, tab_clasificar, tab_conciliacion, tab_generar, tab_envios = st.tabs([
+tab_resumen, tab_archivos, tab_borrador, tab_conciliacion, tab_generar = st.tabs([
     "📊 Resumen",
-    "🗂️ Mapeo nativo",
-    "👥 Terceros",
-    "📥 Balance",
-    "⚙️ Clasificar",
+    "📂 Archivos",
+    "⚙️ Borrador",
     "🔍 Conciliación",
     "📤 Generar XML",
-    "📦 Envíos",
 ])
+
+# Aliases retrocompatibles para no romper bloques `with tab_xxx:` existentes.
+# Todos apuntan al tab_archivos unificado o al tab_borrador.
+# Solo el PRIMER bloque que se renderice bajo cada alias será visible.
+tab_mapeo = tab_archivos
+tab_terceros = tab_archivos
+tab_balance = tab_archivos
+tab_clasificar = tab_borrador
+tab_envios = tab_generar
 
 
 # ============================================================
@@ -219,8 +230,24 @@ with tab_resumen:
 
 
 # ============================================================
+# Tab: Archivos (NUEVO - flujo unificado)
+# ============================================================
+# Reemplaza visualmente a Mapeo nativo, Terceros, Balance y PILA.
+# Los tabs antiguos siguen existiendo en el código pero apuntan al mismo
+# contenedor (tab_archivos), por lo que sólo el primer `with` se renderiza.
+
+with tab_archivos:
+    sb = get_supabase()
+    periodo_actual_archivos = obtener_periodo(empresa["id"], año_gravable)
+    render_tab_archivos(empresa, año_gravable, sb, periodo_actual_archivos)
+
+
+# ============================================================
 # Tab: Mapeo nativo (carga del archivo de codificación)
 # ============================================================
+# NOTA: Este bloque ahora queda oculto porque tab_mapeo apunta al mismo
+# contenedor que tab_archivos (que ya fue renderizado arriba). Se mantiene
+# por compatibilidad y para no romper el código existente.
 
 with tab_mapeo:
     st.markdown("### 🗂️ Codificación nativa del software contable")
@@ -914,6 +941,28 @@ with tab_clasificar:
                     # 3. Ejecutar el motor
                     motor = MotorClasificacion(reglas_c1, reglas_c2, reglas_c3)
                     resultado = motor.clasificar_balance(movimientos)
+
+                    # 3b. INTEGRAR datos PILA (si la empresa los tiene cargados).
+                    # Agrega líneas F1001 5010/5011/5012/5016, F1009 2214 y F2276
+                    # cesantías desde exogena_pila_movimientos y exogena_pila_cesantias.
+                    # Excluye automáticamente las cuentas contables que serían duplicadas
+                    # (25500502, 25500602, 25501002, 25502002, 237xxx, 251010).
+                    # Si la empresa no tiene datos PILA, el resultado del motor pasa intacto.
+                    resultado, pila_resumen = integrar_pila_en_resultado(
+                        resultado, sb, empresa["id"], año_gravable
+                    )
+                    if pila_resumen.pila_disponible:
+                        st.info(
+                            f"🏥 PILA integrado: "
+                            f"+{pila_resumen.lineas_agregadas_f1001} líneas F1001 "
+                            f"(${pila_resumen.valor_agregado_f1001:,.0f}), "
+                            f"+{pila_resumen.lineas_agregadas_f1009} líneas F1009 "
+                            f"(${pila_resumen.valor_agregado_f1009:,.0f}), "
+                            f"+{pila_resumen.lineas_agregadas_f2276} líneas F2276 "
+                            f"(${pila_resumen.valor_agregado_f2276:,.0f}). "
+                            f"Excluidas {pila_resumen.movimientos_excluidos} cuentas "
+                            f"duplicadas (${pila_resumen.valor_excluido:,.0f})."
+                        )
 
                     # 4. Calcular estadísticas para el dictamen
                     n_total = len(movimientos)
