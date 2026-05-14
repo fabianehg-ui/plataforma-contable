@@ -212,39 +212,42 @@ CIUDADES_CONOCIDAS = {
 }
 
 
-def inferir_dpto_municipio_desde_texto(*textos: str) -> Optional[tuple[str, str]]:
+def inferir_dpto_municipio_desde_texto(
+    *textos: str,
+    catalogo_extra: Optional[dict] = None,
+) -> Optional[tuple[str, str]]:
     """
     Intenta inferir (codigo_dpto, codigo_municipio) desde uno o varios textos
     libres (ej. dirección, ciudad, razón social).
 
     Args:
         *textos: varios strings opcionales (direccion, ciudad, etc.)
+        catalogo_extra: opcional, dict {nombre_normalizado: (cod_dpto, cod_mun)}
+            con todos los municipios del DANE. Si se pasa, se busca primero ahí
+            (más cobertura). Si no, se usa el catálogo embebido CIUDADES_CONOCIDAS.
 
     Returns:
         Tupla (codigo_dpto, codigo_municipio) o None si no se puede inferir.
 
     Estrategia: busca el nombre de ciudad más específico mencionado.
     Si hay múltiples, gana el más largo (más específico).
-
-    Ejemplos:
-        inferir_dpto_municipio_desde_texto("CALLE 100 #20-30 MEDELLIN ANTIOQUIA")
-          → ('05', '001')
-
-        inferir_dpto_municipio_desde_texto("Calle 50 N° 10-20", "Envigado")
-          → ('05', '266')
-
-        inferir_dpto_municipio_desde_texto("Cra 7 # 11-50")  # sin ciudad
-          → None
     """
     texto_completo = ' '.join(_normalizar(t) for t in textos if t)
     if not texto_completo:
         return None
 
+    # Combinar catálogo embebido + catálogo extra DANE (si se pasa)
+    fuente_busqueda = dict(CIUDADES_CONOCIDAS)  # copia para no mutar el original
+    if catalogo_extra:
+        for k, v in catalogo_extra.items():
+            # Solo agregar si no está ya (el embebido tiene prioridad)
+            if k not in fuente_busqueda:
+                fuente_busqueda[k] = v
+
     mejor_match: Optional[tuple[str, tuple[str, str]]] = None
-    for nombre, codigos in CIUDADES_CONOCIDAS.items():
+    for nombre, codigos in fuente_busqueda.items():
         nombre_norm = _normalizar(nombre)
         # Buscar como palabra completa (con bordes)
-        # ej. "MEDELLIN" en "CALLE 100 MEDELLIN" pero NO en "MEDELLINENSE"
         pattern = rf'\b{re.escape(nombre_norm)}\b'
         if re.search(pattern, texto_completo):
             if mejor_match is None or len(nombre_norm) > len(mejor_match[0]):
