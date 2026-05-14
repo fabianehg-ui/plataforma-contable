@@ -406,7 +406,126 @@ def es_persona_natural(tercero_dict: dict) -> bool:
 
 
 # ================================================================
-# 4) Aplicar fallback de empresa informante
+# 4) Corrección automática de tipo de documento
+# ================================================================
+
+def inferir_tipo_documento_real(nit: str) -> Optional[int]:
+    """
+    Infiere el tipo de documento real según el patrón del NIT/CC colombiano.
+
+    Reglas (basadas en numeración oficial Colombia):
+      - 6 dígitos o menos: cédula vieja (CC) — emitidas antes de 1995
+        ej. '6017605', '70071271' → CC
+      - 7-8 dígitos empezando por 1-8: CC (típico de Antioquia/Bogotá/Valle)
+        ej. '1037612345' → CC (joven, post-1995)
+        ej. '70071271' → CC (típica de hombre)
+        ej. '43000000' a '53000000' → CC de mujer (Antioquia)
+      - 9 dígitos empezando por 8 o 9: NIT (empresas)
+        ej. '900123456', '890200111' → NIT
+      - 10 dígitos empezando por 1: CC joven (post-2000)
+        ej. '1020123456', '1037612345' → CC
+
+    Returns:
+        Tipo de documento inferido (int): 13=CC, 31=NIT, o None si no se puede decidir.
+    """
+    if not nit:
+        return None
+
+    n = str(nit).strip()
+    # Quitar dígito verificación si tiene guión
+    if '-' in n:
+        n = n.split('-')[0]
+    n = n.lstrip('0')  # quitar ceros al inicio
+
+    if not n.isdigit():
+        return None
+
+    longitud = len(n)
+    primer_digito = n[0] if n else ''
+
+    # Reglas de inferencia:
+    # 1. Longitud ≤ 8 → muy probable CC (cédulas antes del 2000)
+    if longitud <= 8:
+        return 13  # CC
+
+    # 2. Longitud 9: ambiguo, pero el primer dígito da pista
+    if longitud == 9:
+        # NITs comienzan con 8 (servicios públicos legacy), 9 (modernos), 6 (algunas)
+        # Las CC nunca llegan a 9 dígitos (las más altas son ~8 dígitos)
+        if primer_digito in ('8', '9', '6'):
+            return 31  # NIT
+        # 1037612345 tiene 10 dígitos así que no entra acá
+        # Algunos NITs viejos: 4xxxxxxxx → menos común pero válido
+        if primer_digito == '4':
+            return 31  # NIT
+        return 13  # asumir CC en caso de duda
+
+    # 3. Longitud 10: típicamente CC joven (post-2000) que empieza con 1
+    if longitud == 10:
+        if primer_digito == '1':
+            return 13  # CC joven
+        # NITs muy raramente llegan a 10 dígitos
+        return 31
+
+    # 4. Longitud > 10: probablemente datos basura, no decidir
+    return None
+
+
+def corregir_tipo_documento(tercero_dict: dict) -> dict:
+    """
+    Detecta si el tipo_documento del tercero parece incorrecto según el NIT y
+    lo corrige automáticamente. Útil cuando el balance contable carga todo
+    como NIT (31) por defecto pero realmente son cédulas (13).
+
+    Args:
+        tercero_dict: dict del tercero (debe tener 'nit' y 'tipo_documento').
+
+    Returns:
+        Copia del tercero con tipo_documento corregido si se detectó error.
+        Si el tipo actual ya es coherente, no se modifica.
+    """
+    out = dict(tercero_dict)
+    nit = (out.get('nit') or '').strip()
+    if not nit:
+        return out
+
+    tipo_actual = out.get('tipo_documento')
+    if isinstance(tipo_actual, str) and tipo_actual.isdigit():
+        tipo_actual = int(tipo_actual)
+
+    tipo_inferido = inferir_tipo_documento_real(nit)
+    if tipo_inferido is None:
+        return out
+
+    # Casos donde corregir:
+    # - tipo_actual = 31 (NIT) pero NIT parece cédula → corregir a 13 (CC)
+    # - tipo_actual = 13 (CC) pero NIT parece empresa → corregir a 31 (NIT)
+    # - tipo_actual = None / 0 → poner el inferido
+    if tipo_actual in (None, 0, ''):
+        out['tipo_documento'] = tipo_inferido
+        out['_tipo_corregido'] = True
+        return out
+
+    # Si actual es jurídica pero inferido es natural (caso común con cédulas
+    # mal cargadas como NIT en el balance):
+    if tipo_actual == 31 and tipo_inferido == 13:
+        out['tipo_documento'] = 13
+        out['_tipo_corregido'] = True
+        # Si tiene razon_social pero apellidos/nombres vacíos, marcar para
+        # que auto_dividir_nombre_natural la procese
+        return out
+
+    # Si actual es natural (13, 22, etc.) pero inferido es NIT:
+    if tipo_actual in (13, 22, 41, 42) and tipo_inferido == 31:
+        out['tipo_documento'] = 31
+        out['_tipo_corregido'] = True
+        return out
+
+    return out
+
+
+# ================================================================
+# 5) Aplicar fallback de empresa informante
 # ================================================================
 
 def aplicar_fallback_empresa(
