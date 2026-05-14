@@ -20,7 +20,7 @@ import io
 import streamlit as st
 import pandas as pd
 
-from core.exogena import conciliacion_enriquecida as ce
+from core.exogena import conciliacion_enriquecida_1 as ce
 
 
 # ============================================================================
