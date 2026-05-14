@@ -297,6 +297,19 @@ def render_tab_generar_xml(
         )
 
     if not boton_generar:
+        # Si hay resultados de una generación anterior, mostrarlos
+        # para que el usuario pueda marcarlos como definitivos sin regenerar
+        storage_key = f"exo_resultados_prueba_{empresa_id}_{ano_gravable}_{tipo_envio}"
+        if storage_key in st.session_state:
+            _render_resultados_previos(
+                storage_key=storage_key,
+                gestor=gestor,
+                empresa_id=empresa_id,
+                ano_gravable=ano_gravable,
+                tipo_envio=tipo_envio,
+                info_empresa=info_empresa,
+            )
+            _render_historico(gestor, empresa_id, ano_gravable)
         return
 
     # ============================================================
@@ -473,7 +486,7 @@ def _ejecutar_generacion(
             ano_envio=ano_envio,
             fecha_envio=datetime.now(),
             ruta_salida=xml_dir,
-            registrar_en_bd=True,
+            registrar_en_bd=False,   # ← MODO PRUEBA: no persistir en BD
             generado_por=usuario_actual_id,
         )
     except ValueError as e:
@@ -526,12 +539,35 @@ def _ejecutar_generacion(
     progreso.progress(100, text="¡Listo!")
     progreso.empty()
 
-    # Invalidar caché de consecutivos para que la próxima vez sugiera los nuevos
-    if cache_key in st.session_state:
-        del st.session_state[cache_key]
+    # NO invalidamos el caché de consecutivos: como estamos en modo prueba,
+    # la próxima generación debe sugerir EL MISMO consecutivo.
+    # El caché solo se limpia cuando el usuario marca como DEFINITIVO.
 
-    # --- 5. Mostrar resultados
-    st.success(f"✅ {len(resultados)} archivos XML generados correctamente")
+    # --- 5. Guardar resultados en session_state para "Marcar definitivo"
+    storage_key = f"exo_resultados_prueba_{empresa_id}_{ano_gravable}_{tipo_envio}"
+    st.session_state[storage_key] = {
+        'resultados': resultados,
+        'consecutivos_elegidos': consecutivos_elegidos,
+        'ano_envio': ano_envio,
+        'tipo_envio': tipo_envio,
+        'fecha_generacion': datetime.now(),
+        'zip_bytes': zip_bytes.getvalue(),
+        'nombre_zip': f"Exogena_{info_empresa.get('nit','EMPRESA')}_AG{ano_gravable}_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
+        'total_registros': sum(r.cantidad_registros for r in resultados.values()),
+        'total_valor': sum(r.valor_total for r in resultados.values()),
+        'cache_key': cache_key,
+    }
+
+    # --- 6. Banner MODO PRUEBA + mensaje claro
+    st.success(f"✅ {len(resultados)} archivos XML generados (modo PRUEBA)")
+
+    st.info(
+        "🔍 **Modo PRUEBA activo** — Los consecutivos NO se han persistido. "
+        "Puedes regenerar las veces que quieras y siempre arrancarán desde el mismo número. "
+        "Cuando subas los archivos a DIAN y te los acepten, presiona "
+        "**\"✅ Marcar como DEFINITIVO\"** abajo para que la plataforma "
+        "registre el envío y avance los consecutivos."
+    )
 
     # Métricas resumen
     total_registros = sum(r.cantidad_registros for r in resultados.values())
@@ -543,7 +579,7 @@ def _ejecutar_generacion(
     col3.metric("Valor total", f"${total_valor:,.0f}")
 
     # Botón descarga ZIP
-    nombre_zip = f"Exogena_{info_empresa.get('nit','EMPRESA')}_AG{ano_gravable}_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
+    nombre_zip = st.session_state[storage_key]['nombre_zip']
     st.download_button(
         "📦 Descargar ZIP completo (XMLs + Excel)",
         data=zip_bytes,
@@ -563,7 +599,7 @@ def _ejecutar_generacion(
             'Archivo': res.nombre_archivo,
             'Registros': res.cantidad_registros,
             'Valor total': res.valor_total,
-            'ID envío BD': res.envio_id if res.envio_id and res.envio_id > 0 else '—',
+            'Estado': '🔍 PRUEBA',
         }
         for fmt, res in resultados.items()
     ])
@@ -577,6 +613,7 @@ def _ejecutar_generacion(
             ),
         },
     )
+
 
     # Descargas individuales (expander)
     with st.expander("📥 Descargas individuales por archivo"):
@@ -603,6 +640,15 @@ def _ejecutar_generacion(
                     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     key='dl_excel_maestro',
                 )
+
+    # --- 7. Sección "Marcar como DEFINITIVO"
+    _render_seccion_marcar_definitivo(
+        storage_key=storage_key,
+        gestor=gestor,
+        empresa_id=empresa_id,
+        ano_gravable=ano_gravable,
+        info_empresa=info_empresa,
+    )
 
     # Histórico de envíos
     _render_historico(gestor, empresa_id, ano_gravable)
@@ -795,3 +841,216 @@ def _guardar_cambios_terceros(cambios: dict, empresa_id: str, sb):
         )
     if errores:
         st.error("Errores al guardar:\n" + "\n".join(errores))
+
+
+# ================================================================
+# Renderiza los resultados de una generación previa (al recargar la página)
+# ================================================================
+
+def _render_resultados_previos(
+    storage_key: str,
+    gestor: 'GestorConsecutivos',
+    empresa_id: str,
+    ano_gravable: int,
+    tipo_envio: str,
+    info_empresa: dict,
+):
+    """
+    Cuando ya hay un resultado de prueba guardado en session_state, mostrarlo
+    para que el usuario pueda descargar de nuevo y/o marcar como definitivo.
+    """
+    data = st.session_state[storage_key]
+    resultados = data['resultados']
+    fecha = data['fecha_generacion']
+
+    st.markdown("---")
+    st.markdown("### 📂 Última generación de prueba")
+    st.info(
+        f"🔍 **Modo PRUEBA** — Última generación: {fecha.strftime('%Y-%m-%d %H:%M')}. "
+        f"Los consecutivos NO se han persistido. Cuando confirmes que DIAN aceptó "
+        f"el envío, presiona **\"✅ Marcar como DEFINITIVO\"** abajo."
+    )
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Archivos generados", f"{len(resultados)}")
+    col2.metric("Registros totales", f"{data['total_registros']:,}")
+    col3.metric("Valor total", f"${data['total_valor']:,.0f}")
+
+    # Re-descarga del ZIP
+    st.download_button(
+        "📦 Descargar ZIP de la última generación",
+        data=data['zip_bytes'],
+        file_name=data['nombre_zip'],
+        mime='application/zip',
+        use_container_width=True,
+    )
+
+    # Tabla detalle
+    detalle = pd.DataFrame([
+        {
+            'Formato': _formato_label(fmt),
+            'Versión': f"v.{res.version}",
+            'Consecutivo': res.consecutivo_usado,
+            'Archivo': res.nombre_archivo,
+            'Registros': res.cantidad_registros,
+            'Valor total': res.valor_total,
+            'Estado': '🔍 PRUEBA',
+        }
+        for fmt, res in resultados.items()
+    ])
+    st.dataframe(
+        detalle, hide_index=True, use_container_width=True,
+        column_config={
+            'Valor total': st.column_config.NumberColumn('Valor total', format='$%d'),
+        },
+    )
+
+    _render_seccion_marcar_definitivo(
+        storage_key=storage_key,
+        gestor=gestor,
+        empresa_id=empresa_id,
+        ano_gravable=ano_gravable,
+        info_empresa=info_empresa,
+    )
+
+
+# ================================================================
+# Sección "Marcar como DEFINITIVO"
+# ================================================================
+
+def _render_seccion_marcar_definitivo(
+    storage_key: str,
+    gestor: 'GestorConsecutivos',
+    empresa_id: str,
+    ano_gravable: int,
+    info_empresa: dict,
+):
+    """
+    Después de generar, mostrar la sección con el botón "Marcar como DEFINITIVO".
+    Cuando el contador confirma, registra los envíos en BD y avanza los consecutivos.
+    """
+    if storage_key not in st.session_state:
+        return
+
+    data = st.session_state[storage_key]
+    resultados = data['resultados']
+
+    st.markdown("---")
+    st.markdown("### ✅ Confirmar envío DEFINITIVO")
+
+    st.markdown(
+        "Cuando hayas subido los archivos XML a DIAN y te los hayan **aceptado**, "
+        "presiona el botón de abajo. Esto:\n\n"
+        "- Registra los envíos en el histórico de la plataforma\n"
+        "- Avanza los consecutivos en BD para la próxima generación\n"
+        "- No se puede deshacer (los consecutivos no se pueden 'devolver')\n"
+    )
+
+    # Tabla previa de qué se va a registrar
+    df_previa = pd.DataFrame([
+        {
+            'Formato': _formato_label(fmt),
+            'Consecutivo': res.consecutivo_usado,
+            'Archivo': res.nombre_archivo,
+        }
+        for fmt, res in resultados.items()
+    ])
+    with st.expander("👀 Ver qué se va a registrar al marcar definitivo"):
+        st.dataframe(df_previa, hide_index=True, use_container_width=True)
+
+    # Confirmación con checkbox + botón
+    col_check, col_btn = st.columns([2, 1])
+    with col_check:
+        confirmar = st.checkbox(
+            "✓ Confirmo que estos XMLs ya fueron aceptados por DIAN",
+            key=f"confirmar_def_{storage_key}",
+        )
+    with col_btn:
+        if st.button(
+            "✅ Marcar como DEFINITIVO",
+            type="primary",
+            disabled=not confirmar,
+            use_container_width=True,
+            key=f"btn_def_{storage_key}",
+        ):
+            _marcar_definitivo(storage_key, gestor, empresa_id, info_empresa)
+
+
+def _marcar_definitivo(
+    storage_key: str,
+    gestor: 'GestorConsecutivos',
+    empresa_id: str,
+    info_empresa: dict,
+):
+    """
+    Persiste en BD los envíos generados en modo prueba.
+    Llama a gestor.registrar_envio() por cada XML del lote.
+    """
+    if storage_key not in st.session_state:
+        st.error("No hay datos de prueba para marcar como definitivos.")
+        return
+
+    data = st.session_state[storage_key]
+    resultados = data['resultados']
+
+    usuario_actual_id = (
+        st.session_state.get('user', {}).get('id')
+        if isinstance(st.session_state.get('user'), dict) else None
+    )
+
+    exitos = []
+    errores = []
+    progreso = st.progress(0, text="Registrando envíos en BD...")
+    total = len(resultados)
+
+    for i, (fmt, res) in enumerate(resultados.items(), 1):
+        try:
+            envio = gestor.registrar_envio(
+                empresa_id=empresa_id,
+                ano_gravable=res.fecha_generacion.year if res.fecha_generacion else 2025,
+                formato=fmt,
+                version=res.version,
+                tipo_envio=res.tipo_envio,
+                consecutivo=res.consecutivo_usado,
+                nombre_archivo=res.nombre_archivo,
+                cantidad_registros=res.cantidad_registros,
+                valor_total=res.valor_total,
+                xml_content=res.xml,
+                archivo_xml_path=str(res.ruta_archivo) if res.ruta_archivo else None,
+                generado_por=usuario_actual_id,
+            )
+            exitos.append((fmt, res.consecutivo_usado, envio.envio_id))
+        except ValueError as e:
+            errores.append((fmt, str(e)))
+        except Exception as e:
+            errores.append((fmt, f"Error inesperado: {e}"))
+
+        progreso.progress(int(i * 100 / total), text=f"Registrando F{fmt}...")
+
+    progreso.empty()
+
+    if exitos:
+        st.success(
+            f"✅ {len(exitos)} envío(s) registrado(s) como DEFINITIVOS. "
+            f"Los consecutivos avanzaron correctamente."
+        )
+        df_exitos = pd.DataFrame(
+            [{'Formato': f'F{f}', 'Consecutivo': c, 'ID BD': eid} for f, c, eid in exitos]
+        )
+        st.dataframe(df_exitos, hide_index=True, use_container_width=True)
+
+    if errores:
+        msg = "⚠️ Algunos envíos no se pudieron registrar:\n"
+        for fmt, err in errores:
+            msg += f"\n- **F{fmt}**: {err}"
+        st.error(msg)
+
+    # Limpiar resultados de prueba e invalidar cachés de consecutivos
+    if exitos:
+        del st.session_state[storage_key]
+        # Limpiar cualquier caché de consecutivos para forzar re-consulta a BD
+        cache_key = data.get('cache_key')
+        if cache_key and cache_key in st.session_state:
+            del st.session_state[cache_key]
+
+        st.info("🔄 Recarga la página o cambia de pestaña para ver los nuevos consecutivos sugeridos.")
