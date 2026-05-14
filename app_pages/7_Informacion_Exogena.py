@@ -2043,11 +2043,33 @@ with tab_generar:
 
             # 4. Integrar PILA si la empresa la tiene
             try:
-                resultado, _ = integrar_pila_en_resultado(
-                    resultado, sb_local, empresa_id_callback, ano,
-                )
-            except Exception:
-                pass  # Si PILA falla, continuamos con resultado del motor
+                from core.exogena.integrador_pila import hay_datos_pila
+                tiene_pila = hay_datos_pila(sb_local, empresa_id_callback, ano)
+                if tiene_pila:
+                    resultado, pila_resumen = integrar_pila_en_resultado(
+                        resultado, sb_local, empresa_id_callback, ano,
+                    )
+                    # Guardar resumen en session_state para mostrarlo en la UI
+                    st.session_state[f'exo_pila_resumen_{empresa_id_callback}_{ano}'] = {
+                        'integrada': True,
+                        'lineas_f1001': pila_resumen.lineas_agregadas_f1001,
+                        'lineas_f1009': pila_resumen.lineas_agregadas_f1009,
+                        'lineas_f2276': pila_resumen.lineas_agregadas_f2276,
+                        'valor_f1001': pila_resumen.valor_agregado_f1001,
+                        'valor_f1009': pila_resumen.valor_agregado_f1009,
+                        'movimientos_excluidos_balance': pila_resumen.movimientos_excluidos,
+                    }
+                else:
+                    st.session_state[f'exo_pila_resumen_{empresa_id_callback}_{ano}'] = {
+                        'integrada': False,
+                        'motivo': 'no_hay_datos_pila',
+                    }
+            except Exception as e:
+                # Reportar el error pero seguir adelante
+                st.session_state[f'exo_pila_resumen_{empresa_id_callback}_{ano}'] = {
+                    'integrada': False,
+                    'motivo': f'error: {e}',
+                }
 
             # 5. Cargar terceros y aplicar adaptador
             terceros_dict = _cargar_terceros_dict(empresa_id_callback)
