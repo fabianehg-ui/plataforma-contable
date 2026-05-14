@@ -332,6 +332,22 @@ def render_tab_generar_xml(
     # ============================================================
     st.markdown("#### 4️⃣ Generación")
 
+    # Toggle: saltar enriquecimiento web (acelera mucho con muchos NITs).
+    # Si el maestro local de terceros ya está completo, no se necesita
+    # consultar RUES/Datos Abiertos/Empresite por internet.
+    saltar_enriquecimiento_web = st.checkbox(
+        "⚡ Saltar enriquecimiento web (más rápido, usa solo maestro local)",
+        value=False,
+        key="exo_saltar_enriquecimiento_web",
+        help=(
+            "Cuando está activado, el sistema NO consulta RUES/Datos Abiertos/Empresite "
+            "para completar datos de terceros faltantes. Solo usa el maestro local "
+            "de la BD. Es mucho más rápido (segundos en vez de 10-30 min) si tu "
+            "maestro de terceros ya está completo. Si hay terceros con datos faltantes, "
+            "quedarán pendientes en la validación."
+        ),
+    )
+
     col_btn, col_info = st.columns([1, 2])
     with col_btn:
         boton_generar = st.button(
@@ -378,6 +394,7 @@ def render_tab_generar_xml(
         info_empresa=info_empresa,
         gestor=gestor,
         cache_key=cache_key,
+        saltar_enriquecimiento_web=saltar_enriquecimiento_web,
     )
 
 
@@ -396,6 +413,7 @@ def _ejecutar_generacion(
     info_empresa: dict,
     gestor: GestorConsecutivos,
     cache_key: str,
+    saltar_enriquecimiento_web: bool = False,
 ):
     """
     Hace el trabajo real: obtiene registros, genera XMLs + Excel, valida XSD,
@@ -412,48 +430,20 @@ def _ejecutar_generacion(
         return
 
     # Filtrar solo los formatos seleccionados que tengan datos
-    # Criterio: (a) lista no vacía + (b) suma de valores monetarios > 0
-    # (b) evita generar XMLs cuyo "Cab/CantReg" y "Cab/ValTotal" quedarían en 0,
-    # lo que quemaría consecutivo y enviaría archivos sin contenido reportable.
-    try:
-        from core.exogena.adaptador_motor_v2 import (
-            formato_tiene_valor, valor_monetario_total_formato,
-        )
-    except ImportError:
-        # Fallback: si no se pudo importar el helper, mantener comportamiento previo
-        # (filtro solo por lista no vacía).
-        def formato_tiene_valor(_fmt, regs, tolerancia=0.01):
-            return bool(regs)
-        def valor_monetario_total_formato(_fmt, _regs):
-            return 0.0
-
     registros_filtrados = {
         fmt: registros_por_formato_completo[fmt]
         for fmt in formatos_a_generar
-        if fmt in registros_por_formato_completo
-        and registros_por_formato_completo[fmt]
-        and formato_tiene_valor(fmt, registros_por_formato_completo[fmt])
+        if fmt in registros_por_formato_completo and registros_por_formato_completo[fmt]
     }
 
-    # Detallar por qué se omiten formatos (lista vacía vs valor total 0)
-    formatos_sin_registros = [
+    formatos_vacios = [
         fmt for fmt in formatos_a_generar
         if not registros_por_formato_completo.get(fmt)
     ]
-    formatos_en_ceros = [
-        fmt for fmt in formatos_a_generar
-        if registros_por_formato_completo.get(fmt)
-        and not formato_tiene_valor(fmt, registros_por_formato_completo[fmt])
-    ]
-    if formatos_sin_registros:
+    if formatos_vacios:
         st.warning(
-            f"⚠️ Sin registros para: {', '.join(f'F{f}' for f in formatos_sin_registros)}. "
+            f"⚠️ Sin datos para: {', '.join(f'F{f}' for f in formatos_vacios)}. "
             "Se omiten."
-        )
-    if formatos_en_ceros:
-        st.warning(
-            f"⚠️ Valor total = $0 para: {', '.join(f'F{f}' for f in formatos_en_ceros)}. "
-            "Se omiten (no se quema consecutivo)."
         )
 
     if not registros_filtrados:
@@ -496,28 +486,36 @@ def _ejecutar_generacion(
     except Exception as e:
         fuentes_no_disponibles.append(f'Caché: {type(e).__name__}')
 
-    for nombre_clase, label in [
-        ('RUESEnriquecedor', 'RUES Confecámaras'),
-        ('DatosAbiertosEnriquecedor', 'Datos Abiertos del Gobierno'),
-        ('EmpresiteEnriquecedor', 'Empresite Colombia'),
-    ]:
-        try:
-            from core.exogena.enriquecimiento import (
-                RUESEnriquecedor, DatosAbiertosEnriquecedor, EmpresiteEnriquecedor,
-            )
-            clases = {
-                'RUESEnriquecedor': RUESEnriquecedor,
-                'DatosAbiertosEnriquecedor': DatosAbiertosEnriquecedor,
-                'EmpresiteEnriquecedor': EmpresiteEnriquecedor,
-            }
-            instancia = clases[nombre_clase]()
-            if instancia.disponible():
-                cascada_enriquecedores.append(instancia)
-                fuentes_disponibles.append(label)
-            else:
-                fuentes_no_disponibles.append(f'{label}: dependencias faltantes (instala requests/bs4)')
-        except Exception as e:
-            fuentes_no_disponibles.append(f'{label}: {type(e).__name__}: {e}')
+    if saltar_enriquecimiento_web:
+        # Modo rápido: NO usar fuentes web. Solo cache local + maestro BD.
+        st.info(
+            "⚡ Modo rápido activado: se omite enriquecimiento web "
+            "(RUES / Datos Abiertos / Empresite). Los terceros con datos "
+            "incompletos en BD quedarán pendientes para revisión."
+        )
+    else:
+        for nombre_clase, label in [
+            ('RUESEnriquecedor', 'RUES Confecámaras'),
+            ('DatosAbiertosEnriquecedor', 'Datos Abiertos del Gobierno'),
+            ('EmpresiteEnriquecedor', 'Empresite Colombia'),
+        ]:
+            try:
+                from core.exogena.enriquecimiento import (
+                    RUESEnriquecedor, DatosAbiertosEnriquecedor, EmpresiteEnriquecedor,
+                )
+                clases = {
+                    'RUESEnriquecedor': RUESEnriquecedor,
+                    'DatosAbiertosEnriquecedor': DatosAbiertosEnriquecedor,
+                    'EmpresiteEnriquecedor': EmpresiteEnriquecedor,
+                }
+                instancia = clases[nombre_clase]()
+                if instancia.disponible():
+                    cascada_enriquecedores.append(instancia)
+                    fuentes_disponibles.append(label)
+                else:
+                    fuentes_no_disponibles.append(f'{label}: dependencias faltantes (instala requests/bs4)')
+            except Exception as e:
+                fuentes_no_disponibles.append(f'{label}: {type(e).__name__}: {e}')
 
     cascada = (
         EnriquecedorEnCascada(cascada_enriquecedores)
