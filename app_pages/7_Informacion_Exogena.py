@@ -1926,23 +1926,63 @@ with tab_conciliacion:
 
 
 # ============================================================
-# Tab: Generar XML
+# Tab: Generar XML — UI completa con sistema de consecutivos
 # ============================================================
 
 with tab_generar:
-    render_proximamente(
-        titulo="Generación de archivos XML",
-        descripcion=(
-            "Motor validado contra los XSD del prevalidador AG 2025 v3.3.0-26. "
-            "Genera archivos `Dmuisca_*.xml` listos para subir a DIAN MUISCA."
-        ),
-        fases=[
-            "Builder de XML por formato usando los XSDs como esquema",
-            "Validación XSD en cliente antes de la descarga",
-            "Edge Function en Supabase que genera y guarda los XML en bucket",
-            "Histórico de envíos por empresa/año",
-        ],
-    )
+    try:
+        from core.exogena.ui_generacion_xml import render_tab_generar_xml
+
+        def _obtener_registros_por_formato(empresa_id_callback: str, ano: int) -> dict:
+            """
+            Callback que el tab Generar usa para conseguir los registros
+            ya clasificados desde el motor.
+
+            Por ahora devuelve un dict vacío como placeholder, hasta que
+            conectemos el motor_clasificacion → generador_xml_v2.
+
+            Cuando esté conectado el adaptador, este callback debe:
+              1. Obtener el ResultadoClasificacion del motor (de session_state o BD)
+              2. Aplicar integrador_pila si aplica
+              3. Convertir cada MovimientoClasificado a su RegistroFXXXX
+              4. Devolver {formato: [RegistrosFXXXX...]}
+            """
+            return st.session_state.get('exo_registros_por_formato', {})
+
+        # Info de la empresa para la cabecera del Excel
+        info_empresa_dict = {
+            'nit': empresa.get('nit', ''),
+            'razon_social': empresa.get('razon_social') or empresa.get('nombre', ''),
+            'nombre': empresa.get('nombre', ''),
+        }
+
+        # Aviso temporal mientras no haya datos clasificados conectados
+        if not st.session_state.get('exo_registros_por_formato'):
+            st.warning(
+                "⚠️ **Aún no hay registros clasificados en memoria.** "
+                "El flujo completo requiere clasificar primero el balance en la pestaña "
+                "**⚙️ Borrador**. Por ahora la UI muestra la mecánica de consecutivos, "
+                "pero al generar no producirá XMLs hasta que el motor entregue los registros."
+            )
+
+        render_tab_generar_xml(
+            empresa_id=empresa['id'],
+            ano_gravable=año_gravable,
+            obtener_registros_por_formato=_obtener_registros_por_formato,
+            info_empresa=info_empresa_dict,
+        )
+
+    except ImportError as e:
+        st.error(
+            f"⚠️ No se pudo cargar el módulo de generación XML: {e}\n\n"
+            "Verifica que `core/exogena/ui_generacion_xml.py`, "
+            "`core/exogena/gestor_consecutivos.py` y "
+            "`core/exogena/generar_xml_exogena.py` estén desplegados."
+        )
+    except Exception as e:
+        st.error(f"⚠️ Error en la pestaña Generar: {e}")
+        import traceback as _tb
+        st.code(_tb.format_exc())
 
 
 # ============================================================
