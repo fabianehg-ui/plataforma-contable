@@ -160,10 +160,10 @@ def construir_conciliacion_enriquecida(
 
     capa1_data = sb.table('exogena_puc_generico').select('*').eq(
         'año_gravable', año_gravable
-    ).execute().data or []
+    ).eq('activo', True).execute().data or []
     capa2_data = sb.table('exogena_mapeo_empresa').select('*').eq(
         'empresa_id', empresa_id
-    ).eq('año_gravable', año_gravable).execute().data or []
+    ).eq('año_gravable', año_gravable).eq('activo', True).execute().data or []
     capa3_data = sb.table('exogena_mapeo_manual').select('*').eq(
         'empresa_id', empresa_id
     ).eq('año_gravable', año_gravable).execute().data or []
