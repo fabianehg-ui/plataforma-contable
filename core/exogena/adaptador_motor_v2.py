@@ -598,3 +598,79 @@ def construir_registros_v2(
         salida['2276'] = regs
 
     return salida
+
+
+# ================================================================
+# HELPER: valor monetario total de un formato
+# ================================================================
+# Campos numéricos de cada Registro que SÍ representan valores monetarios.
+# Los campos `concepto` y `entidad_informante` quedan fuera (son códigos DIAN).
+CAMPOS_VALOR_POR_FORMATO: dict[str, tuple[str, ...]] = {
+    '1001': (
+        'pago_deducible', 'pago_no_deducible',
+        'iva_mayor_deducible', 'iva_mayor_no_deducible',
+        'retencion_renta_practicada', 'retencion_renta_asumida',
+        'retencion_iva_responsables', 'retencion_iva_no_dom',
+    ),
+    '1003': ('valor_base', 'retencion'),
+    '1005': ('iva_descontable', 'iva_dev_ventas', 'iva_mayor_costo'),
+    '1006': ('iva_generado', 'iva_dev_compras', 'impuesto_consumo'),
+    '1007': ('ingresos_brutos', 'devoluciones_rebajas_descuentos'),
+    '1008': ('saldo',),
+    '1009': ('saldo',),
+    '1011': ('saldo',),
+    '1012': ('valor',),
+    '1647': ('valor_total', 'valor_ingreso_transferido', 'valor_retencion_transferida'),
+    '2276': (
+        'pagos_salarios', 'pagos_emolumentos_ecles', 'pagos_bonos_papel',
+        'valor_exceso_alimentacion', 'pagos_honorarios', 'pagos_servicios',
+        'pagos_comisiones', 'pagos_prestaciones', 'pagos_viaticos',
+        'pagos_gastos_repres', 'pagos_compensaciones_coop', 'valor_apoyos_estado',
+        'otros_pagos', 'cesantias_pagadas', 'cesantias_consignadas',
+        'auxilio_cesantias_tradicional', 'pensiones_juvi', 'total_ingresos_brutos',
+        'aportes_obligatorios_salud', 'aportes_obligatorios_pension',
+        'aportes_voluntarios_rais', 'aportes_voluntarios_pension',
+        'aportes_afc', 'aportes_avc',
+        'retencion_fuente', 'iva_mayor_valor', 'retencion_iva',
+        'pagos_alimentacion_41uvt', 'ingreso_laboral_promedio_6m',
+    ),
+}
+
+
+def valor_monetario_total_formato(formato: str, registros: list) -> float:
+    """
+    Suma todos los campos monetarios de todos los registros de un formato.
+
+    Útil para decidir si un formato debe generarse: si retorna 0, el formato
+    no tiene valor reportable y se debe omitir (no quema consecutivo, no se
+    envía XML vacío al DIAN).
+
+    Args:
+        formato: '1001', '1005', '1009', etc. (sin el prefijo 'F').
+        registros: lista de Registro{FXXXX} ya construidos.
+
+    Returns:
+        Suma absoluta de todos los campos monetarios. 0.0 si no hay valor.
+    """
+    if not registros:
+        return 0.0
+    campos = CAMPOS_VALOR_POR_FORMATO.get(str(formato).replace('F', ''), ())
+    if not campos:
+        # Formato desconocido: por seguridad, conservar como si tuviera valor
+        # (el filtro de "lista no vacía" ya lo cubría antes de este helper).
+        return float('inf')
+    total = 0.0
+    for r in registros:
+        for c in campos:
+            v = getattr(r, c, 0) or 0
+            total += abs(float(v))
+    return total
+
+
+def formato_tiene_valor(formato: str, registros: list, tolerancia: float = 0.01) -> bool:
+    """
+    True si el formato tiene al menos un peso de valor reportable.
+    Usa tolerancia para evitar problemas de redondeo a centavos.
+    """
+    return valor_monetario_total_formato(formato, registros) > tolerancia
+

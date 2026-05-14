@@ -412,20 +412,48 @@ def _ejecutar_generacion(
         return
 
     # Filtrar solo los formatos seleccionados que tengan datos
+    # Criterio: (a) lista no vacía + (b) suma de valores monetarios > 0
+    # (b) evita generar XMLs cuyo "Cab/CantReg" y "Cab/ValTotal" quedarían en 0,
+    # lo que quemaría consecutivo y enviaría archivos sin contenido reportable.
+    try:
+        from core.exogena.adaptador_motor_v2 import (
+            formato_tiene_valor, valor_monetario_total_formato,
+        )
+    except ImportError:
+        # Fallback: si no se pudo importar el helper, mantener comportamiento previo
+        # (filtro solo por lista no vacía).
+        def formato_tiene_valor(_fmt, regs, tolerancia=0.01):
+            return bool(regs)
+        def valor_monetario_total_formato(_fmt, _regs):
+            return 0.0
+
     registros_filtrados = {
         fmt: registros_por_formato_completo[fmt]
         for fmt in formatos_a_generar
-        if fmt in registros_por_formato_completo and registros_por_formato_completo[fmt]
+        if fmt in registros_por_formato_completo
+        and registros_por_formato_completo[fmt]
+        and formato_tiene_valor(fmt, registros_por_formato_completo[fmt])
     }
 
-    formatos_vacios = [
+    # Detallar por qué se omiten formatos (lista vacía vs valor total 0)
+    formatos_sin_registros = [
         fmt for fmt in formatos_a_generar
         if not registros_por_formato_completo.get(fmt)
     ]
-    if formatos_vacios:
+    formatos_en_ceros = [
+        fmt for fmt in formatos_a_generar
+        if registros_por_formato_completo.get(fmt)
+        and not formato_tiene_valor(fmt, registros_por_formato_completo[fmt])
+    ]
+    if formatos_sin_registros:
         st.warning(
-            f"⚠️ Sin datos para: {', '.join(f'F{f}' for f in formatos_vacios)}. "
+            f"⚠️ Sin registros para: {', '.join(f'F{f}' for f in formatos_sin_registros)}. "
             "Se omiten."
+        )
+    if formatos_en_ceros:
+        st.warning(
+            f"⚠️ Valor total = $0 para: {', '.join(f'F{f}' for f in formatos_en_ceros)}. "
+            "Se omiten (no se quema consecutivo)."
         )
 
     if not registros_filtrados:
