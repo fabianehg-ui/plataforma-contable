@@ -1061,36 +1061,69 @@ class MotorClasificacion:
         # GUARD DE DOBLE REPORTE: pasivos de prestaciones sociales.
         # Las cuentas 2510, 2515, 2525, 25300x, 25301x, 25302x se reportan
         # en DOS formatos:
-        #   - F1009 con su saldo final (lo que falta pagar)
-        #   - F2276 con sus débitos del año (lo efectivamente pagado al empleado)
-        # Este guard se ejecuta a la PAR (sin return) para que capa 2 después
-        # reporte normalmente el saldo final en F1009.
-        # Solo agrega el movimiento F2276 si hay débitos > 0 en el año.
+        #   - F2276 con sus DÉBITOS del año (lo efectivamente pagado al empleado)
+        #   - F1009 con su SALDO FINAL positivo (lo que falta pagar al cierre)
+        # Si el saldo final es negativo (crédito residual) NO se reporta en F1009
+        # — ese saldo negativo es solo del corte contable, no es una cuenta por
+        # pagar real.
+        # Marcamos una bandera para evitar que el flujo normal después marque
+        # "sin_resolver" si capa 1/2/3 no la clasificaron.
+        doble_reporte_disparado = False
         concepto_pasivo = _concepto_f2276_pasivo_prestacion(mov.codigo_cuenta)
-        if concepto_pasivo is not None and mov.debitos and mov.debitos > 0:
+        if concepto_pasivo is not None:
+            # Esta cuenta es prestacional → el guard YA es la regla aplicable.
+            # Aunque no agreguemos nada (sin débitos ni saldo positivo), evitar
+            # que caiga en sin_resolver más abajo: estas cuentas NO tienen
+            # reglas en capa 1/2/3 y el guard es su único punto de clasificación.
+            doble_reporte_disparado = True
+
             descripcion_concepto = {
                 19: 'papre - prestaciones sociales pagadas',
                 24: 'potro - otros pagos (vacaciones)',
                 25: 'cein - cesantías + intereses pagados al empleado',
                 26: 'ceco - cesantías consignadas al fondo',
             }.get(concepto_pasivo, f'concepto {concepto_pasivo}')
-            resultados.append(MovimientoClasificado(
-                codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
-                formato_dian='2276',
-                concepto_dian=concepto_pasivo,
-                valor=abs(mov.debitos),
-                base_aplicable='debitos',
-                capa_resolucion='pasivo_prestacion_doble_reporte',
-                requiere_revision=False,
-                nota=(
-                    f'Doble reporte: débitos del año del pasivo prestacional '
-                    f'→ F2276 concepto {concepto_pasivo} ({descripcion_concepto}). '
-                    f'El saldo final se reporta en F1009 por flujo normal.'
-                ),
-                balance_id=mov.balance_id,
-            ))
-            # NO hacemos return: dejamos que capa 2 / capa 1 reporten el
-            # saldo final en F1009 también.
+
+            # F2276 — solo si hay débitos > 0 (pagos efectivos al empleado en el año)
+            if mov.debitos and mov.debitos > 0:
+                resultados.append(MovimientoClasificado(
+                    codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                    formato_dian='2276',
+                    concepto_dian=concepto_pasivo,
+                    valor=abs(mov.debitos),
+                    base_aplicable='debitos',
+                    capa_resolucion='pasivo_prestacion_doble_reporte',
+                    requiere_revision=False,
+                    nota=(
+                        f'Doble reporte: débitos del año del pasivo prestacional '
+                        f'→ F2276 concepto {concepto_pasivo} ({descripcion_concepto}). '
+                        f'Solo se toman los DÉBITOS del año (pagos al empleado).'
+                    ),
+                    balance_id=mov.balance_id,
+                ))
+
+            # F1009 — solo si saldo final positivo (lo que falta pagar al cierre).
+            # Un saldo NEGATIVO indica que no quedó cuenta por pagar al cierre.
+            if mov.saldo_final and mov.saldo_final > 0:
+                # Concepto F1009 estándar para pasivos prestacionales: 2214
+                resultados.append(MovimientoClasificado(
+                    codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                    formato_dian='1009',
+                    concepto_dian=2214,
+                    valor=mov.saldo_final,
+                    base_aplicable='saldo_final',
+                    capa_resolucion='pasivo_prestacion_doble_reporte',
+                    requiere_revision=False,
+                    nota=(
+                        f'Doble reporte: saldo final positivo del pasivo prestacional '
+                        f'→ F1009 concepto 2214 (cuenta por pagar al cierre).'
+                    ),
+                    balance_id=mov.balance_id,
+                ))
+
+            # NO hacemos return: si capa 2 / capa 3 tienen reglas específicas
+            # esas se aplican adicionales (raro pero válido). Si no hay reglas,
+            # la bandera `doble_reporte_disparado` evita el sin_resolver final.
 
         # CAPA 3: override manual (siempre gana)
         capa3 = self._buscar_capa3(mov.codigo_cuenta, mov.nit)
@@ -1167,8 +1200,15 @@ class MotorClasificacion:
         # CAPA 2: mapeo nativo por rangos
         capa2 = self._buscar_capa2(mov.codigo_cuenta)
         if capa2:
-            ambiguo = len(capa2) > 1
-            for r in capa2:
+            # Si el guard de doble-reporte ya generó F2276 y/o F1009 para esta
+            # cuenta, filtrar reglas de capa 2 que apunten a esos formatos
+            # para evitar el doble reporte.
+            formatos_ya_reportados = {r.formato_dian for r in resultados}
+            capa2_filtrada = [
+                r for r in capa2 if r.formato_dian not in formatos_ya_reportados
+            ]
+            ambiguo = len(capa2_filtrada) > 1
+            for r in capa2_filtrada:
                 valor, base = self._valor_para_formato(mov, r.formato_dian)
                 resultados.append(MovimientoClasificado(
                     codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
@@ -1180,17 +1220,23 @@ class MotorClasificacion:
                     regla_id=r.id,
                     requiere_revision=ambiguo,
                     nota=(
-                        f'Ambigüedad: {len(capa2)} reglas posibles. {r.descripcion_concepto}'
+                        f'Ambigüedad: {len(capa2_filtrada)} reglas posibles. {r.descripcion_concepto}'
                         if ambiguo else r.descripcion_concepto
                     ),
                     balance_id=mov.balance_id,
                 ))
-            return resultados
+            if resultados:
+                return resultados
 
         # CAPA 1: PUC genérico (fallback)
         capa1 = self._buscar_capa1(mov.codigo_cuenta)
         if capa1:
-            for r in capa1:
+            # Mismo filtro: evitar duplicar formatos ya cubiertos por guard
+            formatos_ya_reportados = {r.formato_dian for r in resultados}
+            capa1_filtrada = [
+                r for r in capa1 if r.formato_dian not in formatos_ya_reportados
+            ]
+            for r in capa1_filtrada:
                 valor, base = self._valor_para_formato(mov, r.formato_dian)
                 resultados.append(MovimientoClasificado(
                     codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
@@ -1203,9 +1249,21 @@ class MotorClasificacion:
                     nota=f'PUC genérico: {r.nombre_cuenta}',
                     balance_id=mov.balance_id,
                 ))
+            if resultados:
+                return resultados
+
+        # Sin resolver — pero ANTES verificar si el guard de doble-reporte
+        # ya generó movimientos (cuentas 251010, 251505, 252501, 25300x, etc.).
+        # En ese caso, la cuenta YA fue clasificada (al F2276 y/o F1009) y
+        # no debe marcarse como sin_resolver.
+        if doble_reporte_disparado and resultados:
             return resultados
 
-        # Sin resolver
+        # Si el guard disparó pero NO acumuló nada (débitos=0 y saldo<=0)
+        # significa que la cuenta no aporta nada al reporte → silenciar.
+        if doble_reporte_disparado:
+            return []  # filtrar: no es sin_resolver ni necesita reportarse
+
         return [MovimientoClasificado(
             codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
             formato_dian='', concepto_dian=None,
