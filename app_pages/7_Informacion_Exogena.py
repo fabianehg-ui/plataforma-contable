@@ -878,7 +878,7 @@ with tab_clasificar:
                     # Capa 1: PUC genérico (compartido todas las empresas)
                     capa1_data = sb.table("exogena_puc_generico").select("*").eq(
                         "año_gravable", año_gravable
-                    ).execute().data or []
+                    ).eq("activo", True).execute().data or []
                     reglas_c1 = [
                         ReglaCapa1(
                             codigo_cuenta=r["codigo_cuenta"],
@@ -891,7 +891,7 @@ with tab_clasificar:
                     # Capa 2: Mapeo nativo de la empresa
                     capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
                         "empresa_id", empresa["id"]
-                    ).eq("año_gravable", año_gravable).execute().data or []
+                    ).eq("año_gravable", año_gravable).eq("activo", True).execute().data or []
                     reglas_c2 = [
                         ReglaCapa2(
                             formato_dian=r["formato_dian"],
@@ -1318,10 +1318,10 @@ with tab_conciliacion:
                 # Cargar reglas
                 capa1_data = sb.table("exogena_puc_generico").select("*").eq(
                     "año_gravable", año_gravable
-                ).execute().data or []
+                ).eq("activo", True).execute().data or []
                 capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
                     "empresa_id", empresa["id"]
-                ).eq("año_gravable", año_gravable).execute().data or []
+                ).eq("año_gravable", año_gravable).eq("activo", True).execute().data or []
                 capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
                     "empresa_id", empresa["id"]
                 ).eq("año_gravable", año_gravable).execute().data or []
@@ -1601,10 +1601,10 @@ with tab_conciliacion:
                     # Cargar reglas
                     capa1_data = sb.table("exogena_puc_generico").select("*").eq(
                         "año_gravable", año_gravable
-                    ).execute().data or []
+                    ).eq("activo", True).execute().data or []
                     capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
                         "empresa_id", empresa["id"]
-                    ).eq("año_gravable", año_gravable).execute().data or []
+                    ).eq("año_gravable", año_gravable).eq("activo", True).execute().data or []
                     capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
                         "empresa_id", empresa["id"]
                     ).eq("año_gravable", año_gravable).execute().data or []
@@ -1822,10 +1822,10 @@ with tab_conciliacion:
                             
                             capa1_data = sb.table("exogena_puc_generico").select("*").eq(
                                 "año_gravable", año_gravable
-                            ).execute().data or []
+                            ).eq("activo", True).execute().data or []
                             capa2_data = sb.table("exogena_mapeo_empresa").select("*").eq(
                                 "empresa_id", empresa["id"]
-                            ).eq("año_gravable", año_gravable).execute().data or []
+                            ).eq("año_gravable", año_gravable).eq("activo", True).execute().data or []
                             capa3_data = sb.table("exogena_mapeo_manual").select("*").eq(
                                 "empresa_id", empresa["id"]
                             ).eq("año_gravable", año_gravable).execute().data or []
@@ -1975,7 +1975,7 @@ with tab_generar:
             # 1. Cargar reglas de las 3 capas (mismo patrón del tab Borrador)
             capa1_data = sb_local.table("exogena_puc_generico").select("*").eq(
                 "año_gravable", ano
-            ).execute().data or []
+            ).eq("activo", True).execute().data or []
             reglas_c1 = [
                 ReglaCapa1(
                     codigo_cuenta=r["codigo_cuenta"],
@@ -1987,7 +1987,7 @@ with tab_generar:
 
             capa2_data = sb_local.table("exogena_mapeo_empresa").select("*").eq(
                 "empresa_id", empresa_id_callback
-            ).eq("año_gravable", ano).execute().data or []
+            ).eq("año_gravable", ano).eq("activo", True).execute().data or []
             reglas_c2 = [
                 ReglaCapa2(
                     formato_dian=r["formato_dian"],
