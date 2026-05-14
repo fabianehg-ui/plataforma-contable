@@ -571,6 +571,12 @@ def _ejecutar_generacion(
             f'{f}: {n}' for f, n in resultado_validacion.fuentes_usadas.items()
         )
         st.info(f"🔎 Enriquecidos automáticamente desde: {fuentes_str}")
+    if resultado_validacion.tipos_documento_corregidos > 0:
+        st.info(
+            f"🆔 {resultado_validacion.tipos_documento_corregidos} tercero(s) "
+            f"con tipo de documento corregido automáticamente "
+            f"(NITs reclasificados como cédulas según patrón del número)"
+        )
     if resultado_validacion.enriquecidos_fallback > 0:
         st.info(
             f"🏢 {resultado_validacion.enriquecidos_fallback} persona(s) natural(es) "
@@ -1405,6 +1411,7 @@ def _persistir_correcciones_terceros(
         return
 
     campos_persistir = [
+        'tipo_documento',  # ← incluido para persistir correcciones CC vs NIT
         'razon_social', 'primer_apellido', 'segundo_apellido',
         'primer_nombre', 'otros_nombres',
         'direccion', 'codigo_dpto', 'codigo_municipio', 'codigo_pais',

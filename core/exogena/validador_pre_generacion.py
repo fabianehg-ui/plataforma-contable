@@ -30,6 +30,7 @@ try:
         validar_tercero_completo,
         aplicar_fallback_empresa,
         auto_dividir_nombre_natural,
+        corregir_tipo_documento,
         es_persona_natural,
         obtener_nit_banco,
         inferir_dpto_municipio_desde_texto,
@@ -42,6 +43,7 @@ except ImportError:
             validar_tercero_completo,
             aplicar_fallback_empresa,
             auto_dividir_nombre_natural,
+            corregir_tipo_documento,
             es_persona_natural,
             obtener_nit_banco,
             inferir_dpto_municipio_desde_texto,
@@ -53,6 +55,7 @@ except ImportError:
             validar_tercero_completo,
             aplicar_fallback_empresa,
             auto_dividir_nombre_natural,
+            corregir_tipo_documento,
             es_persona_natural,
             obtener_nit_banco,
             inferir_dpto_municipio_desde_texto,
@@ -95,6 +98,7 @@ class ResultadoValidacion:
     enriquecidos_fallback: int = 0
     bancos_inferidos: int = 0  # F1012
     ciudades_inferidas: int = 0
+    tipos_documento_corregidos: int = 0
     fuentes_usadas: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -184,13 +188,20 @@ def validar_y_enriquecer(
             else (formatos_que_lo_usan[0] if formatos_que_lo_usan else '1001')
         )
 
+        # CORRECCIÓN DE TIPO DE DOCUMENTO: detectar cuando un NIT en realidad
+        # parece cédula (caso típico: balance con CC cargada como NIT por
+        # default). Hacer esto ANTES de auto-dividir para que la auto-división
+        # funcione correctamente sobre personas naturales mal tipificadas.
+        tercero_actual = corregir_tipo_documento(tercero_actual)
+        if tercero_actual.get('_tipo_corregido'):
+            tercero_actual.pop('_tipo_corregido', None)
+            res.tipos_documento_corregidos += 1
+
         # AUTO-DIVISIÓN: si es persona natural y su nombre está en
         # razón social, intentar dividirlo automáticamente.
         tercero_actual = auto_dividir_nombre_natural(tercero_actual)
         if tercero_actual.get('_auto_dividido'):
             tercero_actual.pop('_auto_dividido', None)
-            # No es un "enriquecimiento auto" formal pero contar
-            res.ciudades_inferidas += 0  # no tocar este contador, ya está bien
 
         errores_iniciales = validar_tercero_completo(tercero_actual, formato_ref)
 
@@ -239,21 +250,28 @@ def validar_y_enriquecer(
             res.terceros_completos[nit] = tercero_actual
             continue
 
-        # 6. Fallback: si es persona natural, usar datos de empresa informante
+        # 6. Fallback: si es persona natural y le falta ubicación, usar datos
+        # de empresa informante. Esto se aplica SOLO para llenar la ubicación
+        # (dirección/dpto/municipio); si también le faltan apellidos/nombres,
+        # la persona queda pendiente para input manual.
         if es_persona_natural(tercero_actual):
-            tercero_actual = aplicar_fallback_empresa(
-                tercero_actual, info_empresa_informante
+            # Verificar qué le falta de ubicación
+            falta_ubicacion = (
+                not (tercero_actual.get('direccion') or '').strip() or
+                not (tercero_actual.get('codigo_dpto') or '').strip() or
+                not (tercero_actual.get('codigo_municipio') or '').strip()
             )
-            res.enriquecidos_fallback += 1
+            if falta_ubicacion:
+                tercero_actual = aplicar_fallback_empresa(
+                    tercero_actual, info_empresa_informante
+                )
+                res.enriquecidos_fallback += 1
 
-            # Re-validar
-            errores_post = validar_tercero_completo(
-                tercero_actual,
-                formatos_con_ubicacion_req[0],
-            )
-            if not errores_post:
-                res.terceros_completos[nit] = tercero_actual
-                continue
+                # Re-validar (puede que TODAVÍA falten apellidos/nombres)
+                errores_post = validar_tercero_completo(tercero_actual, formato_ref)
+                if not errores_post:
+                    res.terceros_completos[nit] = tercero_actual
+                    continue
 
         # 7. Si llegamos acá, está pendiente: dejar para input manual
         res.terceros_pendientes[nit] = TerceroPendiente(
