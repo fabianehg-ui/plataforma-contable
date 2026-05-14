@@ -164,7 +164,7 @@ def render_tab_generar_xml(
         st.rerun()
 
     # ============================================================
-    # 2) Tabla de consecutivos editables
+    # 2) Consecutivo inicial + asignación correlativa automática
     # ============================================================
     st.markdown("#### 2️⃣ Consecutivos por formato")
 
@@ -186,70 +186,82 @@ def render_tab_generar_xml(
 
     sugerencias = st.session_state[cache_key]
 
-    # Mensaje contextual
+    # Determinar el consecutivo de arranque sugerido
+    # = (máximo último_usado entre todos los formatos) + 1
+    # Esto garantiza que el correlativo no choque con nada previo.
     max_anterior = max((s.ultimo_usado for s in sugerencias.values()), default=0)
+    consecutivo_inicial_sugerido = max_anterior + 1
+
+    # Mensaje contextual
     if max_anterior == 0:
         _info_envio_inicial()
     else:
         _info_envio_continuacion(max_anterior)
 
-    # Construir DataFrame para edición
-    filas = []
-    for fmt in formatos_disponibles:
-        sug = sugerencias[fmt]
-        cfg = FORMATOS_CONFIG[fmt]
-        icono, nombre = FORMATOS_INFO[fmt]
-        filas.append({
-            'Formato': f"{icono} F{fmt}",
-            'Descripción': nombre[:50],
-            'Versión': f"v.{cfg['version']}",
-            'Último usado': sug.ultimo_usado,
-            'Consecutivo a usar': sug.siguiente,
-            '_fmt': fmt,  # columna oculta para mapear
-        })
-
-    df = pd.DataFrame(filas)
-
-    # data_editor: solo "Consecutivo a usar" es editable
-    df_editado = st.data_editor(
-        df,
-        hide_index=True,
-        column_config={
-            'Formato': st.column_config.TextColumn('Formato', disabled=True, width='small'),
-            'Descripción': st.column_config.TextColumn('Descripción', disabled=True, width='large'),
-            'Versión': st.column_config.TextColumn('Versión', disabled=True, width='small'),
-            'Último usado': st.column_config.NumberColumn(
-                'Último usado', disabled=True, width='small',
-                help='Mayor consecutivo encontrado en la base de datos',
+    # Input único del consecutivo inicial
+    col_inp, col_help = st.columns([1, 2])
+    with col_inp:
+        consecutivo_inicial = st.number_input(
+            "Empezar desde consecutivo Nº",
+            min_value=1,
+            max_value=99_999_999,
+            value=consecutivo_inicial_sugerido,
+            step=1,
+            key=f"consec_inicial_{cache_key}",
+            help=(
+                "Los formatos se numerarán correlativamente a partir de este número. "
+                f"Sugerido: {consecutivo_inicial_sugerido} (mayor usado + 1)."
             ),
-            'Consecutivo a usar': st.column_config.NumberColumn(
-                'Consecutivo a usar', min_value=1, max_value=99_999_999, step=1,
-                width='medium',
-                help='Editable. El sistema valida que no esté usado antes.',
-            ),
-            '_fmt': None,  # ocultar columna técnica
-        },
-        use_container_width=True,
-        key=f"editor_consec_{cache_key}",
-    )
+        )
+    with col_help:
+        st.write("")
+        st.caption(
+            "💡 Los 11 formatos se numerarán **consecutivamente** a partir del número que escribas. "
+            "Ejemplo: si pones 5, F1001 será el 5, F1003 el 6, F1005 el 7, y así sucesivamente."
+        )
 
-    # Mapeo formato → consecutivo elegido
-    consecutivos_elegidos: dict[str, int] = {}
-    for _, row in df_editado.iterrows():
-        fmt = row['_fmt']
-        consecutivos_elegidos[fmt] = int(row['Consecutivo a usar'])
+    # Asignación correlativa automática
+    consecutivos_elegidos: dict[str, int] = {
+        fmt: int(consecutivo_inicial) + i
+        for i, fmt in enumerate(formatos_disponibles)
+    }
 
-    # Detectar cambios respecto a sugerencias
-    cambios = []
+    # Vista previa de la asignación (tabla simple, NO editable, evita el bug de data_editor)
+    with st.expander("👀 Ver vista previa de la asignación de consecutivos", expanded=False):
+        filas_preview = []
+        for fmt in formatos_disponibles:
+            sug = sugerencias[fmt]
+            cfg = FORMATOS_CONFIG[fmt]
+            icono, nombre = FORMATOS_INFO[fmt]
+            consec = consecutivos_elegidos[fmt]
+            # Detectar si el consecutivo elegido CHOCA con uno ya usado
+            choca = consec <= sug.ultimo_usado and sug.ultimo_usado > 0
+            filas_preview.append({
+                'Formato': f"{icono} F{fmt}",
+                'Descripción': nombre[:50],
+                'Versión': f"v.{cfg['version']}",
+                'Último usado': sug.ultimo_usado if sug.ultimo_usado > 0 else '—',
+                'Consecutivo a usar': consec,
+                'Estado': '⚠️ Conflicto' if choca else '✅ OK',
+            })
+
+        df_preview = pd.DataFrame(filas_preview)
+        st.dataframe(df_preview, hide_index=True, use_container_width=True)
+
+    # Detectar y avisar de conflictos antes de generar
+    conflictos = []
     for fmt, consec in consecutivos_elegidos.items():
-        sugerido = sugerencias[fmt].siguiente
-        if consec != sugerido:
-            cambios.append((fmt, sugerido, consec))
+        sug = sugerencias[fmt]
+        if sug.ultimo_usado > 0 and consec <= sug.ultimo_usado:
+            conflictos.append((fmt, sug.ultimo_usado, consec))
 
-    if cambios:
-        with st.expander(f"ℹ️ {len(cambios)} consecutivo(s) editados manualmente"):
-            for fmt, sug_val, elegido in cambios:
-                st.markdown(f"- **F{fmt}**: sugerido {sug_val} → elegido **{elegido}**")
+    if conflictos:
+        msg = "⚠️ **Conflictos detectados** — los siguientes formatos chocarían con consecutivos ya usados:\n\n"
+        for fmt, ultimo, consec in conflictos:
+            msg += f"- **F{fmt}**: último usado = {ultimo}, intentas usar = {consec}\n"
+        msg += f"\n💡 Sube el consecutivo inicial hasta **{max_anterior + 1}** o más para evitar conflictos."
+        st.error(msg)
+
 
     # ============================================================
     # 3) Filtro de qué formatos generar
