@@ -27,17 +27,29 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# Importar generadores del v2
-from generador_xml_v2 import (
-    Tercero, TerceroDestino, CabeceraXML, normalizar_nit, calcular_dv, TIPO_DOC_NIT,
-    PAIS_COLOMBIA,
-    RegistroF1001, RegistroF1003, RegistroF1005, RegistroF1006, RegistroF1007,
-    RegistroF1008, RegistroF1009, RegistroF1011, RegistroF1012,
-    RegistroF1647, RegistroF2276,
-    atributos_f1001, atributos_f1003, atributos_f1005, atributos_f1006,
-    atributos_f1007, atributos_f1008, atributos_f1009,
-    atributos_f1011, atributos_f1012, atributos_f1647, atributos_f2276,
-)
+# Imports robustos: funcionan en producción (core.exogena.*) y en tests locales.
+try:
+    from core.exogena.generador_xml_v2 import (
+        Tercero, TerceroDestino, CabeceraXML, normalizar_nit, calcular_dv, TIPO_DOC_NIT,
+        PAIS_COLOMBIA,
+        RegistroF1001, RegistroF1003, RegistroF1005, RegistroF1006, RegistroF1007,
+        RegistroF1008, RegistroF1009, RegistroF1011, RegistroF1012,
+        RegistroF1647, RegistroF2276,
+        atributos_f1001, atributos_f1003, atributos_f1005, atributos_f1006,
+        atributos_f1007, atributos_f1008, atributos_f1009,
+        atributos_f1011, atributos_f1012, atributos_f1647, atributos_f2276,
+    )
+except ImportError:
+    from generador_xml_v2 import (
+        Tercero, TerceroDestino, CabeceraXML, normalizar_nit, calcular_dv, TIPO_DOC_NIT,
+        PAIS_COLOMBIA,
+        RegistroF1001, RegistroF1003, RegistroF1005, RegistroF1006, RegistroF1007,
+        RegistroF1008, RegistroF1009, RegistroF1011, RegistroF1012,
+        RegistroF1647, RegistroF2276,
+        atributos_f1001, atributos_f1003, atributos_f1005, atributos_f1006,
+        atributos_f1007, atributos_f1008, atributos_f1009,
+        atributos_f1011, atributos_f1012, atributos_f1647, atributos_f2276,
+    )
 
 
 # ================================================================

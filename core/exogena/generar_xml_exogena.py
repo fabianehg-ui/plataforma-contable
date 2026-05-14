@@ -37,17 +37,32 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Optional, Any
 
-from generador_xml_v2 import (
-    CabeceraXML, construir_nombre_archivo, guardar_xml,
-    generar_xml_f1001, generar_xml_f1003, generar_xml_f1005, generar_xml_f1006,
-    generar_xml_f1007, generar_xml_f1008, generar_xml_f1009,
-    generar_xml_f1011, generar_xml_f1012, generar_xml_f1647, generar_xml_f2276,
-    FORMATOS_CONFIG,
-)
-from gestor_consecutivos import (
-    GestorConsecutivos, SugerenciaConsecutivo, EnvioRegistrado,
-    TIPO_ENVIO_INICIAL, TIPOS_ENVIO_VALIDOS, TIPOS_ENVIO_DESC,
-)
+# Imports robustos: funcionan tanto en producción (estructura core.exogena.*)
+# como en tests locales que añaden core/exogena al sys.path.
+try:
+    from core.exogena.generador_xml_v2 import (
+        CabeceraXML, construir_nombre_archivo, guardar_xml,
+        generar_xml_f1001, generar_xml_f1003, generar_xml_f1005, generar_xml_f1006,
+        generar_xml_f1007, generar_xml_f1008, generar_xml_f1009,
+        generar_xml_f1011, generar_xml_f1012, generar_xml_f1647, generar_xml_f2276,
+        FORMATOS_CONFIG,
+    )
+    from core.exogena.gestor_consecutivos import (
+        GestorConsecutivos, SugerenciaConsecutivo, EnvioRegistrado,
+        TIPO_ENVIO_INICIAL, TIPOS_ENVIO_VALIDOS, TIPOS_ENVIO_DESC,
+    )
+except ImportError:
+    from generador_xml_v2 import (
+        CabeceraXML, construir_nombre_archivo, guardar_xml,
+        generar_xml_f1001, generar_xml_f1003, generar_xml_f1005, generar_xml_f1006,
+        generar_xml_f1007, generar_xml_f1008, generar_xml_f1009,
+        generar_xml_f1011, generar_xml_f1012, generar_xml_f1647, generar_xml_f2276,
+        FORMATOS_CONFIG,
+    )
+    from gestor_consecutivos import (
+        GestorConsecutivos, SugerenciaConsecutivo, EnvioRegistrado,
+        TIPO_ENVIO_INICIAL, TIPOS_ENVIO_VALIDOS, TIPOS_ENVIO_DESC,
+    )
 
 
 # ================================================================
