@@ -515,9 +515,12 @@ def _ejecutar_generacion(
         }
 
         ruta_xlsx = tmpdir / f"Exogena_{info_empresa.get('nit','EMPRESA')}_AG{ano_gravable}.xlsx"
+        # IMPORTANTE: el generador de Excel espera claves con prefijo 'F'
+        # ('F1001', 'F1003', ...). En el resto del pipeline se usan claves
+        # sin prefijo ('1001', '1003', ...). Convertir aquí.
         generar_excel_prevalidador(
             ruta_xlsx, info_global, {
-                fmt: {'registros': regs}
+                (fmt if fmt.startswith('F') else f'F{fmt}'): {'registros': regs}
                 for fmt, regs in registros_filtrados.items()
             }
         )
