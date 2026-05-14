@@ -519,6 +519,27 @@ def _ejecutar_generacion(
         st.error(f"❌ Error consultando maestro de terceros: {e}")
         return
 
+    # Cargar catálogo DANE completo de municipios para inferencia exhaustiva
+    # (clave normalizada → (cod_dpto, cod_mun)). Se cachea en session_state.
+    catalogo_dane_key = f"_exo_cat_dane_municipios_{empresa_id}"
+    if catalogo_dane_key not in st.session_state:
+        try:
+            import unicodedata
+            muns_resp = sb_local.table("exogena_cat_municipios").select(
+                "codigo_dpto, codigo_mcp, nombre"
+            ).execute()
+            catalogo_dane = {}
+            for m in (muns_resp.data or []):
+                clave_norm = ''.join(
+                    c for c in unicodedata.normalize('NFKD', m['nombre'].upper())
+                    if unicodedata.category(c) != 'Mn'
+                ).strip()
+                catalogo_dane[clave_norm] = (m['codigo_dpto'], m['codigo_mcp'])
+            st.session_state[catalogo_dane_key] = catalogo_dane
+        except Exception:
+            st.session_state[catalogo_dane_key] = {}
+    catalogo_dane = st.session_state[catalogo_dane_key]
+
     # Ejecutar el validador
     try:
         resultado_validacion = validar_y_enriquecer(
@@ -531,6 +552,7 @@ def _ejecutar_generacion(
                 'codigo_pais': info_empresa.get('codigo_pais', '169'),
             },
             enriquecedor=cascada,
+            catalogo_municipios_dane=catalogo_dane,
         )
     except Exception as e:
         st.error(f"❌ Error ejecutando validador: {e}")
@@ -831,113 +853,282 @@ def _render_historico(gestor: GestorConsecutivos, empresa_id: str, ano_gravable:
 def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=None):
     """
     Renderiza un formulario para que el contador complete los datos
-    faltantes (dirección, dpto, mun) de los terceros que no se pudieron
-    enriquecer automáticamente.
+    faltantes de los terceros que no se pudieron enriquecer automáticamente.
 
-    Los cambios se guardan en exogena_terceros y luego el contador
-    debe presionar "Generar" de nuevo para que se incluyan.
+    Diseño robusto:
+      - Usa st.form para agrupar TODO el input y procesar en un solo submit
+        (evita re-renders intermedios que causaban NotFoundError de Streamlit)
+      - Auto-infiere dpto/municipio desde la dirección escrita usando el
+        catálogo DANE local (sin queries adicionales a BD)
+      - Búsqueda de dpto/municipio por NOMBRE en lugar de selectbox encadenado
     """
     pendientes = resultado_validacion.terceros_pendientes
     total = len(pendientes)
 
-    st.error(
-        f"⚠️ **{total} tercero(s) tienen datos incompletos.** "
-        f"Para evitar rechazos de DIAN, completa la información antes de generar."
-    )
+    # Importar helpers
+    try:
+        from core.exogena.enriquecimiento.helpers_inferencia import (
+            inferir_dpto_municipio_desde_texto,
+            CIUDADES_CONOCIDAS,
+            es_persona_natural,
+        )
+    except ImportError:
+        CIUDADES_CONOCIDAS = {}
+        inferir_dpto_municipio_desde_texto = lambda *a: None
+        es_persona_natural = lambda d: False
 
     st.markdown("#### 📝 Completar datos faltantes")
     st.caption(
-        "Los siguientes terceros no pudieron enriquecerse desde RUES, "
-        "Datos Abiertos, Empresite ni fallback de empresa. "
-        "Por favor completa los campos faltantes y guarda los cambios."
+        f"Los siguientes **{total} tercero(s)** no pudieron enriquecerse automáticamente. "
+        "Complete los campos faltantes. Si solo escribes la **dirección con ciudad** "
+        "(ej. 'Calle 33 Medellín'), el sistema deducirá el dpto y municipio."
     )
 
-    # Cargar catálogo de departamentos y municipios para selectores
-    try:
-        dptos_resp = sb.table("exogena_cat_departamentos").select("*").execute()
-        muns_resp = sb.table("exogena_cat_municipios").select("*").execute()
-        dptos = {d['codigo']: d['nombre'] for d in (dptos_resp.data or [])}
-        muns_por_dpto = {}
-        for m in (muns_resp.data or []):
-            muns_por_dpto.setdefault(m['codigo_dpto'], []).append(
-                (m['codigo_mcp'], m['nombre'])
+    # Cargar catálogo de departamentos y mapa nombre→código de municipios
+    # (una sola query, cacheada en session_state)
+    cache_key = f"_exo_cat_dane_{empresa_id}"
+    if cache_key not in st.session_state:
+        try:
+            dptos_resp = sb.table("exogena_cat_departamentos").select("*").execute()
+            muns_resp = sb.table("exogena_cat_municipios").select("*").execute()
+            dptos = {d['codigo']: d['nombre'] for d in (dptos_resp.data or [])}
+            muns_por_dpto = {}
+            mun_lookup = {}  # nombre_municipio_normalizado → (codigo_dpto, codigo_mcp)
+            for m in (muns_resp.data or []):
+                cod_dpto = m['codigo_dpto']
+                cod_mcp = m['codigo_mcp']
+                nombre_mun = m['nombre']
+                muns_por_dpto.setdefault(cod_dpto, []).append((cod_mcp, nombre_mun))
+                # Lookup por nombre (normalizado)
+                import unicodedata
+                clave_norm = ''.join(
+                    c for c in unicodedata.normalize('NFKD', nombre_mun.upper())
+                    if unicodedata.category(c) != 'Mn'
+                ).strip()
+                mun_lookup[clave_norm] = (cod_dpto, cod_mcp)
+            st.session_state[cache_key] = {
+                'dptos': dptos,
+                'muns_por_dpto': muns_por_dpto,
+                'mun_lookup': mun_lookup,
+            }
+        except Exception as e:
+            st.warning(f"⚠️ No se pudo cargar catálogo DANE: {e}")
+            st.session_state[cache_key] = {
+                'dptos': {}, 'muns_por_dpto': {}, 'mun_lookup': {}
+            }
+
+    cat = st.session_state[cache_key]
+    dptos = cat['dptos']
+    muns_por_dpto = cat['muns_por_dpto']
+
+    # ============================================================
+    # FORMULARIO ÚNICO con st.form (evita re-renders intermedios)
+    # ============================================================
+    with st.form(key=f"form_completar_{empresa_id}", clear_on_submit=False):
+        st.caption(
+            "💡 Tip: en el campo **Dirección** escribe la ciudad junto con la "
+            "dirección (ej. *'Calle 33 #65-100, Medellín'*). El sistema "
+            "deducirá automáticamente departamento y municipio al guardar."
+        )
+
+        # Inputs por tercero (todos van al diccionario `cambios`)
+        for nit, pend in pendientes.items():
+            es_nat = es_persona_natural({'tipo_documento': 13 if pend.primer_apellido or pend.primer_nombre else 31})
+            nombre = (pend.razon_social or
+                      f"{pend.primer_nombre or ''} {pend.primer_apellido or ''}".strip() or
+                      '(sin nombre)')
+            tipo_label = "👤 Natural" if es_nat else "🏢 Jurídica"
+
+            st.markdown(f"---")
+            st.markdown(
+                f"**{tipo_label} · {nit}** — {nombre[:60]}  \n"
+                f"<small style='color:#888'>Errores: {', '.join(pend.errores)} · "
+                f"Formatos: {', '.join('F'+f for f in pend.formatos_afectados)}</small>",
+                unsafe_allow_html=True,
             )
-    except Exception:
-        dptos = {}
-        muns_por_dpto = {}
-
-    # Renderizar un formulario por tercero pendiente
-    cambios = {}  # nit → dict de campos editados
-
-    for nit, pend in pendientes.items():
-        nombre = (pend.razon_social or
-                  f"{pend.primer_nombre or ''} {pend.primer_apellido or ''}".strip() or
-                  '(sin nombre)')
-        with st.expander(
-            f"🔧 {nit} — {nombre[:60]}  "
-            f"({', '.join(f'F{f}' for f in pend.formatos_afectados)})",
-            expanded=True,
-        ):
-            st.caption(f"Errores: {', '.join(pend.errores)}")
 
             col1, col2 = st.columns(2)
             with col1:
-                new_dir = st.text_input(
-                    "Dirección",
+                # Si es natural: pedir apellidos/nombres
+                if es_nat:
+                    st.text_input(
+                        "Primer apellido",
+                        value=pend.primer_apellido or '',
+                        key=f"papl_{nit}",
+                        placeholder="ej. GONZALEZ",
+                    )
+                    st.text_input(
+                        "Segundo apellido (opcional)",
+                        value='',
+                        key=f"sapl_{nit}",
+                    )
+                else:
+                    # Jurídica: pedir razón social
+                    st.text_input(
+                        "Razón social",
+                        value=pend.razon_social or '',
+                        key=f"raz_{nit}",
+                        placeholder="ej. EMPRESA SAS",
+                    )
+
+                # Dirección — campo libre, se infiere ciudad al guardar
+                st.text_input(
+                    "Dirección (incluye ciudad si la sabes)",
                     value=pend.direccion or '',
                     key=f"dir_{nit}",
-                    placeholder="ej. CALLE 33 # 65-100",
+                    placeholder="ej. CALLE 33 #65-100, MEDELLIN",
                 )
-                new_dpto = st.selectbox(
-                    "Departamento",
-                    options=[''] + sorted(dptos.keys()),
-                    format_func=lambda c: f"{c} — {dptos.get(c, '')}" if c else '— Selecciona —',
-                    index=(sorted(dptos.keys()).index(pend.codigo_dpto) + 1)
-                          if pend.codigo_dpto and pend.codigo_dpto in dptos else 0,
-                    key=f"dpto_{nit}",
-                )
+
             with col2:
-                # Municipio depende del dpto elegido
-                muns_disponibles = muns_por_dpto.get(new_dpto, []) if new_dpto else []
-                opciones_mun = [''] + [c for c, _ in muns_disponibles]
-                try:
-                    idx_mun = opciones_mun.index(pend.codigo_municipio) if pend.codigo_municipio else 0
-                except ValueError:
-                    idx_mun = 0
-                new_mun = st.selectbox(
-                    "Municipio",
-                    options=opciones_mun,
-                    format_func=lambda c: (
-                        f"{c} — {dict(muns_disponibles).get(c, '')}" if c else '— Selecciona —'
-                    ),
-                    index=idx_mun,
-                    key=f"mun_{nit}",
+                if es_nat:
+                    st.text_input(
+                        "Primer nombre",
+                        value=pend.primer_nombre or '',
+                        key=f"pnom_{nit}",
+                        placeholder="ej. JORGE",
+                    )
+                    st.text_input(
+                        "Otros nombres (opcional)",
+                        value='',
+                        key=f"onom_{nit}",
+                    )
+
+                # Dpto + Municipio: campos de texto con buscador (no selectbox encadenado)
+                st.text_input(
+                    "Departamento (código o nombre, deja vacío para inferir)",
+                    value=(f"{pend.codigo_dpto} — {dptos.get(pend.codigo_dpto, '')}"
+                           if pend.codigo_dpto and pend.codigo_dpto in dptos else ''),
+                    key=f"dpto_txt_{nit}",
+                    placeholder="ej. 05 — ANTIOQUIA  o  ANTIOQUIA",
                 )
                 st.text_input(
-                    "País (default 169 Colombia)",
-                    value=pend.codigo_pais or '169',
-                    key=f"pais_{nit}",
-                    disabled=True,
+                    "Municipio (código o nombre, deja vacío para inferir)",
+                    value=pend.codigo_municipio or '',
+                    key=f"mun_txt_{nit}",
+                    placeholder="ej. 001 — MEDELLIN  o  MEDELLIN",
                 )
 
-            cambios[nit] = {
-                'direccion': new_dir.strip() or None,
-                'codigo_dpto': new_dpto or None,
-                'codigo_municipio': new_mun or None,
-                'codigo_pais': pend.codigo_pais or '169',
-            }
+        st.markdown("---")
+        col_btn1, col_btn2 = st.columns([1, 2])
+        with col_btn1:
+            submitted = st.form_submit_button(
+                "💾 Guardar y reintentar",
+                type="primary",
+                use_container_width=True,
+            )
+        with col_btn2:
+            st.caption(
+                "Los cambios se guardan en el maestro de terceros (`exogena_terceros`). "
+                "Después de guardar, vuelve a presionar 'Generar XMLs y Excel'."
+            )
 
-    st.markdown("---")
-    col_btn1, col_btn2 = st.columns([1, 2])
-    with col_btn1:
-        if st.button("💾 Guardar y reintentar", type="primary", use_container_width=True):
-            _guardar_cambios_terceros(cambios, empresa_id, sb)
-    with col_btn2:
-        st.caption(
-            "Los cambios se guardan en el maestro de terceros (exogena_terceros) "
-            "y quedarán disponibles para futuros envíos. Después de guardar, "
-            "vuelve a presionar 'Generar XMLs y Excel'."
+    # ============================================================
+    # PROCESAR submit (fuera del form, después del submit)
+    # ============================================================
+    if submitted:
+        cambios = _construir_cambios_desde_form(
+            pendientes, dptos, muns_por_dpto, cat.get('mun_lookup', {}),
+            inferir_dpto_municipio_desde_texto,
         )
+        _guardar_cambios_terceros(cambios, empresa_id, sb)
+
+
+def _construir_cambios_desde_form(
+    pendientes,
+    dptos,
+    muns_por_dpto,
+    mun_lookup,
+    inferir_dpto_municipio_desde_texto,
+):
+    """
+    Construye el dict {nit: cambios} a partir de los valores del form.
+    Hace la inferencia de dpto/municipio aquí, después del submit.
+    """
+    import unicodedata
+    cambios = {}
+
+    def _normalizar(s):
+        if not s:
+            return ''
+        s2 = ''.join(
+            c for c in unicodedata.normalize('NFKD', str(s).upper())
+            if unicodedata.category(c) != 'Mn'
+        )
+        return s2.strip()
+
+    def _resolver_dpto(texto_input):
+        """Acepta '05', '05 — ANTIOQUIA', 'ANTIOQUIA' → devuelve código '05' o None."""
+        if not texto_input:
+            return None
+        t = _normalizar(texto_input)
+        # ¿Es un código de 2 dígitos?
+        codigo_extraido = t.split('—')[0].split('-')[0].strip()
+        if codigo_extraido in dptos:
+            return codigo_extraido
+        # Buscar por nombre
+        for cod, nom in dptos.items():
+            if _normalizar(nom) == t or _normalizar(nom) in t:
+                return cod
+        return None
+
+    def _resolver_municipio(texto_input, codigo_dpto):
+        """Acepta código '001', nombre 'MEDELLIN', etc."""
+        if not texto_input:
+            return None
+        t = _normalizar(texto_input)
+        codigo_extraido = t.split('—')[0].split('-')[0].strip()
+        if codigo_dpto and codigo_dpto in muns_por_dpto:
+            # ¿Código directo dentro del dpto?
+            for cod, nom in muns_por_dpto[codigo_dpto]:
+                if cod == codigo_extraido:
+                    return cod
+                if _normalizar(nom) == t or _normalizar(nom) in t:
+                    return cod
+        # Búsqueda global por nombre (fallback)
+        if t in mun_lookup:
+            cod_d, cod_m = mun_lookup[t]
+            return cod_m
+        return None
+
+    for nit, pend in pendientes.items():
+        # Recuperar valores del session_state (los inputs los guardaron con esos keys)
+        razon = st.session_state.get(f"raz_{nit}", '') or None
+        papl = st.session_state.get(f"papl_{nit}", '') or None
+        sapl = st.session_state.get(f"sapl_{nit}", '') or None
+        pnom = st.session_state.get(f"pnom_{nit}", '') or None
+        onom = st.session_state.get(f"onom_{nit}", '') or None
+        direccion = (st.session_state.get(f"dir_{nit}", '') or '').strip() or None
+        dpto_txt = st.session_state.get(f"dpto_txt_{nit}", '')
+        mun_txt = st.session_state.get(f"mun_txt_{nit}", '')
+
+        # Resolver códigos dpto/municipio
+        codigo_dpto = _resolver_dpto(dpto_txt)
+        codigo_mun = _resolver_municipio(mun_txt, codigo_dpto)
+
+        # Si dpto o mun siguen vacíos, intentar inferir desde la dirección
+        if not codigo_dpto or not codigo_mun:
+            inferido = inferir_dpto_municipio_desde_texto(direccion or '', razon or '')
+            if inferido:
+                if not codigo_dpto:
+                    codigo_dpto = inferido[0]
+                if not codigo_mun:
+                    codigo_mun = inferido[1]
+
+        cambios[nit] = {
+            k: v for k, v in {
+                'razon_social': razon,
+                'primer_apellido': (papl or '').strip().upper() if papl else None,
+                'segundo_apellido': (sapl or '').strip().upper() if sapl else None,
+                'primer_nombre': (pnom or '').strip().upper() if pnom else None,
+                'otros_nombres': (onom or '').strip().upper() if onom else None,
+                'direccion': direccion,
+                'codigo_dpto': codigo_dpto,
+                'codigo_municipio': codigo_mun,
+                'codigo_pais': pend.codigo_pais or '169',
+            }.items() if v
+        }
+
+    return cambios
 
 
 def _guardar_cambios_terceros(cambios: dict, empresa_id: str, sb):

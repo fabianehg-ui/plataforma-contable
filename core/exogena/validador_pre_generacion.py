@@ -116,6 +116,7 @@ def validar_y_enriquecer(
     info_empresa_informante: dict,
     enriquecedor: Optional[Enriquecedor] = None,
     on_progress: Optional[Callable[[str, int, int], None]] = None,
+    catalogo_municipios_dane: Optional[dict] = None,
 ) -> ResultadoValidacion:
     """
     Valida y enriquece los terceros referenciados por los registros antes
@@ -130,6 +131,9 @@ def validar_y_enriquecer(
         enriquecedor: cascada de enriquecedores (RUES + datos.gov.co + ...).
             Si None, NO se hace enriquecimiento externo (solo fallback + inferencia local).
         on_progress: callback opcional para reportar progreso (texto, actual, total).
+        catalogo_municipios_dane: opcional, dict {nombre_municipio_normalizado: (cod_dpto, cod_mun)}
+            con todos los ~1100 municipios del DANE para inferencia exhaustiva.
+            Si no se pasa, se usa solo el catálogo embebido de ~50 ciudades.
 
     Returns:
         ResultadoValidacion con terceros_completos y terceros_pendientes.
@@ -217,7 +221,10 @@ def validar_y_enriquecer(
                 tercero_actual.get('direccion', ''),
                 tercero_actual.get('razon_social', ''),
             ]
-            inferido = inferir_dpto_municipio_desde_texto(*textos_para_inferir)
+            inferido = inferir_dpto_municipio_desde_texto(
+                *textos_para_inferir,
+                catalogo_extra=catalogo_municipios_dane,
+            )
             if inferido:
                 if not tercero_actual.get('codigo_dpto'):
                     tercero_actual['codigo_dpto'] = inferido[0]
