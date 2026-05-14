@@ -1932,22 +1932,146 @@ with tab_conciliacion:
 with tab_generar:
     try:
         from core.exogena.ui_generacion_xml import render_tab_generar_xml
+        from core.exogena.adaptador_motor_v2 import construir_registros_v2
+
+        @st.cache_data(ttl=120, show_spinner=False)
+        def _cargar_terceros_dict(empresa_id_callback: str) -> dict:
+            """Devuelve {nit: dict_tercero} desde la tabla exogena_terceros."""
+            sb_local = get_supabase()
+            resp = sb_local.table("exogena_terceros").select(
+                "nit, dv, tipo_documento, razon_social, "
+                "primer_apellido, segundo_apellido, primer_nombre, otros_nombres, "
+                "direccion, codigo_dpto, codigo_municipio, codigo_pais"
+            ).eq("empresa_id", empresa_id_callback).execute()
+            return {t['nit']: t for t in (resp.data or [])}
+
+        def _ejecutar_motor_y_adaptar(empresa_id_callback: str, ano: int) -> dict:
+            """
+            Corre el motor en vivo:
+              1. Carga reglas de las 3 capas desde BD (mismo patrón del tab Borrador)
+              2. Carga movimientos del balance
+              3. Ejecuta motor.clasificar_balance()
+              4. Integra PILA
+              5. Pasa por el adaptador → registros del v2
+            Devuelve {formato: [registros]} listo para el generador.
+            """
+            sb_local = get_supabase()
+
+            # Obtener periodo activo
+            periodo_local = obtener_periodo(empresa_id_callback, ano)
+            if not periodo_local:
+                return {}
+
+            try:
+                from core.exogena.motor_clasificacion import (
+                    MotorClasificacion, Movimiento,
+                    ReglaCapa1, ReglaCapa2, ReglaCapa3,
+                )
+            except ImportError as imp_err:
+                raise RuntimeError(
+                    f"No se pudo importar el motor de clasificación: {imp_err}"
+                )
+
+            # 1. Cargar reglas de las 3 capas (mismo patrón del tab Borrador)
+            capa1_data = sb_local.table("exogena_puc_generico").select("*").eq(
+                "año_gravable", ano
+            ).execute().data or []
+            reglas_c1 = [
+                ReglaCapa1(
+                    codigo_cuenta=r["codigo_cuenta"],
+                    formato_dian=r["formato_dian"],
+                    concepto_dian=r.get("concepto_dian"),
+                    nombre_cuenta=r.get("nombre_cuenta", ""),
+                ) for r in capa1_data
+            ]
+
+            capa2_data = sb_local.table("exogena_mapeo_empresa").select("*").eq(
+                "empresa_id", empresa_id_callback
+            ).eq("año_gravable", ano).execute().data or []
+            reglas_c2 = [
+                ReglaCapa2(
+                    formato_dian=r["formato_dian"],
+                    concepto_dian=r["concepto_dian"],
+                    cuenta_inicial=r["cuenta_inicial"],
+                    cuenta_final=r["cuenta_final"],
+                    descripcion_concepto=r.get("descripcion_concepto", ""),
+                    id=r.get("id"),
+                    fila_origen=r.get("fila_origen", 0),
+                ) for r in capa2_data
+            ]
+
+            capa3_data = sb_local.table("exogena_mapeo_manual").select("*").eq(
+                "empresa_id", empresa_id_callback
+            ).eq("año_gravable", ano).execute().data or []
+            reglas_c3 = [
+                ReglaCapa3(
+                    codigo_cuenta=r["codigo_cuenta"],
+                    nit=r.get("nit"),
+                    formato_dian=r.get("formato_dian"),
+                    concepto_dian=r.get("concepto_dian"),
+                    nota=r.get("nota", ""),
+                    id=r.get("id"),
+                    excluir=bool(r.get("excluir", False)),
+                    motivo_exclusion=r.get("motivo_exclusion"),
+                ) for r in capa3_data
+            ]
+
+            # 2. Cargar movimientos del balance
+            movs_data = sb_local.table("exogena_balance").select("*").eq(
+                "periodo_id", periodo_local["id"]
+            ).eq("es_totalizador", False).execute().data or []
+
+            if not movs_data:
+                return {}
+
+            movimientos = [
+                Movimiento(
+                    codigo_cuenta=m["codigo_cuenta"],
+                    nit=m.get("nit"),
+                    debitos=float(m.get("debitos", 0) or 0),
+                    creditos=float(m.get("creditos", 0) or 0),
+                    saldo_final=float(m.get("saldo_final", 0) or 0),
+                    nombre_cuenta=m.get("nombre_cuenta", ""),
+                    nombre_tercero=m.get("nombre_tercero", ""),
+                    balance_id=m.get("id"),
+                ) for m in movs_data
+            ]
+
+            # 3. Ejecutar el motor
+            motor = MotorClasificacion(reglas_c1, reglas_c2, reglas_c3)
+            resultado = motor.clasificar_balance(movimientos)
+
+            # 4. Integrar PILA si la empresa la tiene
+            try:
+                resultado, _ = integrar_pila_en_resultado(
+                    resultado, sb_local, empresa_id_callback, ano,
+                )
+            except Exception:
+                pass  # Si PILA falla, continuamos con resultado del motor
+
+            # 5. Cargar terceros y aplicar adaptador
+            terceros_dict = _cargar_terceros_dict(empresa_id_callback)
+            return construir_registros_v2(resultado, terceros_dict)
 
         def _obtener_registros_por_formato(empresa_id_callback: str, ano: int) -> dict:
             """
             Callback que el tab Generar usa para conseguir los registros
             ya clasificados desde el motor.
 
-            Por ahora devuelve un dict vacío como placeholder, hasta que
-            conectemos el motor_clasificacion → generador_xml_v2.
-
-            Cuando esté conectado el adaptador, este callback debe:
-              1. Obtener el ResultadoClasificacion del motor (de session_state o BD)
-              2. Aplicar integrador_pila si aplica
-              3. Convertir cada MovimientoClasificado a su RegistroFXXXX
-              4. Devolver {formato: [RegistrosFXXXX...]}
+            Estrategia:
+              1. Si el usuario acaba de clasificar en el tab Borrador,
+                 los registros estarán en st.session_state['exo_registros_por_formato']
+                 → usarlos directamente (más rápido).
+              2. Si no hay nada en session_state, correr el motor en vivo
+                 contra la BD y aplicar el adaptador.
             """
-            return st.session_state.get('exo_registros_por_formato', {})
+            # Atajo: si Borrador ya dejó los registros listos
+            cache_session = st.session_state.get('exo_registros_por_formato_v2')
+            if cache_session:
+                return cache_session
+
+            # Sino: ejecutar motor en vivo
+            return _ejecutar_motor_y_adaptar(empresa_id_callback, ano)
 
         # Info de la empresa para la cabecera del Excel
         info_empresa_dict = {
@@ -1955,15 +2079,6 @@ with tab_generar:
             'razon_social': empresa.get('razon_social') or empresa.get('nombre', ''),
             'nombre': empresa.get('nombre', ''),
         }
-
-        # Aviso temporal mientras no haya datos clasificados conectados
-        if not st.session_state.get('exo_registros_por_formato'):
-            st.warning(
-                "⚠️ **Aún no hay registros clasificados en memoria.** "
-                "El flujo completo requiere clasificar primero el balance en la pestaña "
-                "**⚙️ Borrador**. Por ahora la UI muestra la mecánica de consecutivos, "
-                "pero al generar no producirá XMLs hasta que el motor entregue los registros."
-            )
 
         render_tab_generar_xml(
             empresa_id=empresa['id'],
@@ -1976,8 +2091,9 @@ with tab_generar:
         st.error(
             f"⚠️ No se pudo cargar el módulo de generación XML: {e}\n\n"
             "Verifica que `core/exogena/ui_generacion_xml.py`, "
-            "`core/exogena/gestor_consecutivos.py` y "
-            "`core/exogena/generar_xml_exogena.py` estén desplegados."
+            "`core/exogena/gestor_consecutivos.py`, "
+            "`core/exogena/generar_xml_exogena.py` y "
+            "`core/exogena/adaptador_motor_v2.py` estén desplegados."
         )
     except Exception as e:
         st.error(f"⚠️ Error en la pestaña Generar: {e}")
