@@ -139,6 +139,12 @@ class MovimientoClasificado:
     requiere_revision: bool = False
     nota: str = ''
     balance_id: Optional[int] = None
+    # Campos opcionales para split PILA (solo aplica a conceptos 5010/5011/5012):
+    # - valor_deducible:    aporte asumido por el EMPLEADOR (deducible de renta)
+    # - valor_no_deducible: aporte asumido por el TRABAJADOR (NO deducible)
+    # Cuando son None, se asume que `valor` es 100% deducible (default histórico).
+    valor_deducible: Optional[float] = None
+    valor_no_deducible: Optional[float] = None
 
 
 @dataclass

@@ -102,7 +102,17 @@ def hay_datos_pila(supabase, empresa_id: str, año_gravable: int) -> bool:
 # ============================================================
 
 def _construir_lineas_f1001_aportes(movimientos_pila: list[dict], año_gravable: int) -> list[MovimientoClasificado]:
-    """F1001 5010/5011/5012 — aportes pagados durante el año (excluye cot dic = pasivo)."""
+    """F1001 5010/5011/5012 — aportes pagados durante el año (excluye cot dic = pasivo).
+
+    DIAN AG 2025 distinción crítica:
+      - valor_empleador → "Pago deducible" (aporte patronal)
+      - valor_trabajador → "Pago NO deducible" (descuento del salario del empleado)
+
+    Para conceptos:
+      5010 Parafiscales (SENA, ICBF, Caja): 100% empleador
+      5011 Salud + ARL: empleador y trabajador
+      5012 Pensión: empleador y trabajador
+    """
     periodo_pasivo = f'{año_gravable}12'
     agg: dict[tuple[int, str], dict] = {}
 
@@ -120,21 +130,33 @@ def _construir_lineas_f1001_aportes(movimientos_pila: list[dict], año_gravable:
                 'concepto': cpto,
                 'nit': nit,
                 'nombre': m['fondo_nombre'],
-                'valor': 0.0,
+                'valor_empleador': 0.0,
+                'valor_trabajador': 0.0,
             }
-        agg[key]['valor'] += float(m['total_obligatorio'])
+        agg[key]['valor_empleador'] += float(m.get('valor_empleador', 0) or 0)
+        agg[key]['valor_trabajador'] += float(m.get('valor_trabajador', 0) or 0)
 
     lineas = []
     for (cpto, nit), v in agg.items():
+        total = v['valor_empleador'] + v['valor_trabajador']
+        # Skip si todo es cero
+        if total <= 0:
+            continue
         lineas.append(MovimientoClasificado(
             codigo_cuenta=f'PILA_F1001_{cpto}',
             nit=nit,
             formato_dian='1001',
             concepto_dian=cpto,
-            valor=v['valor'],
+            valor=total,
+            valor_deducible=v['valor_empleador'],       # empleador = deducible
+            valor_no_deducible=v['valor_trabajador'],   # trabajador = NO deducible
             base_aplicable='pila_aportes',
             capa_resolucion='pila_aportes',
-            nota=f'PILA AG{año_gravable}: aportes pagados a {v["nombre"]} en el año',
+            nota=(
+                f'PILA AG{año_gravable}: aportes a {v["nombre"]}. '
+                f'Empleador (deducible): ${v["valor_empleador"]:,.0f}, '
+                f'Trabajador (no deducible): ${v["valor_trabajador"]:,.0f}'
+            ),
         ))
     return lineas
 

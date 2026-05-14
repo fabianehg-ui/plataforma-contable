@@ -151,8 +151,15 @@ def _construir_f1001(
         nit = (m.nit or '').strip() or NIT_CUANTIAS_MENORES
         key = (nit, int(m.concepto_dian))
 
-        # Aplicar la base correspondiente
-        # base_aplicable puede ser: 'deducible', 'no_deducible', 'iva_mayor', etc.
+        # CASO PILA: si el movimiento trae split empleador/trabajador,
+        # respetarlo (deducible = empleador, no deducible = trabajador).
+        # Esto solo aplica a movs de PILA (capa_resolucion == 'pila_aportes').
+        if m.valor_deducible is not None or m.valor_no_deducible is not None:
+            agrupados[key]['pago_deducible'] += float(m.valor_deducible or 0)
+            agrupados[key]['pago_no_deducible'] += float(m.valor_no_deducible or 0)
+            continue
+
+        # CASO NORMAL: usa base_aplicable
         base = (m.base_aplicable or 'deducible').lower()
 
         if 'iva_mayor' in base or 'ivamc' in base or base == 'iva_mc':
