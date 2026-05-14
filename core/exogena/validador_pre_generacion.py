@@ -431,18 +431,37 @@ def aplicar_terceros_a_registros(
                 tipo_doc = datos_actualizados.get('tipo_documento') or reg.tercero.tipo_documento
                 if isinstance(tipo_doc, int):
                     tipo_doc = str(tipo_doc).zfill(2)
+
+                # Helper: usa el valor del dict si la CLAVE existe (incluso si es None).
+                # Esto es crítico cuando auto_dividir_nombre_natural pone razon_social=None
+                # explícitamente — queremos que se borre, no que se preserve el viejo.
+                def _toma(campo: str, fallback):
+                    if campo in datos_actualizados:
+                        return datos_actualizados[campo]
+                    return fallback
+
                 reg.tercero = Tercero(
                     nit=nit,
                     tipo_documento=tipo_doc,
-                    razon_social=datos_actualizados.get('razon_social') or reg.tercero.razon_social,
-                    primer_apellido=datos_actualizados.get('primer_apellido') or reg.tercero.primer_apellido,
-                    segundo_apellido=datos_actualizados.get('segundo_apellido') or reg.tercero.segundo_apellido,
-                    primer_nombre=datos_actualizados.get('primer_nombre') or reg.tercero.primer_nombre,
-                    otros_nombres=datos_actualizados.get('otros_nombres') or reg.tercero.otros_nombres,
-                    direccion=datos_actualizados.get('direccion') or reg.tercero.direccion,
-                    codigo_departamento=datos_actualizados.get('codigo_dpto') or reg.tercero.codigo_departamento,
-                    codigo_municipio=datos_actualizados.get('codigo_municipio') or reg.tercero.codigo_municipio,
-                    codigo_pais=datos_actualizados.get('codigo_pais') or reg.tercero.codigo_pais or PAIS_COLOMBIA,
+                    razon_social=_toma('razon_social', reg.tercero.razon_social),
+                    primer_apellido=_toma('primer_apellido', reg.tercero.primer_apellido),
+                    segundo_apellido=_toma('segundo_apellido', reg.tercero.segundo_apellido),
+                    primer_nombre=_toma('primer_nombre', reg.tercero.primer_nombre),
+                    otros_nombres=_toma('otros_nombres', reg.tercero.otros_nombres),
+                    direccion=_toma('direccion', reg.tercero.direccion),
+                    codigo_departamento=(
+                        datos_actualizados.get('codigo_dpto')
+                        or reg.tercero.codigo_departamento
+                    ),
+                    codigo_municipio=(
+                        datos_actualizados.get('codigo_municipio')
+                        or reg.tercero.codigo_municipio
+                    ),
+                    codigo_pais=(
+                        datos_actualizados.get('codigo_pais')
+                        or reg.tercero.codigo_pais
+                        or PAIS_COLOMBIA
+                    ),
                     digito_verificacion=(
                         str(datos_actualizados.get('dv')) if datos_actualizados.get('dv') is not None
                         else reg.tercero.digito_verificacion

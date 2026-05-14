@@ -112,6 +112,42 @@ def render_tab_generar_xml(
         "Los consecutivos se controlan automáticamente, pero puedes sobreescribirlos."
     )
 
+    # === Banner de estado PILA ===
+    pila_key = f'exo_pila_resumen_{empresa_id}_{ano_gravable}'
+    pila_info = st.session_state.get(pila_key)
+    if pila_info is None:
+        # Verificar si hay datos PILA cargados (consulta directa)
+        try:
+            from db.supabase_client import get_supabase
+            sb_check = get_supabase()
+            from core.exogena.integrador_pila import hay_datos_pila
+            if hay_datos_pila(sb_check, empresa_id, ano_gravable):
+                st.success(
+                    "✅ **PILA disponible** — los aportes a salud, pensión y "
+                    "parafiscales se reportarán automáticamente en F1001 "
+                    "(conceptos 5010/5011/5012) y F1009 (concepto 2214)."
+                )
+            else:
+                st.warning(
+                    "⚠️ **No hay datos PILA cargados** para este año gravable. "
+                    "Si tu empresa tiene empleados, los aportes a salud, pensión "
+                    "y parafiscales **no aparecerán** en los conceptos F1001 "
+                    "5010/5011/5012. Carga las planillas PILA en la pestaña PILA "
+                    "antes de generar."
+                )
+        except Exception:
+            pass  # No bloquear si falla la verificación
+    elif pila_info.get('integrada'):
+        st.success(
+            f"✅ **PILA integrada** — agregadas "
+            f"{pila_info['lineas_f1001']} líneas F1001 (${pila_info['valor_f1001']:,.0f}), "
+            f"{pila_info['lineas_f1009']} líneas F1009 (${pila_info['valor_f1009']:,.0f}). "
+            f"Excluidas del balance: {pila_info.get('movimientos_excluidos_balance', 0)} movimientos "
+            f"(evitar doble conteo)."
+        )
+    elif pila_info.get('motivo', '').startswith('error:'):
+        st.error(f"❌ Error integrando PILA: {pila_info['motivo']}")
+
     # Necesitamos el cliente Supabase para el gestor
     from db.supabase_client import get_supabase
     sb = get_supabase()
@@ -456,6 +492,16 @@ def _ejecutar_generacion(
                 f"🏦 {resultado_validacion.bancos_inferidos} cuenta(s) bancaria(s) "
                 f"del F1012 con NIT del banco inferido automáticamente"
             )
+
+        # === Persistir auto-correcciones a BD (auto-división de nombres, enriquecimientos) ===
+        # Las correcciones automáticas se aplican a todos los terceros completos,
+        # incluso si HAY pendientes para que la próxima generación los encuentre bien.
+        _persistir_correcciones_terceros(
+            resultado_validacion.terceros_completos,
+            terceros_dict_bd,
+            empresa_id,
+            sb_local,
+        )
 
         # Si hay pendientes, mostrar formulario y detener
         if resultado_validacion.tiene_pendientes:
@@ -1073,3 +1119,75 @@ def _marcar_definitivo(
             del st.session_state[cache_key]
 
         st.info("🔄 Recarga la página o cambia de pestaña para ver los nuevos consecutivos sugeridos.")
+
+
+# ================================================================
+# Persistir correcciones automáticas a la BD
+# ================================================================
+
+def _persistir_correcciones_terceros(
+    terceros_completos: dict,
+    terceros_bd_original: dict,
+    empresa_id: str,
+    sb,
+) -> None:
+    """
+    Persiste a BD las correcciones automáticas hechas a terceros, comparando
+    los datos completos (post-validación + auto-división + enriquecimiento)
+    contra los datos originales en BD.
+
+    Se actualiza un tercero solo si tiene cambios reales en al menos uno
+    de los campos relevantes. La actualización es silenciosa.
+
+    Args:
+        terceros_completos: dict {nit: dict_con_datos_corregidos}
+        terceros_bd_original: dict {nit: dict_original_de_BD}
+        empresa_id: UUID empresa
+        sb: cliente Supabase
+    """
+    if not sb:
+        return
+
+    campos_persistir = [
+        'razon_social', 'primer_apellido', 'segundo_apellido',
+        'primer_nombre', 'otros_nombres',
+        'direccion', 'codigo_dpto', 'codigo_municipio', 'codigo_pais',
+    ]
+
+    actualizaciones_realizadas = 0
+    errores = []
+    for nit, datos_completos in terceros_completos.items():
+        original = terceros_bd_original.get(nit, {})
+        cambios = {}
+        for campo in campos_persistir:
+            valor_nuevo = datos_completos.get(campo)
+            valor_original = original.get(campo)
+            # Normalizar para comparar (None == '' == 0)
+            v_nuevo_norm = (valor_nuevo or '').strip() if isinstance(valor_nuevo, str) else valor_nuevo
+            v_orig_norm = (valor_original or '').strip() if isinstance(valor_original, str) else valor_original
+
+            if v_nuevo_norm != v_orig_norm:
+                # Si valor_nuevo es None y valor_original es '' o None → no contar
+                if not v_nuevo_norm and not v_orig_norm:
+                    continue
+                cambios[campo] = valor_nuevo
+
+        if cambios:
+            try:
+                sb.table("exogena_terceros").update(cambios).eq(
+                    "empresa_id", empresa_id
+                ).eq("nit", nit).execute()
+                actualizaciones_realizadas += 1
+            except Exception as e:
+                errores.append(f"{nit}: {e}")
+
+    if actualizaciones_realizadas > 0:
+        st.success(
+            f"💾 {actualizaciones_realizadas} tercero(s) corregido(s) "
+            f"automáticamente y guardado(s) en BD para futuros envíos."
+        )
+    if errores:
+        st.warning(
+            f"⚠️ {len(errores)} actualización(es) fallaron silenciosamente. "
+            f"Detalles en logs."
+        )
