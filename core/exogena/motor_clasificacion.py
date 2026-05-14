@@ -1065,18 +1065,54 @@ class MotorClasificacion:
             return resultados
 
         # GUARD DE DOBLE REPORTE: pasivos de prestaciones sociales.
-        # Las cuentas 2510, 2515, 2525, 25300x, 25301x, 25302x se reportan
-        # en DOS formatos:
-        #   - F2276 con sus DÉBITOS del año (lo efectivamente pagado al empleado)
-        #   - F1009 con su SALDO FINAL positivo (lo que falta pagar al cierre)
+        # Reporte según el tipo de cuenta:
+        #
+        #   2510, 2515, 2525 (consolidados a tercero institucional):
+        #     - F2276 con sus DÉBITOS del año (lo pagado en el período)
+        #     - F1009 con su SALDO FINAL positivo (cuenta por pagar al cierre)
+        #
+        #   25300x, 25301x, 25302x (provisiones por pagar AL EMPLEADO):
+        #     - F2276 con sus DÉBITOS del año (pagos efectivos al empleado)
+        #     - NO se reportan en F1009 (su saldo es solo del corte contable,
+        #       se libera con el siguiente pago — no es cuenta por pagar real
+        #       frente a un tercero institucional)
+        #
+        #   2505 (Salarios por pagar):
+        #     - F1009 con su SALDO FINAL positivo (salario causado y no pagado
+        #       al cierre — sí es cuenta por pagar real)
+        #     - NO se reporta en F2276 (los pagos de salarios cruzan por las
+        #       cuentas 5xxx de gasto, que ya tienen su propio reporte F2276)
+        #
         # Si el saldo final es negativo (crédito residual) NO se reporta en F1009
         # — ese saldo negativo es solo del corte contable, no es una cuenta por
         # pagar real.
         # Marcamos una bandera para evitar que el flujo normal después marque
         # "sin_resolver" si capa 1/2/3 no la clasificaron.
         doble_reporte_disparado = False
+        cuenta_str = str(mov.codigo_cuenta).strip()
+        es_2505 = cuenta_str.startswith('2505')
         concepto_pasivo = _concepto_f2276_pasivo_prestacion(mov.codigo_cuenta)
-        if concepto_pasivo is not None:
+
+        if es_2505:
+            # Salarios por pagar: solo F1009 con saldo final positivo
+            doble_reporte_disparado = True
+            if mov.saldo_final and mov.saldo_final > 0:
+                resultados.append(MovimientoClasificado(
+                    codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
+                    formato_dian='1009',
+                    concepto_dian=2214,
+                    valor=mov.saldo_final,
+                    base_aplicable='saldo_final',
+                    capa_resolucion='pasivo_prestacion_doble_reporte',
+                    requiere_revision=False,
+                    nota=(
+                        f'Salarios por pagar (2505) con saldo final positivo '
+                        f'→ F1009 concepto 2214 (cuenta por pagar al cierre).'
+                    ),
+                    balance_id=mov.balance_id,
+                ))
+
+        elif concepto_pasivo is not None:
             # Esta cuenta es prestacional → el guard YA es la regla aplicable.
             # Aunque no agreguemos nada (sin débitos ni saldo positivo), evitar
             # que caiga en sin_resolver más abajo: estas cuentas NO tienen
@@ -1108,9 +1144,26 @@ class MotorClasificacion:
                     balance_id=mov.balance_id,
                 ))
 
-            # F1009 — solo si saldo final positivo (lo que falta pagar al cierre).
-            # Un saldo NEGATIVO indica que no quedó cuenta por pagar al cierre.
-            if mov.saldo_final and mov.saldo_final > 0:
+            # F1009 — solo cuentas 2510, 2515, 2525 (pasivos consolidados a
+            # terceros institucionales: fondo de cesantías, etc.) y solo si
+            # saldo final positivo (lo que falta pagar al cierre).
+            #
+            # Las cuentas 2530xx (provisiones por pagar AL EMPLEADO) NO se
+            # reportan en F1009 porque su saldo es solo del corte contable
+            # — se libera con el siguiente pago al trabajador, no es una
+            # cuenta por pagar real frente a un tercero institucional.
+            # Estas cuentas SÍ se siguen reportando en F2276 con sus débitos
+            # del año (pagos efectivos al empleado), arriba en este mismo guard.
+            #
+            # Un saldo final NEGATIVO tampoco se reporta en F1009 — es solo
+            # un crédito residual del corte contable.
+            cuenta_str = str(mov.codigo_cuenta).strip()
+            es_pasivo_consolidado = (
+                cuenta_str.startswith('2510')
+                or cuenta_str.startswith('2515')
+                or cuenta_str.startswith('2525')
+            )
+            if es_pasivo_consolidado and mov.saldo_final and mov.saldo_final > 0:
                 # Concepto F1009 estándar para pasivos prestacionales: 2214
                 resultados.append(MovimientoClasificado(
                     codigo_cuenta=mov.codigo_cuenta, nit=mov.nit,
@@ -1122,7 +1175,8 @@ class MotorClasificacion:
                     requiere_revision=False,
                     nota=(
                         f'Doble reporte: saldo final positivo del pasivo prestacional '
-                        f'→ F1009 concepto 2214 (cuenta por pagar al cierre).'
+                        f'consolidado (2510/2515/2525) → F1009 concepto 2214 '
+                        f'(cuenta por pagar al cierre frente a tercero institucional).'
                     ),
                     balance_id=mov.balance_id,
                 ))
