@@ -29,6 +29,7 @@ try:
     from .enriquecimiento.helpers_inferencia import (
         validar_tercero_completo,
         aplicar_fallback_empresa,
+        auto_dividir_nombre_natural,
         es_persona_natural,
         obtener_nit_banco,
         inferir_dpto_municipio_desde_texto,
@@ -40,6 +41,7 @@ except ImportError:
         from core.exogena.enriquecimiento.helpers_inferencia import (
             validar_tercero_completo,
             aplicar_fallback_empresa,
+            auto_dividir_nombre_natural,
             es_persona_natural,
             obtener_nit_banco,
             inferir_dpto_municipio_desde_texto,
@@ -50,6 +52,7 @@ except ImportError:
         from enriquecimiento.helpers_inferencia import (
             validar_tercero_completo,
             aplicar_fallback_empresa,
+            auto_dividir_nombre_natural,
             es_persona_natural,
             obtener_nit_banco,
             inferir_dpto_municipio_desde_texto,
@@ -169,27 +172,38 @@ def validar_y_enriquecer(
             f for f in formatos_que_lo_usan if f in FORMATOS_REQUIEREN_UBICACION
         ]
 
-        # Solo enriquecer si está en al menos un formato que exige ubicación
-        # (los demás formatos no requieren dirección/dpto/mun)
-        necesita_ubicacion = bool(formatos_con_ubicacion_req)
+        # Validar SIEMPRE la identidad (apellidos/nombres o razón social),
+        # independientemente de si el formato requiere ubicación o no.
+        # El primer formato sirve como referencia para los chequeos.
+        formato_ref = (
+            formatos_con_ubicacion_req[0] if formatos_con_ubicacion_req
+            else (formatos_que_lo_usan[0] if formatos_que_lo_usan else '1001')
+        )
 
-        errores_iniciales = []
-        if necesita_ubicacion:
-            errores_iniciales = validar_tercero_completo(
-                tercero_actual, formatos_con_ubicacion_req[0]
-            )
+        # AUTO-DIVISIÓN: si es persona natural y su nombre está en
+        # razón social, intentar dividirlo automáticamente.
+        tercero_actual = auto_dividir_nombre_natural(tercero_actual)
+        if tercero_actual.get('_auto_dividido'):
+            tercero_actual.pop('_auto_dividido', None)
+            # No es un "enriquecimiento auto" formal pero contar
+            res.ciudades_inferidas += 0  # no tocar este contador, ya está bien
+
+        errores_iniciales = validar_tercero_completo(tercero_actual, formato_ref)
 
         if not errores_iniciales:
             # Tercero completo: pasa directo
             res.terceros_completos[nit] = tercero_actual
             continue
 
-        # 3. Intentar enriquecer desde cascada (solo si falta ubicación)
-        if necesita_ubicacion and enriquecedor and enriquecedor.disponible():
+        # 3. Intentar enriquecer desde cascada (si falta cualquier dato y tenemos enriquecedor)
+        if enriquecedor and enriquecedor.disponible():
             try:
                 datos = enriquecedor.enriquecer(nit)
                 if datos:
                     tercero_actual = _fusionar_enriquecimiento(tercero_actual, datos)
+                    # Re-aplicar auto-división si el enriquecedor llenó razon_social
+                    tercero_actual = auto_dividir_nombre_natural(tercero_actual)
+                    tercero_actual.pop('_auto_dividido', None)
                     res.enriquecidos_auto += 1
                     res.fuentes_usadas[datos.fuente] = \
                         res.fuentes_usadas.get(datos.fuente, 0) + 1
@@ -212,10 +226,7 @@ def validar_y_enriquecer(
                 res.ciudades_inferidas += 1
 
         # 5. Re-validar después de enriquecer
-        errores_post = validar_tercero_completo(
-            tercero_actual,
-            formatos_con_ubicacion_req[0] if formatos_con_ubicacion_req else '1001',
-        ) if necesita_ubicacion else []
+        errores_post = validar_tercero_completo(tercero_actual, formato_ref)
 
         if not errores_post:
             res.terceros_completos[nit] = tercero_actual

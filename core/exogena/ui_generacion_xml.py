@@ -246,7 +246,23 @@ def render_tab_generar_xml(
             })
 
         df_preview = pd.DataFrame(filas_preview)
-        st.dataframe(df_preview, hide_index=True, use_container_width=True)
+        st.dataframe(
+            df_preview,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                'Formato': st.column_config.TextColumn('Formato', width='small'),
+                'Descripción': st.column_config.TextColumn('Descripción', width='medium'),
+                'Versión': st.column_config.TextColumn('Versión', width='small'),
+                'Último usado': st.column_config.TextColumn(
+                    'Último usado', width='small',
+                ),
+                'Consecutivo a usar': st.column_config.NumberColumn(
+                    'Consecutivo a usar', format='%d', width='small',
+                ),
+                'Estado': st.column_config.TextColumn('Estado', width='small'),
+            },
+        )
 
     # Detectar y avisar de conflictos antes de generar
     conflictos = []
