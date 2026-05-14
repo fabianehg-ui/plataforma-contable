@@ -367,7 +367,90 @@ def _ejecutar_generacion(
         st.error("❌ Ninguno de los formatos seleccionados tiene datos para reportar.")
         return
 
-    progreso.progress(20, text="Generando XMLs...")
+    progreso.progress(15, text="Validando datos de terceros...")
+
+    # --- 1b. VALIDACIÓN + AUTO-ENRIQUECIMIENTO de terceros
+    try:
+        from core.exogena.validador_pre_generacion import (
+            validar_y_enriquecer, aplicar_terceros_a_registros,
+        )
+        from core.exogena.enriquecimiento import (
+            CacheEnriquecedor, RUESEnriquecedor, DatosAbiertosEnriquecedor,
+            EmpresiteEnriquecedor, EnriquecedorEnCascada,
+        )
+
+        # Cargar terceros actuales de la empresa (BD)
+        from db.supabase_client import get_supabase
+        sb_local = get_supabase()
+        terceros_resp = sb_local.table("exogena_terceros").select(
+            "nit, dv, tipo_documento, razon_social, "
+            "primer_apellido, segundo_apellido, primer_nombre, otros_nombres, "
+            "direccion, codigo_dpto, codigo_municipio, codigo_pais"
+        ).eq("empresa_id", empresa_id).execute()
+        terceros_dict_bd = {t['nit']: t for t in (terceros_resp.data or [])}
+
+        # Construir cascada de enriquecedores
+        cascada = EnriquecedorEnCascada([
+            CacheEnriquecedor(sb_local),
+            RUESEnriquecedor(),
+            DatosAbiertosEnriquecedor(),
+            EmpresiteEnriquecedor(),
+            # GoogleEnriquecedor desactivado por defecto (riesgoso)
+        ])
+
+        resultado_validacion = validar_y_enriquecer(
+            registros_por_formato=registros_filtrados,
+            terceros_dict=terceros_dict_bd,
+            info_empresa_informante={
+                'direccion': info_empresa.get('direccion', ''),
+                'codigo_dpto': info_empresa.get('codigo_dpto', ''),
+                'codigo_municipio': info_empresa.get('codigo_municipio', ''),
+                'codigo_pais': info_empresa.get('codigo_pais', '169'),
+            },
+            enriquecedor=cascada,
+        )
+
+        # Mensajes informativos del enriquecimiento
+        if resultado_validacion.enriquecidos_auto > 0:
+            st.info(
+                f"🔎 {resultado_validacion.enriquecidos_auto} tercero(s) "
+                f"enriquecido(s) automáticamente desde fuentes externas "
+                f"({', '.join(f'{f}: {n}' for f, n in resultado_validacion.fuentes_usadas.items())})"
+            )
+        if resultado_validacion.enriquecidos_fallback > 0:
+            st.info(
+                f"🏢 {resultado_validacion.enriquecidos_fallback} persona(s) natural(es) "
+                f"recibieron datos de ubicación de la empresa informante como fallback"
+            )
+        if resultado_validacion.bancos_inferidos > 0:
+            st.info(
+                f"🏦 {resultado_validacion.bancos_inferidos} cuenta(s) bancaria(s) "
+                f"del F1012 con NIT del banco inferido automáticamente"
+            )
+
+        # Si hay pendientes, mostrar formulario y detener
+        if resultado_validacion.tiene_pendientes:
+            progreso.empty()
+            _render_form_completar_terceros(
+                resultado_validacion,
+                empresa_id,
+                sb=sb_local,
+            )
+            return
+
+        # Si todo OK, aplicar terceros completos a los registros
+        registros_filtrados = aplicar_terceros_a_registros(
+            registros_filtrados, resultado_validacion.terceros_completos
+        )
+
+    except ImportError:
+        # Si el módulo de validación no está disponible, continuar sin validar
+        st.warning(
+            "⚠️ Módulo de validación de terceros no disponible — "
+            "generando sin verificar completitud de direcciones."
+        )
+
+    progreso.progress(30, text="Generando XMLs...")
 
     # --- 2. Generar XMLs
     try:
@@ -563,3 +646,152 @@ def _render_historico(gestor: GestorConsecutivos, empresa_id: str, ano_gravable:
     })
 
     st.dataframe(df_view, hide_index=True, use_container_width=True)
+
+
+# ================================================================
+# Formulario para completar terceros pendientes
+# ================================================================
+
+def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=None):
+    """
+    Renderiza un formulario para que el contador complete los datos
+    faltantes (dirección, dpto, mun) de los terceros que no se pudieron
+    enriquecer automáticamente.
+
+    Los cambios se guardan en exogena_terceros y luego el contador
+    debe presionar "Generar" de nuevo para que se incluyan.
+    """
+    pendientes = resultado_validacion.terceros_pendientes
+    total = len(pendientes)
+
+    st.error(
+        f"⚠️ **{total} tercero(s) tienen datos incompletos.** "
+        f"Para evitar rechazos de DIAN, completa la información antes de generar."
+    )
+
+    st.markdown("#### 📝 Completar datos faltantes")
+    st.caption(
+        "Los siguientes terceros no pudieron enriquecerse desde RUES, "
+        "Datos Abiertos, Empresite ni fallback de empresa. "
+        "Por favor completa los campos faltantes y guarda los cambios."
+    )
+
+    # Cargar catálogo de departamentos y municipios para selectores
+    try:
+        dptos_resp = sb.table("exogena_cat_departamentos").select("*").execute()
+        muns_resp = sb.table("exogena_cat_municipios").select("*").execute()
+        dptos = {d['codigo']: d['nombre'] for d in (dptos_resp.data or [])}
+        muns_por_dpto = {}
+        for m in (muns_resp.data or []):
+            muns_por_dpto.setdefault(m['codigo_dpto'], []).append(
+                (m['codigo_mcp'], m['nombre'])
+            )
+    except Exception:
+        dptos = {}
+        muns_por_dpto = {}
+
+    # Renderizar un formulario por tercero pendiente
+    cambios = {}  # nit → dict de campos editados
+
+    for nit, pend in pendientes.items():
+        nombre = (pend.razon_social or
+                  f"{pend.primer_nombre or ''} {pend.primer_apellido or ''}".strip() or
+                  '(sin nombre)')
+        with st.expander(
+            f"🔧 {nit} — {nombre[:60]}  "
+            f"({', '.join(f'F{f}' for f in pend.formatos_afectados)})",
+            expanded=True,
+        ):
+            st.caption(f"Errores: {', '.join(pend.errores)}")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                new_dir = st.text_input(
+                    "Dirección",
+                    value=pend.direccion or '',
+                    key=f"dir_{nit}",
+                    placeholder="ej. CALLE 33 # 65-100",
+                )
+                new_dpto = st.selectbox(
+                    "Departamento",
+                    options=[''] + sorted(dptos.keys()),
+                    format_func=lambda c: f"{c} — {dptos.get(c, '')}" if c else '— Selecciona —',
+                    index=(sorted(dptos.keys()).index(pend.codigo_dpto) + 1)
+                          if pend.codigo_dpto and pend.codigo_dpto in dptos else 0,
+                    key=f"dpto_{nit}",
+                )
+            with col2:
+                # Municipio depende del dpto elegido
+                muns_disponibles = muns_por_dpto.get(new_dpto, []) if new_dpto else []
+                opciones_mun = [''] + [c for c, _ in muns_disponibles]
+                try:
+                    idx_mun = opciones_mun.index(pend.codigo_municipio) if pend.codigo_municipio else 0
+                except ValueError:
+                    idx_mun = 0
+                new_mun = st.selectbox(
+                    "Municipio",
+                    options=opciones_mun,
+                    format_func=lambda c: (
+                        f"{c} — {dict(muns_disponibles).get(c, '')}" if c else '— Selecciona —'
+                    ),
+                    index=idx_mun,
+                    key=f"mun_{nit}",
+                )
+                st.text_input(
+                    "País (default 169 Colombia)",
+                    value=pend.codigo_pais or '169',
+                    key=f"pais_{nit}",
+                    disabled=True,
+                )
+
+            cambios[nit] = {
+                'direccion': new_dir.strip() or None,
+                'codigo_dpto': new_dpto or None,
+                'codigo_municipio': new_mun or None,
+                'codigo_pais': pend.codigo_pais or '169',
+            }
+
+    st.markdown("---")
+    col_btn1, col_btn2 = st.columns([1, 2])
+    with col_btn1:
+        if st.button("💾 Guardar y reintentar", type="primary", use_container_width=True):
+            _guardar_cambios_terceros(cambios, empresa_id, sb)
+    with col_btn2:
+        st.caption(
+            "Los cambios se guardan en el maestro de terceros (exogena_terceros) "
+            "y quedarán disponibles para futuros envíos. Después de guardar, "
+            "vuelve a presionar 'Generar XMLs y Excel'."
+        )
+
+
+def _guardar_cambios_terceros(cambios: dict, empresa_id: str, sb):
+    """Persiste los cambios manuales de terceros pendientes en BD."""
+    if not cambios:
+        st.warning("No hay cambios para guardar.")
+        return
+    if sb is None:
+        st.error("No hay conexión con la BD")
+        return
+
+    actualizados = 0
+    errores = []
+    for nit, datos in cambios.items():
+        # Filtrar campos vacíos
+        datos_limpios = {k: v for k, v in datos.items() if v}
+        if not datos_limpios:
+            continue
+        try:
+            sb.table("exogena_terceros").update(datos_limpios).eq(
+                "empresa_id", empresa_id
+            ).eq("nit", nit).execute()
+            actualizados += 1
+        except Exception as e:
+            errores.append(f"{nit}: {e}")
+
+    if actualizados > 0:
+        st.success(
+            f"✅ {actualizados} tercero(s) actualizado(s). "
+            "Presiona 'Generar XMLs y Excel' de nuevo para incluirlos."
+        )
+    if errores:
+        st.error("Errores al guardar:\n" + "\n".join(errores))
