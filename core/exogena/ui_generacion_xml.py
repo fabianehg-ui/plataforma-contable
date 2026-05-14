@@ -434,35 +434,93 @@ def _ejecutar_generacion(
 
     progreso.progress(15, text="Validando datos de terceros...")
 
-    # --- 1b. VALIDACIÓN + AUTO-ENRIQUECIMIENTO de terceros
+    # --- 1b. VALIDACIÓN + AUTO-ENRIQUECIMIENTO de terceros ---
+    # Este bloque DEBE correr SIEMPRE. Cualquier fallo se reporta visiblemente.
     try:
         from core.exogena.validador_pre_generacion import (
             validar_y_enriquecer, aplicar_terceros_a_registros,
         )
-        from core.exogena.enriquecimiento import (
-            CacheEnriquecedor, RUESEnriquecedor, DatosAbiertosEnriquecedor,
-            EmpresiteEnriquecedor, EnriquecedorEnCascada,
+    except ImportError as e_imp:
+        st.error(
+            f"❌ **No se pudo cargar el validador de terceros** (`{e_imp}`). "
+            f"La generación se detendrá por seguridad. Reporta este error."
         )
+        return
 
-        # Cargar terceros actuales de la empresa (BD)
+    # Cliente Supabase
+    try:
         from db.supabase_client import get_supabase
         sb_local = get_supabase()
+    except Exception as e:
+        st.error(f"❌ No se pudo conectar a la base de datos: {e}")
+        return
+
+    # Construir cascada de enriquecedores: cada uno por separado para que
+    # un fallo de un enriquecedor no detenga el resto.
+    cascada_enriquecedores = []
+    fuentes_disponibles = []
+    fuentes_no_disponibles = []
+
+    try:
+        from core.exogena.enriquecimiento import CacheEnriquecedor, EnriquecedorEnCascada
+        cascada_enriquecedores.append(CacheEnriquecedor(sb_local))
+        fuentes_disponibles.append('Caché local')
+    except Exception as e:
+        fuentes_no_disponibles.append(f'Caché: {type(e).__name__}')
+
+    for nombre_clase, label in [
+        ('RUESEnriquecedor', 'RUES Confecámaras'),
+        ('DatosAbiertosEnriquecedor', 'Datos Abiertos del Gobierno'),
+        ('EmpresiteEnriquecedor', 'Empresite Colombia'),
+    ]:
+        try:
+            from core.exogena.enriquecimiento import (
+                RUESEnriquecedor, DatosAbiertosEnriquecedor, EmpresiteEnriquecedor,
+            )
+            clases = {
+                'RUESEnriquecedor': RUESEnriquecedor,
+                'DatosAbiertosEnriquecedor': DatosAbiertosEnriquecedor,
+                'EmpresiteEnriquecedor': EmpresiteEnriquecedor,
+            }
+            instancia = clases[nombre_clase]()
+            if instancia.disponible():
+                cascada_enriquecedores.append(instancia)
+                fuentes_disponibles.append(label)
+            else:
+                fuentes_no_disponibles.append(f'{label}: dependencias faltantes (instala requests/bs4)')
+        except Exception as e:
+            fuentes_no_disponibles.append(f'{label}: {type(e).__name__}: {e}')
+
+    cascada = (
+        EnriquecedorEnCascada(cascada_enriquecedores)
+        if cascada_enriquecedores else None
+    )
+
+    # Mostrar al usuario qué fuentes están activas
+    if fuentes_disponibles:
+        st.caption(
+            f"🔎 Buscando datos faltantes en: {', '.join(fuentes_disponibles)}"
+        )
+    if fuentes_no_disponibles:
+        with st.expander(f"⚠️ {len(fuentes_no_disponibles)} fuente(s) de enriquecimiento no disponible(s) (clic para ver)"):
+            for f in fuentes_no_disponibles:
+                st.caption(f"- {f}")
+
+    # Cargar terceros actuales de la empresa (BD)
+    try:
         terceros_resp = sb_local.table("exogena_terceros").select(
             "nit, dv, tipo_documento, razon_social, "
             "primer_apellido, segundo_apellido, primer_nombre, otros_nombres, "
             "direccion, codigo_dpto, codigo_municipio, codigo_pais"
         ).eq("empresa_id", empresa_id).execute()
         terceros_dict_bd = {t['nit']: t for t in (terceros_resp.data or [])}
+        st.caption(f"📋 {len(terceros_dict_bd)} tercero(s) cargado(s) del maestro BD")
+    except Exception as e:
+        st.error(f"❌ Error consultando maestro de terceros: {e}")
+        return
 
-        # Construir cascada de enriquecedores
-        cascada = EnriquecedorEnCascada([
-            CacheEnriquecedor(sb_local),
-            RUESEnriquecedor(),
-            DatosAbiertosEnriquecedor(),
-            EmpresiteEnriquecedor(),
-            # GoogleEnriquecedor desactivado por defecto (riesgoso)
-        ])
-
+    # Ejecutar el validador
+    try:
         resultado_validacion = validar_y_enriquecer(
             registros_por_formato=registros_filtrados,
             terceros_dict=terceros_dict_bd,
@@ -474,56 +532,63 @@ def _ejecutar_generacion(
             },
             enriquecedor=cascada,
         )
+    except Exception as e:
+        st.error(f"❌ Error ejecutando validador: {e}")
+        st.code(traceback.format_exc())
+        return
 
-        # Mensajes informativos del enriquecimiento
-        if resultado_validacion.enriquecidos_auto > 0:
-            st.info(
-                f"🔎 {resultado_validacion.enriquecidos_auto} tercero(s) "
-                f"enriquecido(s) automáticamente desde fuentes externas "
-                f"({', '.join(f'{f}: {n}' for f, n in resultado_validacion.fuentes_usadas.items())})"
-            )
-        if resultado_validacion.enriquecidos_fallback > 0:
-            st.info(
-                f"🏢 {resultado_validacion.enriquecidos_fallback} persona(s) natural(es) "
-                f"recibieron datos de ubicación de la empresa informante como fallback"
-            )
-        if resultado_validacion.bancos_inferidos > 0:
-            st.info(
-                f"🏦 {resultado_validacion.bancos_inferidos} cuenta(s) bancaria(s) "
-                f"del F1012 con NIT del banco inferido automáticamente"
-            )
+    # === Resumen de validación SIEMPRE visible ===
+    col_v1, col_v2, col_v3, col_v4 = st.columns(4)
+    col_v1.metric("Terceros procesados", resultado_validacion.total_terceros)
+    col_v2.metric("✅ Completos", len(resultado_validacion.terceros_completos))
+    col_v3.metric("⚠️ Pendientes", resultado_validacion.total_pendientes)
+    col_v4.metric("🔎 Enriquecidos", resultado_validacion.enriquecidos_auto)
 
-        # === Persistir auto-correcciones a BD (auto-división de nombres, enriquecimientos) ===
-        # Las correcciones automáticas se aplican a todos los terceros completos,
-        # incluso si HAY pendientes para que la próxima generación los encuentre bien.
-        _persistir_correcciones_terceros(
-            resultado_validacion.terceros_completos,
-            terceros_dict_bd,
+    if resultado_validacion.enriquecidos_auto > 0:
+        fuentes_str = ', '.join(
+            f'{f}: {n}' for f, n in resultado_validacion.fuentes_usadas.items()
+        )
+        st.info(f"🔎 Enriquecidos automáticamente desde: {fuentes_str}")
+    if resultado_validacion.enriquecidos_fallback > 0:
+        st.info(
+            f"🏢 {resultado_validacion.enriquecidos_fallback} persona(s) natural(es) "
+            f"recibieron datos de ubicación de la empresa informante como fallback "
+            f"(dirección: {info_empresa.get('direccion', '')})"
+        )
+    if resultado_validacion.bancos_inferidos > 0:
+        st.info(
+            f"🏦 {resultado_validacion.bancos_inferidos} cuenta(s) bancaria(s) "
+            f"del F1012 con NIT del banco inferido automáticamente"
+        )
+
+    # === Persistir auto-correcciones a BD ===
+    _persistir_correcciones_terceros(
+        resultado_validacion.terceros_completos,
+        terceros_dict_bd,
+        empresa_id,
+        sb_local,
+    )
+
+    # === Si hay pendientes: DETENER y mostrar formulario ===
+    if resultado_validacion.tiene_pendientes:
+        progreso.empty()
+        st.error(
+            f"⛔ **Generación detenida**: "
+            f"{resultado_validacion.total_pendientes} tercero(s) con datos incompletos. "
+            f"Complete los datos en el formulario de abajo y vuelva a presionar "
+            f"'Generar XMLs y Excel' para continuar."
+        )
+        _render_form_completar_terceros(
+            resultado_validacion,
             empresa_id,
-            sb_local,
+            sb=sb_local,
         )
+        return
 
-        # Si hay pendientes, mostrar formulario y detener
-        if resultado_validacion.tiene_pendientes:
-            progreso.empty()
-            _render_form_completar_terceros(
-                resultado_validacion,
-                empresa_id,
-                sb=sb_local,
-            )
-            return
-
-        # Si todo OK, aplicar terceros completos a los registros
-        registros_filtrados = aplicar_terceros_a_registros(
-            registros_filtrados, resultado_validacion.terceros_completos
-        )
-
-    except ImportError:
-        # Si el módulo de validación no está disponible, continuar sin validar
-        st.warning(
-            "⚠️ Módulo de validación de terceros no disponible — "
-            "generando sin verificar completitud de direcciones."
-        )
+    # Si todo OK, aplicar terceros completos a los registros
+    registros_filtrados = aplicar_terceros_a_registros(
+        registros_filtrados, resultado_validacion.terceros_completos
+    )
 
     progreso.progress(30, text="Generando XMLs...")
 
