@@ -2073,11 +2073,31 @@ with tab_generar:
             # Sino: ejecutar motor en vivo
             return _ejecutar_motor_y_adaptar(empresa_id_callback, ano)
 
-        # Info de la empresa para la cabecera del Excel
+        # Info de la empresa para la cabecera del Excel y fallback de naturales
+        # Buscar datos completos de la empresa en BD (no solo lo que viene en empresa[])
+        try:
+            sb_emp = get_supabase()
+            emp_resp = sb_emp.table("empresas").select("*").eq(
+                "id", empresa['id']
+            ).limit(1).execute()
+            emp_data = emp_resp.data[0] if emp_resp.data else {}
+        except Exception:
+            emp_data = {}
+
         info_empresa_dict = {
-            'nit': empresa.get('nit', ''),
-            'razon_social': empresa.get('razon_social') or empresa.get('nombre', ''),
-            'nombre': empresa.get('nombre', ''),
+            'nit': empresa.get('nit', '') or emp_data.get('nit', ''),
+            'razon_social': (
+                empresa.get('razon_social') or empresa.get('nombre') or
+                emp_data.get('razon_social', '')
+            ),
+            'nombre': empresa.get('nombre', '') or emp_data.get('razon_social', ''),
+            # Ubicación para fallback de personas naturales
+            'direccion': emp_data.get('direccion', '') or empresa.get('direccion', ''),
+            'codigo_dpto': emp_data.get('codigo_dpto', '') or empresa.get('codigo_dpto', ''),
+            'codigo_municipio': (
+                emp_data.get('codigo_municipio', '') or empresa.get('codigo_municipio', '')
+            ),
+            'codigo_pais': emp_data.get('codigo_pais', '169') or '169',
         }
 
         render_tab_generar_xml(
