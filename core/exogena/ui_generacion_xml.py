@@ -334,12 +334,11 @@ def render_tab_generar_xml(
 
     saltar_enriquecimiento_web = st.checkbox(
         "⚡ Saltar enriquecimiento web (más rápido, usa solo maestro local)",
-        value=False,
+        value=True,  # default TRUE porque RUES/etc no funcionan en Railway
         key="exo_saltar_enriquecimiento_web",
         help=(
             "Cuando está activado, el sistema NO consulta RUES/Datos Abiertos/Empresite "
-            "para completar datos de terceros faltantes. Solo usa el maestro local "
-            "de la BD. Mucho más rápido si tu maestro de terceros ya está completo."
+            "para completar datos. Solo usa el maestro local. Es mucho más rápido."
         ),
     )
 
@@ -359,7 +358,14 @@ def render_tab_generar_xml(
             f"consecutivos duplicados antes de guardar."
         )
 
-    if not boton_generar:
+    # Flag persistente: si el usuario pulsó "Generar" recientemente
+    # y luego guardó cambios de pendientes (rerun), recuperar la intención.
+    gen_flag_key = f"exo_generando_{empresa_id}_{ano_gravable}_{tipo_envio}"
+    if boton_generar:
+        st.session_state[gen_flag_key] = True
+    sigue_generando = st.session_state.get(gen_flag_key, False)
+
+    if not sigue_generando:
         # Si hay resultados de una generación anterior, mostrarlos
         # para que el usuario pueda marcarlos como definitivos sin regenerar
         storage_key = f"exo_resultados_prueba_{empresa_id}_{ano_gravable}_{tipo_envio}"
@@ -483,9 +489,8 @@ def _ejecutar_generacion(
 
     if saltar_enriquecimiento_web:
         st.info(
-            "⚡ Modo rápido activado: se omite enriquecimiento web "
-            "(RUES / Datos Abiertos / Empresite). Los terceros con datos "
-            "incompletos en BD quedarán pendientes para revisión."
+            "⚡ Modo rápido activado: se omite enriquecimiento web. "
+            "Solo se usa el maestro local."
         )
     else:
         for nombre_clase, label in [
@@ -507,7 +512,7 @@ def _ejecutar_generacion(
                     cascada_enriquecedores.append(instancia)
                     fuentes_disponibles.append(label)
                 else:
-                    fuentes_no_disponibles.append(f'{label}: dependencias faltantes (instala requests/bs4)')
+                    fuentes_no_disponibles.append(f'{label}: dependencias faltantes')
             except Exception as e:
                 fuentes_no_disponibles.append(f'{label}: {type(e).__name__}: {e}')
 
@@ -545,7 +550,7 @@ def _ejecutar_generacion(
             for t in batch:
                 terceros_dict_bd[t['nit']] = t
             if len(batch) < page_size:
-                break  # última página
+                break
             offset += page_size
         st.caption(f"📋 {len(terceros_dict_bd)} tercero(s) cargado(s) del maestro BD")
     except Exception as e:
@@ -923,7 +928,7 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
         "(ej. 'Calle 33 Medellín'), el sistema deducirá el dpto y municipio."
     )
 
-    # Botón para descargar la lista completa de pendientes en CSV
+    # Botón para descargar CSV de pendientes
     try:
         import io as _io
         import csv as _csv
@@ -958,7 +963,7 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
             mime="text/csv",
         )
     except Exception as _e:
-        st.caption(f"⚠️ No se pudo generar CSV de pendientes: {_e}")
+        st.caption(f"⚠️ No se pudo generar CSV: {_e}")
 
     # Cargar catálogo de departamentos y mapa nombre→código de municipios
     # (una sola query, cacheada en session_state)
@@ -1008,7 +1013,6 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
         )
 
         # Inputs por tercero (todos van al diccionario `cambios`)
-        # Importar helper de inferencia para determinar si es natural por patrón NIT
         try:
             from core.exogena.enriquecimiento.helpers_inferencia import (
                 inferir_tipo_documento_real,
@@ -1250,8 +1254,13 @@ def _guardar_cambios_terceros(cambios: dict, empresa_id: str, sb):
     if actualizados > 0:
         st.success(
             f"✅ {actualizados} tercero(s) actualizado(s). "
-            "Presiona 'Generar XMLs y Excel' de nuevo para incluirlos."
+            "La pantalla se actualizará para re-validar..."
         )
+        # CRÍTICO: forzar rerun para que se ejecute el validador con los datos nuevos
+        # de la BD, evitando que el usuario pierda los cambios visualmente.
+        import time
+        time.sleep(1.5)  # dejar que el usuario lea el mensaje
+        st.rerun()
     if errores:
         st.error("Errores al guardar:\n" + "\n".join(errores))
 
