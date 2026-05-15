@@ -1,240 +1,140 @@
-# 🏢 Plataforma Contable Web
+# BorradorFácil 350 · versión 2.1.5
 
-Versión web de la aplicación **Generador de Plano Contable**.
-Multi-empresa, multi-usuario, con login seguro y gestión centralizada en la nube.
-
----
-
-## 🧱 Arquitectura
-
-- **Frontend + Backend:** Streamlit (Python)
-- **Autenticación:** Supabase Auth (email + contraseña)
-- **Base de datos:** Supabase PostgreSQL
-- **Almacenamiento de archivos:** Supabase Storage
-- **Hosting:** Railway (recomendado) o Render
-- **Composición de código:** 98.5% Python, 1.5% Otros
+Aplicación de escritorio para Windows con **carga automática de PDFs de Contai** y **exportación a PDF estilo DIAN**.
 
 ---
 
-## 📂 Estructura del Proyecto
+## Novedades de la v2.1.5
 
-```
-plataforma-contable/
-├── Home.py                          # Página de login y bienvenida
-├── app/
-│   └── pages/
-│       ├── 1_💵_Caja_Menor.py       # ✅ Módulo migrado (funciona end-to-end)
-│       ├── 2_🛒_Compras_DIAN.py     # ⏳ Placeholder
-│       ├── 3_💼_Nómina.py           # ⏳ Placeholder
-│       ├── 4_📝_Provisiones.py      # ⏳ Placeholder
-│       ├── 5_📎_PILA.py             # ✅ Funcional
-│       └── 6_⚙️_Configuración.py    # ⚙️ Configuración general
-│
-├── core/                            # Lógica de negocio (portada del .exe)
-│   ├── procesadores/
-│   │   └── procesador_caja_menor.py # Adaptado para archivos en memoria
-│   └── utils/
-│       └── configuracion_web.py     # Reemplaza configuracion.py
-│
-├── auth/
-│   └── login.py                     # Flujo de login contra Supabase
-│
-├── db/
-│   └── supabase_client.py          # Cliente único de Supabase
-│
-├── data/
-│   ├── cuentas.xlsx                 # PUC de referencia
-│   └── mapeos.xlsx                  # Reglas de mapeo
-│
-├── .streamlit/
-│   ├── config.toml                  # Configuración de Streamlit
-│   └── secrets.toml.example         # Plantilla de credenciales
-│
-├── requirements.txt                 # Dependencias Python
-├── Procfile                         # Para Railway/Render
-├── runtime.txt                      # Versión de Python
-├── .gitignore
-├── DEPLOY.md                        # Guía de despliegue paso a paso
-└── README.md                        # Este archivo
-```
+**Clasificador de conceptos mejorado** con 3 niveles de reglas en orden de confianza:
+
+1. **Código PUC exacto** (alta confianza) — la cuenta 23-65-XX se reconoce automáticamente.
+2. **Patrones combinados** (alta) — ej: VIGILANCIA + FISCAL → Honorarios; VIGILANCIA + PRIVADA → Servicios.
+3. **Palabras clave individuales** (media confianza).
+
+Cada movimiento ahora reporta también su nivel de confianza, lo que permite identificar fácilmente cuáles requieren revisión manual.
+
+### Casos que ahora se clasifican bien (antes caían a "Otros pagos"):
+
+- VIGILANCIA FISCAL → Honorarios
+- CONSULTORIA EN SISTEMAS → Honorarios
+- ASESORIA TRIBUTARIA → Honorarios
+- REVISORIA FISCAL → Honorarios
+- FRANQUICIA → Regalías
+- LICENCIA DE USO DE MARCA → Regalías
+- TRANSPORTE DE CARGA → Servicios
+- MANTENIMIENTO → Servicios
+- CAPACITACION → Servicios
+- INTERESES DE PRESTAMO → Rendimientos financieros
+- PAGOS AL EXTERIOR → Otros pagos (prioridad sobre cualquier otra palabra)
 
 ---
 
-## 🚀 Instalación Rápida (Local)
+## ⚠️ Aviso normativo importante
 
-### Requisitos previos
-- Python 3.9+
-- Git
-- Cuenta en Supabase (gratuita)
+**El Consejo de Estado suspendió provisionalmente** los artículos 2 al 8 del **Decreto 0572 de 2025** mediante auto del **7 de mayo de 2026**. Desde el **8 de mayo de 2026** aplican las tarifas y bases de los **Decretos 0261/2023 y 0242/2024** (DIAN Comunicado 070 del 08/05/2026).
 
-### Pasos
-
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/fabianehg-ui/plataforma-contable.git
-cd plataforma-contable
-
-# 2. Crear entorno virtual
-python -m venv venv
-
-# 3. Activar entorno virtual
-source venv/bin/activate          # Linux/Mac
-# venv\Scripts\activate            # Windows
-
-# 4. Instalar dependencias
-pip install -r requirements.txt
-
-# 5. Configurar credenciales
-cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-# Edita secrets.toml con tus credenciales de Supabase
-
-# 6. Ejecutar la aplicación
-streamlit run Home.py
-```
-
-La aplicación estará disponible en: `http://localhost:8501`
+**Esta versión todavía tiene cargadas las tarifas del Decreto 0572.** Si vas a presentar una declaración con período desde mayo 2026 en adelante, verifica manualmente las tarifas de autorretención por CIIU antes de generar el F350. La actualización de tarifas vigentes está pendiente para una próxima versión.
 
 ---
 
-## 🌐 Despliegue en la Web
+## Flujo del usuario
 
-Para desplegar tu aplicación en producción, consulta **[DEPLOY.md](./DEPLOY.md)** para la guía completa paso a paso.
+### 1. Registrar empresa
+Menú → `🏢 Empresas` → `+ Nueva empresa`. Datos: NIT, razón social, CIIU, tarifa autorretención.
 
-### Resumen rápido:
-1. **Crear cuenta en Supabase** (gratuita) y configurar base de datos
-2. **Crear cuenta en Railway** y conectar el repo de GitHub
-3. **Configurar variables de entorno** desde Railway
-4. **Conectar dominio propio** (opcional)
+### 2. Nueva declaración mensual
+Menú → `➕ Nueva Declaración` → selecciona empresa + mes + año.
 
-**Costo aproximado:** $0–10 USD/mes
+### 3. Cargar los 2 PDFs de Contai
+- **Auxiliar de Retefuente**: Reportes → Tributarios → Análisis de % de Retención (resumido)
+- **Balance de Prueba**: Reportes → Contables → Balance de Prueba por Cuenta
+
+### 4. Procesar
+La app valida NITs (PJ/PN/extranjeros), clasifica cada movimiento al concepto F350, asigna casillas, calcula autorretención sobre cuenta 4.
+
+### 5. Revisar Ficha de Diligenciamiento
+Vista consolidada con botones 📋 Copiar al lado de cada valor.
+
+### 6. Exportar PDF del F350
+Layout similar al oficial DIAN, con marca de agua "BORRADOR".
+
+### 7. Copiar a Muisca, firmar y presentar
+Tienes el PDF al lado + los botones 📋 en la app.
+
+### 8. Marcar como presentada
+Queda registro en la BD para papeles de trabajo.
 
 ---
 
-## 📦 Módulos y Estado
+## Mapeo de casillas (validado con F350 real)
 
-| Módulo | Estado | Descripción |
+### Retenciones a título de renta
+
+| Concepto | Base PJ | Ret PJ | Base PN | Ret PN |
+|---|---|---|---|---|
+| Rentas de trabajo | — | — | 77 | 93 |
+| Honorarios | 29 | 42 | 79 | 95 |
+| Comisiones | 30 | 43 | 80 | 96 |
+| Servicios | 31 | 44 | 81 | 97 |
+| Rendimientos financieros | 32 | 45 | 82 | 98 |
+| Arrendamientos | 33 | 46 | 83 | 99 |
+| Regalías | 34 | 47 | 84 | 100 |
+| Dividendos | 35 | 48 | 85 | 101 |
+| Compras | 36 | 49 | 86 | 102 |
+| Contratos construcción | 38 | 51 | 88 | 104 |
+| Loterías rifas | 39 | 52 | 90 | 106 |
+| Otros pagos | 41 | 54 | 92 | 108 |
+
+### Autorretenciones
+
+| Concepto | Base | Retención |
 |---|---|---|
-| **Caja Menor** | ✅ Funcional | Sube Excel de egresos → genera plano contable |
-| **PILA** | ✅ Funcional | Sube PDF de planilla → extrae empleados y totales, descarga Excel |
-| **Compras DIAN** | ⏳ Pendiente | Placeholder listo, lógica por migrar |
-| **Nómina** | ⏳ Pendiente | Placeholder listo, lógica por migrar |
-| **Provisiones** | ⏳ Pendiente | Placeholder listo, lógica por migrar |
+| Contribuyentes exonerados 114-1 | 59 | 68 |
+| Ventas | 60 | 69 |
+| Honorarios | 61 | 70 |
+| Servicios | 63 | 72 |
+| Otros conceptos | 67 | 76 |
 
-### Flujo de migración:
-Cada módulo se migra copiando el procesador del .exe actual a `core/procesadores/` 
-y creando una página en `app/pages/` que sigue el patrón de **Caja Menor**.
+### Totales
 
----
-
-## 🔐 Seguridad
-
-- ✅ **Autenticación segura** mediante Supabase Auth
-- ✅ **Contraseñas hasheadas** y almacenadas de forma segura
-- ✅ **Variables de entorno** para credenciales sensibles
-- ✅ **HTTPS** en producción
-- ✅ **Acceso multi-usuario** con control de permisos
+| Casilla | Concepto |
+|---|---|
+| 130 | Total retenciones renta y complementario |
+| 134 | Total retenciones IVA |
+| 136 | Total retenciones |
+| 138 | Total retenciones más sanciones |
 
 ---
 
-## 🛠️ Tecnologías
+## Instalación
 
-- **Python 3.9+**
-- **Streamlit** - Framework web interactivo
-- **Supabase** - Backend como servicio (autenticación + BD)
-- **PostgreSQL** - Base de datos relacional
-- **Pandas** - Manipulación de datos
-- **Openpyxl** - Lectura/escritura de Excel
-- **PyPDF2** - Procesamiento de PDF
+### Una sola vez: Python 3.12
+https://www.python.org/downloads/ · Marcar "Add Python to PATH".
 
----
+### Probar la app
+Doble clic en `EJECUTAR_APP.bat` (la primera vez instala pdfplumber + reportlab).
 
-## 📋 Funcionalidades Principales
-
-- ✅ Login seguro con email y contraseña
-- ✅ Gestión multi-empresa
-- ✅ Multi-usuario con roles
-- ✅ Subida de archivos (Excel, PDF)
-- ✅ Generación de reportes
-- ✅ Descarga de resultados en Excel
-- ✅ Interfaz intuitiva y responsiva
-- ✅ Almacenamiento en la nube
+### Generar .exe distribuible
+Doble clic en `COMPILAR_APP.bat`. Tarda 8-15 min, genera `dist/BorradorFacil350.exe`.
 
 ---
 
-## 🐛 Problemas y Soluciones
+## Límites
 
-### La aplicación no se conecta a Supabase
-- Verifica que `secrets.toml` contenga las credenciales correctas
-- Comprueba tu conexión a internet
-- Revisa los logs de Supabase en el dashboard
+- NO presenta ante la DIAN (lo hace el contador en Muisca con IFE).
+- NO reemplaza criterio profesional.
+- NO se conecta a internet ni a sistemas DIAN.
+- La responsabilidad final sobre la declaración es del contador firmante.
 
-### Error al subir archivos
-- Asegúrate de que el archivo tiene el formato correcto (.xlsx o .pdf)
-- Verifica que el tamaño del archivo no exceda los límites de Supabase Storage
-
-### Errores en Railway/Render
-- Revisa los logs de despliegue en el dashboard
-- Verifica que las variables de entorno están configuradas correctamente
-- Asegúrate de que el `requirements.txt` contiene todas las dependencias
+Si detectas un concepto mal mapeado, edita la función `clasificar_concepto_por_cuenta()` o el dict `MAPEO_CASILLAS_F350` en el código. Para agregar palabras clave nuevas, ahora basta con añadir entradas a `REGLAS_CODIGO_PUC`, `REGLAS_PATRON_COMBINADO` o `REGLAS_PALABRA_CLAVE` (sin tocar el resto del código).
 
 ---
 
-## 📚 Documentación Adicional
+## Historial
 
-- **[DEPLOY.md](./DEPLOY.md)** - Guía completa de despliegue
-- **[Documentación de Streamlit](https://docs.streamlit.io/)** - Referencia oficial
-- **[Documentación de Supabase](https://supabase.com/docs)** - Guía de Supabase
-
----
-
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas. Por favor:
-
-1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feature/amazing-feature`)
-3. Commit tus cambios (`git commit -m 'Add some amazing feature'`)
-4. Push a la rama (`git push origin feature/amazing-feature`)
-5. Abre un Pull Request
-
----
-
-## 📄 Licencia
-
-Este proyecto está disponible bajo la licencia que especifiques.
-
----
-
-## 👤 Autor
-
-**Fabian Herrera**  
-GitHub: [@fabianehg-ui](https://github.com/fabianehg-ui)
-
----
-
-## 📞 Soporte
-
-Si tienes preguntas o encuentras problemas:
-
-1. Revisa la sección **Problemas y Soluciones** arriba
-2. Consulta la documentación en [DEPLOY.md](./DEPLOY.md)
-3. Abre un [Issue](https://github.com/fabianehg-ui/plataforma-contable/issues) en GitHub
-4. Contacta directamente al autor
-
----
-
-## 🎯 Roadmap
-
-- [ ] Migrar módulo Compras DIAN
-- [ ] Migrar módulo Nómina
-- [ ] Migrar módulo Provisiones
-- [ ] Agregar más opciones de autenticación (Google, GitHub)
-- [ ] Implementar panel de administración
-- [ ] Agregar más reportes y visualizaciones
-- [ ] Mejorar rendimiento con caché
-- [ ] Agregar internacionalización (i18n)
-
----
-
-**Última actualización:** 2026-05-14  
-**Versión del repositorio:** Desarrollo activo
+- **2.1.5** — Clasificador mejorado con código PUC + patrones combinados + confianza
+- 2.1.0 — Exportación PDF estilo DIAN + mapeo corregido
+- 2.0.0 — Carga automática de PDFs de Contai + autorretención cuenta 4
+- 1.1.0 — Módulo manual con Ficha de Diligenciamiento
+- 1.0.0 — CRUD empresas, catálogo CIIU, validación NIT
