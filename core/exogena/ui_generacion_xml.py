@@ -333,8 +333,6 @@ def render_tab_generar_xml(
     st.markdown("#### 4️⃣ Generación")
 
     # Toggle: saltar enriquecimiento web (acelera mucho con muchos NITs).
-    # Si el maestro local de terceros ya está completo, no se necesita
-    # consultar RUES/Datos Abiertos/Empresite por internet.
     saltar_enriquecimiento_web = st.checkbox(
         "⚡ Saltar enriquecimiento web (más rápido, usa solo maestro local)",
         value=False,
@@ -487,7 +485,6 @@ def _ejecutar_generacion(
         fuentes_no_disponibles.append(f'Caché: {type(e).__name__}')
 
     if saltar_enriquecimiento_web:
-        # Modo rápido: NO usar fuentes web. Solo cache local + maestro BD.
         st.info(
             "⚡ Modo rápido activado: se omite enriquecimiento web "
             "(RUES / Datos Abiertos / Empresite). Los terceros con datos "
@@ -916,6 +913,45 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
         "(ej. 'Calle 33 Medellín'), el sistema deducirá el dpto y municipio."
     )
 
+    # Botón para descargar la lista completa de pendientes en CSV
+    # (útil para diagnóstico fuera del formulario)
+    try:
+        import io as _io
+        import csv as _csv
+        buf = _io.StringIO()
+        w = _csv.writer(buf)
+        w.writerow([
+            'nit', 'tipo_detectado', 'razon_social', 'primer_apellido',
+            'segundo_apellido', 'primer_nombre', 'otros_nombres',
+            'direccion', 'codigo_dpto', 'codigo_municipio', 'codigo_pais',
+            'errores', 'formatos_afectados',
+        ])
+        for nit_p, pend_p in pendientes.items():
+            w.writerow([
+                nit_p,
+                getattr(pend_p, 'tipo_documento', '') or '',
+                getattr(pend_p, 'razon_social', '') or '',
+                getattr(pend_p, 'primer_apellido', '') or '',
+                getattr(pend_p, 'segundo_apellido', '') or '',
+                getattr(pend_p, 'primer_nombre', '') or '',
+                getattr(pend_p, 'otros_nombres', '') or '',
+                getattr(pend_p, 'direccion', '') or '',
+                getattr(pend_p, 'codigo_dpto', '') or '',
+                getattr(pend_p, 'codigo_municipio', '') or '',
+                getattr(pend_p, 'codigo_pais', '') or '',
+                ' | '.join(pend_p.errores) if pend_p.errores else '',
+                ', '.join(pend_p.formatos_afectados) if pend_p.formatos_afectados else '',
+            ])
+        st.download_button(
+            label=f"📋 Descargar lista de los {total} pendientes (CSV)",
+            data=buf.getvalue(),
+            file_name=f"pendientes_{empresa_id[:8]}.csv",
+            mime="text/csv",
+            help="Descarga la lista completa de terceros pendientes con sus errores específicos. Útil para diagnóstico o para llenar masivamente desde Excel.",
+        )
+    except Exception as _e:
+        st.caption(f"⚠️ No se pudo generar CSV de pendientes: {_e}")
+
     # Cargar catálogo de departamentos y mapa nombre→código de municipios
     # (una sola query, cacheada en session_state)
     cache_key = f"_exo_cat_dane_{empresa_id}"
@@ -964,8 +1000,24 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
         )
 
         # Inputs por tercero (todos van al diccionario `cambios`)
+        # Importar helper de inferencia para determinar si es natural por patrón NIT
+        try:
+            from core.exogena.enriquecimiento.helpers_inferencia import (
+                inferir_tipo_documento_real,
+            )
+        except ImportError:
+            inferir_tipo_documento_real = lambda _: None
+
         for nit, pend in pendientes.items():
-            es_nat = es_persona_natural({'tipo_documento': 13 if pend.primer_apellido or pend.primer_nombre else 31})
+            tipo_inferido = inferir_tipo_documento_real(nit)
+            if tipo_inferido == 13:
+                es_nat = True
+            elif tipo_inferido == 31:
+                es_nat = False
+            else:
+                es_nat = es_persona_natural({
+                    'tipo_documento': 13 if pend.primer_apellido or pend.primer_nombre else 31
+                })
             nombre = (pend.razon_social or
                       f"{pend.primer_nombre or ''} {pend.primer_apellido or ''}".strip() or
                       '(sin nombre)')
