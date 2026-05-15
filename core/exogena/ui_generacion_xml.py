@@ -1230,39 +1230,54 @@ def _construir_cambios_desde_form(
 def _guardar_cambios_terceros(cambios: dict, empresa_id: str, sb):
     """Persiste los cambios manuales de terceros pendientes en BD."""
     if not cambios:
-        st.warning("No hay cambios para guardar.")
+        st.warning("⚠️ No hay cambios para guardar (los campos están vacíos o no se modificaron).")
         return
     if sb is None:
         st.error("No hay conexión con la BD")
         return
 
+    # Debug: mostrar al usuario exactamente qué se va a guardar
+    with st.expander(f"🔍 Detalle: voy a guardar cambios para {len(cambios)} tercero(s)", expanded=False):
+        for nit, datos in cambios.items():
+            datos_limpios = {k: v for k, v in datos.items() if v not in (None, '')}
+            st.code(f"NIT {nit}: {datos_limpios}")
+
     actualizados = 0
     errores = []
     for nit, datos in cambios.items():
-        # Filtrar campos vacíos
-        datos_limpios = {k: v for k, v in datos.items() if v}
+        # Filtrar campos vacíos pero permitir 0 y False
+        datos_limpios = {k: v for k, v in datos.items() if v not in (None, '')}
         if not datos_limpios:
             continue
         try:
-            sb.table("exogena_terceros").update(datos_limpios).eq(
+            resp = sb.table("exogena_terceros").update(datos_limpios).eq(
                 "empresa_id", empresa_id
             ).eq("nit", nit).execute()
-            actualizados += 1
+            # Verificar que el UPDATE encontró al menos 1 fila
+            if resp.data:
+                actualizados += 1
+            else:
+                errores.append(f"NIT {nit}: no existe en exogena_terceros (no se actualizó nada)")
         except Exception as e:
             errores.append(f"{nit}: {e}")
 
     if actualizados > 0:
         st.success(
-            f"✅ {actualizados} tercero(s) actualizado(s). "
-            "La pantalla se actualizará para re-validar..."
+            f"✅ {actualizados} tercero(s) actualizado(s) en BD. "
+            "La pantalla se actualizará..."
         )
-        # CRÍTICO: forzar rerun para que se ejecute el validador con los datos nuevos
-        # de la BD, evitando que el usuario pierda los cambios visualmente.
         import time
-        time.sleep(1.5)  # dejar que el usuario lea el mensaje
+        time.sleep(2)  # dejar leer
         st.rerun()
+    elif not errores:
+        st.warning(
+            "⚠️ Nada se actualizó. Posibles causas:\n"
+            "- Los campos del formulario quedaron vacíos\n"
+            "- El NIT no existe en la tabla exogena_terceros\n"
+            "- Sin cambios respecto al valor actual"
+        )
     if errores:
-        st.error("Errores al guardar:\n" + "\n".join(errores))
+        st.error("❌ Errores al guardar:\n" + "\n".join(errores))
 
 
 # ================================================================
