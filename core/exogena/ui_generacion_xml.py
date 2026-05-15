@@ -332,7 +332,6 @@ def render_tab_generar_xml(
     # ============================================================
     st.markdown("#### 4️⃣ Generación")
 
-    # Toggle: saltar enriquecimiento web (acelera mucho con muchos NITs).
     saltar_enriquecimiento_web = st.checkbox(
         "⚡ Saltar enriquecimiento web (más rápido, usa solo maestro local)",
         value=False,
@@ -340,9 +339,7 @@ def render_tab_generar_xml(
         help=(
             "Cuando está activado, el sistema NO consulta RUES/Datos Abiertos/Empresite "
             "para completar datos de terceros faltantes. Solo usa el maestro local "
-            "de la BD. Es mucho más rápido (segundos en vez de 10-30 min) si tu "
-            "maestro de terceros ya está completo. Si hay terceros con datos faltantes, "
-            "quedarán pendientes en la validación."
+            "de la BD. Mucho más rápido si tu maestro de terceros ya está completo."
         ),
     )
 
@@ -530,13 +527,26 @@ def _ejecutar_generacion(
                 st.caption(f"- {f}")
 
     # Cargar terceros actuales de la empresa (BD)
+    # IMPORTANTE: Supabase limita a 1000 filas por consulta por defecto.
+    # Si la empresa tiene más terceros, hay que paginar con .range().
     try:
-        terceros_resp = sb_local.table("exogena_terceros").select(
-            "nit, dv, tipo_documento, razon_social, "
-            "primer_apellido, segundo_apellido, primer_nombre, otros_nombres, "
-            "direccion, codigo_dpto, codigo_municipio, codigo_pais"
-        ).eq("empresa_id", empresa_id).execute()
-        terceros_dict_bd = {t['nit']: t for t in (terceros_resp.data or [])}
+        terceros_dict_bd = {}
+        offset = 0
+        page_size = 1000
+        while True:
+            terceros_resp = sb_local.table("exogena_terceros").select(
+                "nit, dv, tipo_documento, razon_social, "
+                "primer_apellido, segundo_apellido, primer_nombre, otros_nombres, "
+                "direccion, codigo_dpto, codigo_municipio, codigo_pais"
+            ).eq("empresa_id", empresa_id).range(offset, offset + page_size - 1).execute()
+            batch = terceros_resp.data or []
+            if not batch:
+                break
+            for t in batch:
+                terceros_dict_bd[t['nit']] = t
+            if len(batch) < page_size:
+                break  # última página
+            offset += page_size
         st.caption(f"📋 {len(terceros_dict_bd)} tercero(s) cargado(s) del maestro BD")
     except Exception as e:
         st.error(f"❌ Error consultando maestro de terceros: {e}")
@@ -914,7 +924,6 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
     )
 
     # Botón para descargar la lista completa de pendientes en CSV
-    # (útil para diagnóstico fuera del formulario)
     try:
         import io as _io
         import csv as _csv
@@ -947,7 +956,6 @@ def _render_form_completar_terceros(resultado_validacion, empresa_id: str, sb=No
             data=buf.getvalue(),
             file_name=f"pendientes_{empresa_id[:8]}.csv",
             mime="text/csv",
-            help="Descarga la lista completa de terceros pendientes con sus errores específicos. Útil para diagnóstico o para llenar masivamente desde Excel.",
         )
     except Exception as _e:
         st.caption(f"⚠️ No se pudo generar CSV de pendientes: {_e}")
