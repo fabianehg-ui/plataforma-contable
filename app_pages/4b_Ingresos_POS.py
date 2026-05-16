@@ -623,18 +623,43 @@ with tab_token:
                         f"{resultado_tk['prefijos_no_mapeados']}"
                     )
 
-            # ----- Filtros para la tabla de comparación -----
-            st.markdown("### 🔍 Decisión por celda (día × sucursal)")
-            st.caption(
-                "Filtra el detalle y elige qué fuente usar en cada caso "
-                "que requiera atención. Los casos 'coinciden' no necesitan "
-                "intervención."
-            )
+            # ----- Filtros y modo de visualización -----
+            st.markdown("### 🔍 Decisión y revisión de diferencias")
 
-            col_f1, col_f2, col_f3 = st.columns(3)
+            col_modo, col_f3 = st.columns([2, 3])
+            with col_modo:
+                modo_vista = st.radio(
+                    "Modo de visualización",
+                    options=[
+                        "Por día (detallado)",
+                        "Por sucursal-mes (consolidado)",
+                    ],
+                    horizontal=False,
+                    help=(
+                        "Detallado: una fila por día y sucursal. Aquí eliges la fuente. "
+                        "Consolidado: una fila por sucursal con los totales del período."
+                    ),
+                    key="modo_vista_token",
+                )
+            with col_f3:
+                # Para el rango de fechas, asegurarse de tener fechas válidas
+                fechas_validas = pd.to_datetime(df_cmp["fecha"], errors="coerce").dropna()
+                if len(fechas_validas) > 0:
+                    f_min = fechas_validas.min().date()
+                    f_max = fechas_validas.max().date()
+                    rango = st.date_input(
+                        "Rango de fechas a incluir",
+                        value=(f_min, f_max),
+                        min_value=f_min,
+                        max_value=f_max,
+                    )
+                else:
+                    rango = None
+
+            col_f1, col_f2 = st.columns(2)
             with col_f1:
                 mostrar_coincidencias = st.checkbox(
-                    "Mostrar también los que coinciden",
+                    "Mostrar también las sucursales/días sin diferencias",
                     value=False,
                     help="Por defecto solo se ven los casos que difieren o están en una sola fuente.",
                 )
@@ -644,25 +669,9 @@ with tab_token:
                     options=sorted(df_cmp["sucursal_nombre"].dropna().unique().tolist()),
                     default=[],
                 )
-            with col_f3:
-                # Para el rango de fechas, asegurarse de tener fechas válidas
-                fechas_validas = pd.to_datetime(df_cmp["fecha"], errors="coerce").dropna()
-                if len(fechas_validas) > 0:
-                    f_min = fechas_validas.min().date()
-                    f_max = fechas_validas.max().date()
-                    rango = st.date_input(
-                        "Rango de fechas",
-                        value=(f_min, f_max),
-                        min_value=f_min,
-                        max_value=f_max,
-                    )
-                else:
-                    rango = None
 
-            # Aplicar filtros
+            # ----- Aplicar filtros COMUNES -----
             df_filt = df_cmp.copy()
-            if not mostrar_coincidencias:
-                df_filt = df_filt[df_filt["estado"] != "coincide"]
             if filtro_sucursal:
                 df_filt = df_filt[df_filt["sucursal_nombre"].isin(filtro_sucursal)]
             if rango and isinstance(rango, tuple) and len(rango) == 2:
@@ -672,80 +681,236 @@ with tab_token:
                     (pd.to_datetime(df_filt["fecha"]).dt.date <= f_fin)
                 ]
 
-            if len(df_filt) == 0:
-                st.info(
-                    "👍 No hay diferencias en el rango seleccionado. "
-                    "Marca '🗸 Mostrar también los que coinciden' si quieres ver todo."
+            # ============================================================
+            # MODO CONSOLIDADO (por sucursal-mes)
+            # ============================================================
+            if modo_vista == "Por sucursal-mes (consolidado)":
+                # Consolidar: una fila por sucursal con totales del período
+                df_consol_base = df_filt.copy()
+                # Agregar columna "dias_con_diferencia"
+                df_consol_base["_difiere"] = (
+                    df_consol_base["estado"].isin(["difiere", "solo_pos", "solo_token"])
+                ).astype(int)
+                df_consol_base["_coincide"] = (
+                    df_consol_base["estado"] == "coincide"
+                ).astype(int)
+
+                df_consol = (
+                    df_consol_base.groupby(
+                        ["sucursal_cc", "sucursal_nombre", "prefijo"],
+                        dropna=False,
+                    ).agg(
+                        dias_totales=("fecha", "nunique"),
+                        dias_coinciden=("_coincide", "sum"),
+                        dias_difieren=("_difiere", "sum"),
+                        total_pos=("total_pos", "sum"),
+                        total_token=("total_token", "sum"),
+                        diferencia=("diferencia", "sum"),
+                    ).reset_index()
                 )
+                df_consol = df_consol.sort_values(
+                    "diferencia",
+                    key=lambda s: s.abs(),
+                    ascending=False,
+                ).reset_index(drop=True)
+
+                # Filtrar las que coinciden 100% si el contador no las quiere
+                if not mostrar_coincidencias:
+                    df_consol = df_consol[df_consol["dias_difieren"] > 0].reset_index(drop=True)
+
+                if len(df_consol) == 0:
+                    st.success(
+                        "👍 No hay sucursales con diferencias en el rango seleccionado. "
+                        "Marca '🗸 Mostrar también las sucursales/días sin diferencias' "
+                        "si quieres ver todas."
+                    )
+                else:
+                    st.caption(
+                        f"Mostrando **{len(df_consol)}** sucursales. "
+                        f"Para elegir qué fuente usar día por día, cambia al modo 'Por día'."
+                    )
+
+                    df_show = df_consol.copy()
+                    df_show["total_pos"] = df_show["total_pos"].astype(int)
+                    df_show["total_token"] = df_show["total_token"].astype(int)
+                    df_show["diferencia"] = df_show["diferencia"].astype(int)
+
+                    st.dataframe(
+                        df_show,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=450,
+                        column_config={
+                            "sucursal_cc":     st.column_config.TextColumn("CC", width="small"),
+                            "sucursal_nombre": st.column_config.TextColumn("Sucursal"),
+                            "prefijo":         st.column_config.TextColumn("Prefijo", width="small"),
+                            "dias_totales":    st.column_config.NumberColumn("Días en período", width="small"),
+                            "dias_coinciden":  st.column_config.NumberColumn("Días ✅ ok", width="small"),
+                            "dias_difieren":   st.column_config.NumberColumn("Días ⚠️ revisar", width="small"),
+                            "total_pos":       st.column_config.NumberColumn("Total POS", format="$ %d"),
+                            "total_token":     st.column_config.NumberColumn("Total Token", format="$ %d"),
+                            "diferencia":      st.column_config.NumberColumn("Diferencia", format="$ %d"),
+                        },
+                    )
+
+                    # Botones de descarga (consolidado)
+                    st.markdown("##### 📥 Descargar consolidado por sucursal")
+                    col_d1, col_d2 = st.columns(2)
+                    nombre_periodo = ""
+                    if rango and isinstance(rango, tuple) and len(rango) == 2:
+                        nombre_periodo = f"_{rango[0].strftime('%Y%m')}"
+
+                    with col_d1:
+                        # CSV
+                        csv_bytes = df_show.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+                        st.download_button(
+                            "📥 CSV (por sucursal-mes)",
+                            data=csv_bytes,
+                            file_name=f"diferencias_pos_token_sucursales{nombre_periodo}.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                        )
+                    with col_d2:
+                        # Excel
+                        buffer_xls = io.BytesIO()
+                        df_show.to_excel(buffer_xls, index=False, engine="openpyxl",
+                                          sheet_name="Por sucursal-mes")
+                        st.download_button(
+                            "📊 Excel (por sucursal-mes)",
+                            data=buffer_xls.getvalue(),
+                            file_name=f"diferencias_pos_token_sucursales{nombre_periodo}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                        )
+
+                    # Resumen del período (totales globales del consolidado)
+                    st.markdown("##### 🧮 Totales del período mostrado")
+                    cc1, cc2, cc3 = st.columns(3)
+                    cc1.metric(
+                        "Total POS",
+                        f"$ {int(df_show['total_pos'].sum()):,}".replace(",", "."),
+                    )
+                    cc2.metric(
+                        "Total Token",
+                        f"$ {int(df_show['total_token'].sum()):,}".replace(",", "."),
+                    )
+                    cc3.metric(
+                        "Diferencia",
+                        f"$ {int(df_show['diferencia'].sum()):,}".replace(",", "."),
+                    )
+
+            # ============================================================
+            # MODO DETALLADO (por día) — el original
+            # ============================================================
             else:
-                st.caption(
-                    f"Mostrando **{len(df_filt)}** celdas. La columna "
-                    f"'fuente_elegida' es la que el sistema usará para generar "
-                    f"el plano final. Puedes cambiar cada valor."
-                )
+                # En modo detallado SÍ se ocultan los coincidentes por defecto
+                if not mostrar_coincidencias:
+                    df_filt = df_filt[df_filt["estado"] != "coincide"]
 
-                # Editor con dropdowns para elegir fuente
-                df_editar = df_filt[[
-                    "fecha", "sucursal_nombre", "prefijo",
-                    "total_pos", "total_token", "diferencia",
-                    "estado", "fuente_recomendada", "fuente_elegida",
-                ]].copy()
+                if len(df_filt) == 0:
+                    st.info(
+                        "👍 No hay diferencias en el rango seleccionado. "
+                        "Marca '🗸 Mostrar también las sucursales/días sin diferencias' "
+                        "si quieres ver todo."
+                    )
+                else:
+                    st.caption(
+                        f"Mostrando **{len(df_filt)}** celdas (día × sucursal). "
+                        f"La columna 'fuente_elegida' es la que el sistema usará "
+                        f"para generar el plano final. Puedes cambiar cada valor."
+                    )
 
-                # Formatear columnas numéricas a string para mejor lectura
-                df_editar["fecha"] = pd.to_datetime(df_editar["fecha"]).dt.strftime("%Y-%m-%d")
-                df_editar["total_pos"] = df_editar["total_pos"].astype(int)
-                df_editar["total_token"] = df_editar["total_token"].astype(int)
-                df_editar["diferencia"] = df_editar["diferencia"].astype(int)
-
-                editado = st.data_editor(
-                    df_editar,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=400,
-                    disabled=[
+                    # Editor con dropdowns para elegir fuente
+                    df_editar = df_filt[[
                         "fecha", "sucursal_nombre", "prefijo",
                         "total_pos", "total_token", "diferencia",
-                        "estado", "fuente_recomendada",
-                    ],
-                    column_config={
-                        "fecha":              st.column_config.TextColumn("Fecha", width="small"),
-                        "sucursal_nombre":    st.column_config.TextColumn("Sucursal"),
-                        "prefijo":            st.column_config.TextColumn("Prefijo", width="small"),
-                        "total_pos":          st.column_config.NumberColumn("Total POS", format="$ %d"),
-                        "total_token":        st.column_config.NumberColumn("Total Token", format="$ %d"),
-                        "diferencia":         st.column_config.NumberColumn("Diferencia", format="$ %d"),
-                        "estado":             st.column_config.TextColumn("Estado"),
-                        "fuente_recomendada": st.column_config.TextColumn("Recomendada"),
-                        "fuente_elegida":     st.column_config.SelectboxColumn(
-                            "✏️ Fuente elegida",
-                            options=["pos", "token"],
-                            required=True,
-                            help="Elige qué fuente contabilizar para esta celda",
-                        ),
-                    },
-                    key="editor_token",
-                )
+                        "estado", "fuente_recomendada", "fuente_elegida",
+                    ]].copy()
 
-                # Aplicar las elecciones editadas al df_cmp original
-                # (sólo afecta las filas que están en el df filtrado)
-                if editado is not None:
-                    # mapear (fecha_str, sucursal_nombre) → fuente_elegida
-                    elecciones = {}
-                    for _, r in editado.iterrows():
-                        elecciones[(r["fecha"], r["sucursal_nombre"])] = r["fuente_elegida"]
-                    # actualizar df_cmp en sesión
-                    df_cmp_act = df_cmp.copy()
-                    df_cmp_act["fecha_str"] = pd.to_datetime(df_cmp_act["fecha"]).dt.strftime("%Y-%m-%d")
-                    df_cmp_act["fuente_elegida"] = df_cmp_act.apply(
-                        lambda r: elecciones.get(
-                            (r["fecha_str"], r["sucursal_nombre"]),
-                            r["fuente_elegida"],
-                        ),
-                        axis=1,
+                    df_editar["fecha"] = pd.to_datetime(df_editar["fecha"]).dt.strftime("%Y-%m-%d")
+                    df_editar["total_pos"] = df_editar["total_pos"].astype(int)
+                    df_editar["total_token"] = df_editar["total_token"].astype(int)
+                    df_editar["diferencia"] = df_editar["diferencia"].astype(int)
+
+                    editado = st.data_editor(
+                        df_editar,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=400,
+                        disabled=[
+                            "fecha", "sucursal_nombre", "prefijo",
+                            "total_pos", "total_token", "diferencia",
+                            "estado", "fuente_recomendada",
+                        ],
+                        column_config={
+                            "fecha":              st.column_config.TextColumn("Fecha", width="small"),
+                            "sucursal_nombre":    st.column_config.TextColumn("Sucursal"),
+                            "prefijo":            st.column_config.TextColumn("Prefijo", width="small"),
+                            "total_pos":          st.column_config.NumberColumn("Total POS", format="$ %d"),
+                            "total_token":        st.column_config.NumberColumn("Total Token", format="$ %d"),
+                            "diferencia":         st.column_config.NumberColumn("Diferencia", format="$ %d"),
+                            "estado":             st.column_config.TextColumn("Estado"),
+                            "fuente_recomendada": st.column_config.TextColumn("Recomendada"),
+                            "fuente_elegida":     st.column_config.SelectboxColumn(
+                                "✏️ Fuente elegida",
+                                options=["pos", "token"],
+                                required=True,
+                                help="Elige qué fuente contabilizar para esta celda",
+                            ),
+                        },
+                        key="editor_token",
                     )
-                    df_cmp_act = df_cmp_act.drop(columns=["fecha_str"])
-                    st.session_state["resultado_token"]["df_cmp"] = df_cmp_act
-                    df_cmp = df_cmp_act
+
+                    # Descarga del detalle (sin las elecciones, datos crudos)
+                    st.markdown("##### 📥 Descargar detalle por día")
+                    nombre_periodo = ""
+                    if rango and isinstance(rango, tuple) and len(rango) == 2:
+                        nombre_periodo = f"_{rango[0].strftime('%Y%m')}"
+
+                    col_dd1, col_dd2 = st.columns(2)
+                    with col_dd1:
+                        csv_det = df_editar.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+                        st.download_button(
+                            "📥 CSV (detalle por día)",
+                            data=csv_det,
+                            file_name=f"diferencias_pos_token_detalle{nombre_periodo}.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                            key="dl_csv_detalle",
+                        )
+                    with col_dd2:
+                        buffer_xd = io.BytesIO()
+                        df_editar.to_excel(buffer_xd, index=False, engine="openpyxl",
+                                            sheet_name="Detalle por día")
+                        st.download_button(
+                            "📊 Excel (detalle por día)",
+                            data=buffer_xd.getvalue(),
+                            file_name=f"diferencias_pos_token_detalle{nombre_periodo}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="dl_xls_detalle",
+                        )
+
+                    # Aplicar las elecciones editadas al df_cmp original
+                    # (sólo afecta las filas que están en el df filtrado)
+                    if editado is not None:
+                        # mapear (fecha_str, sucursal_nombre) → fuente_elegida
+                        elecciones = {}
+                        for _, r in editado.iterrows():
+                            elecciones[(r["fecha"], r["sucursal_nombre"])] = r["fuente_elegida"]
+                        # actualizar df_cmp en sesión
+                        df_cmp_act = df_cmp.copy()
+                        df_cmp_act["fecha_str"] = pd.to_datetime(df_cmp_act["fecha"]).dt.strftime("%Y-%m-%d")
+                        df_cmp_act["fuente_elegida"] = df_cmp_act.apply(
+                            lambda r: elecciones.get(
+                                (r["fecha_str"], r["sucursal_nombre"]),
+                                r["fuente_elegida"],
+                            ),
+                            axis=1,
+                        )
+                        df_cmp_act = df_cmp_act.drop(columns=["fecha_str"])
+                        st.session_state["resultado_token"]["df_cmp"] = df_cmp_act
+                        df_cmp = df_cmp_act
 
             # ----- Paso 3: generar plano final -----
             st.markdown("---")
