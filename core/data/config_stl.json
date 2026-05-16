@@ -1,0 +1,50 @@
+{
+  "_meta": {
+    "descripcion": "Configuración del flujo STL (ventas mayoristas JIPER → retailers como Jerónimo Martins, Éxito, Vaquita, Euro)",
+    "comentario": "Si aparece una tarifa de IVA NO configurada en 'cuentas_por_tarifa_iva', la factura NO se procesa y se reporta como alerta. Cuando se detectan líneas mixtas (parte 19% y parte sin IVA en una misma factura), el algoritmo separa por tarifa real y genera una línea contable por cada base. Para NC STL se reversa la misma cuenta de venta usada originalmente."
+  },
+
+  "comprobante_stl": "426",
+  "comprobante_nc_stl": "5",
+  "cc_default": "001101",
+  "cta_cxc": "13050505",
+  "nit_empresa": "901038325",
+
+  "cuentas_por_tarifa_iva": {
+    "19": {
+      "cta_ingreso": "41200906",
+      "cta_iva":     "24080503",
+      "cta_iva_dev": "24080504",
+      "etiqueta":    "IVA 19%"
+    },
+    "5": {
+      "cta_ingreso": "41200905",
+      "cta_iva":     "24080501",
+      "cta_iva_dev": "24080502",
+      "etiqueta":    "IVA 5%"
+    },
+    "0": {
+      "cta_ingreso": "41200902",
+      "cta_iva":     null,
+      "cta_iva_dev": null,
+      "etiqueta":    "Sin IVA (panadería congelada)"
+    }
+  },
+
+  "clientes_stl_conocidos": [
+    { "nit": "900480569", "nombre": "JERONIMO MARTINS COLOMBIA SAS" },
+    { "nit": "890900608", "nombre": "ALMACENES EXITO" },
+    { "nit": "900522508", "nombre": "INVERSIONES SUPER VAQUITA LA 33 SAS" },
+    { "nit": "811045607", "nombre": "INVERSIONES EURO" },
+    { "nit": "900665107", "nombre": "FRUTOS TIPICOS NACIONALES SAS" },
+    { "nit": "901760889", "nombre": "COMERCIAL DE EXPERIENCIAS SAS" },
+    { "nit": "901446831", "nombre": "COMERCIALIZADORA TORREALTA SAS" }
+  ],
+
+  "tolerancias": {
+    "_meta": "Umbrales numéricos para la detección automática",
+    "decimales_diferencia_cuadre": 5,
+    "tarifa_iva_minima_para_considerar_mixta": 0.10,
+    "tarifas_iva_validas": [0.19, 0.05]
+  }
+}
