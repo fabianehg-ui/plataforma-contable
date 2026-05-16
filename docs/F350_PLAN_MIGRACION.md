@@ -93,76 +93,114 @@ plataforma-contable/
 
 ---
 
-## Sesión 2 — Catálogos y configuración por empresa
+## Sesión 2 + 3 + 4 — Módulo completo (HECHO en una sola corrida, 16-may-2026)
 
-**Objetivo:** poder configurar empresas-cliente para el F350 desde el web.
+Estas tres sesiones se combinaron en una sola entrega.
 
-### Entregables a crear
-1. **Tarifas de autorretención vigentes** (Dec. 0261/2023 + 0242/2024)
-   cargadas en `f350_catalogo_ciiu` con `vigencia_desde='2026-05-08'`.
-2. **Lógica pura** extraída a `core/f350/`:
-   - `clasificador.py` (mover desde el .exe, ya está mejorado en v2.1.5)
-   - `casillas.py` (mapeo F350)
-3. **Nueva página `10_Retencion_Fuente.py`** con:
-   - Selección de empresa (filtrada por permisos del usuario)
-   - Sección "Configuración F350" — CIIU, autorretenedor, exonerado
-     114-1
-   - Lectura/escritura en `f350_empresa_config`
-   - Historial de cambios de CIIU
-4. **Catálogo CIIU visible** desde la página (para que el contador
-   pueda buscar el código por nombre de actividad).
+**Objetivo:** módulo F350 completamente funcional desde el web — catálogo,
+configuración, parseo de PDFs, clasificación, autorretención, persistencia y
+generación del PDF F350.
 
-### Tareas que debes hacer tú (cuando arranquemos)
-1. Pasarme el listado oficial de tarifas vigentes Dec. 0261/2023 +
-   0242/2024 (o me lo busco en fuentes oficiales).
-2. Aplicar el script SQL de carga de tarifas.
-3. Probar configurar una empresa de prueba.
+### Entregables hechos
 
----
+#### Lógica pura — `core/f350/` (8 archivos)
+- ✅ `__init__.py` — API pública del paquete.
+- ✅ `nit_utils.py` — `inferir_tipo_persona`, `calcular_dv`, `formato_nit`,
+  `formato_moneda`. Extraído del .exe sin cambios de lógica.
+- ✅ `casillas.py` — `MAPEO_CASILLAS_F350`, `AUTORRET_CASILLAS_F350`,
+  `CONCEPTOS_ORDEN_F350`, `obtener_casillas_f350`.
+- ✅ `clasificador.py` — `REGLAS_CODIGO_PUC` (~30 prefijos PUC),
+  `REGLAS_PATRON_COMBINADO` (~50 patrones), `REGLAS_PALABRA_CLAVE` (~20).
+  Funciones `clasificar_concepto_detallado` y `clasificar_concepto_por_cuenta`.
+- ✅ `parser_contai.py` — **adaptado para recibir bytes/file-like** (no solo
+  rutas como el .exe). Helper `_abrir_pdf(fuente)` con `io.BytesIO`.
+  Parsers de auxiliar y balance con los mismos regex del .exe v2.1.5.
+- ✅ `autorretencion.py` — `calcular_autorretencion_cuenta_4`,
+  `calcular_autorretencion_por_subcuentas` (permite excluir subcuentas),
+  `aproximar_a_miles` (regla DIAN Art. 577 ET, usa Decimal/ROUND_HALF_UP).
+- ✅ `pdf_f350.py` — **adaptado para devolver bytes** si `ruta=None`
+  (necesario para `st.download_button`). Layout estilo DIAN con marca de
+  agua "BORRADOR".
+- ✅ `procesador.py` — **orquestador puro** `procesar_declaracion()` que
+  combina parseo + clasificación + casillas + autorretención. No toca
+  Supabase.
 
-## Sesión 3 — Carga de PDFs y procesamiento
+#### Capa de servicios — `core/f350/servicios.py`
+- ✅ Catálogos: `listar_ciiu`, `obtener_tarifa_vigente` (vía RPC SQL),
+  `obtener_uvt`.
+- ✅ Configuración: `leer_config_empresa`, `guardar_config_empresa`,
+  `registrar_cambio_ciiu`, `historial_ciiu`.
+- ✅ Declaraciones: `listar_declaraciones`, `crear_declaracion`
+  (idempotente vía UNIQUE empresa+anio+mes), `obtener_declaracion`,
+  `actualizar_totales_declaracion`, `cambiar_estado_declaracion`,
+  `eliminar_declaracion`.
+- ✅ Movimientos: `guardar_movimientos` (borra+inserta en lotes de 500),
+  `listar_movimientos`, `actualizar_movimiento`.
+- ✅ Subcuentas: `guardar_subcuentas`, `listar_subcuentas`.
 
-**Objetivo:** poder cargar los PDFs de Contai por web y ver el resultado
-del procesamiento.
+#### Migración SQL — `db/migrations/012_f350_catalogo_ciiu_tarifas.sql`
+- ✅ Carga 50 CIIU más usados por PYMES colombianas con tarifas del
+  **Dec. 0572/2025 marcadas como SUSPENDIDO** desde el 7-may-2026
+  (`vigencia_hasta='2026-05-07'`).
+- ✅ Duplica los mismos CIIU con `tarifa NULL` y `vigencia_desde='2026-05-08'`
+  con normativa "Dec. 0261/2023 + 0242/2024 — Pendiente cargar tarifa
+  oficial". La UI obliga a configurar tarifa manual hasta que se carguen.
+- ✅ Función SQL `f350_tarifa_vigente(codigo, fecha)` con
+  `GRANT EXECUTE TO authenticated`.
 
-### Entregables
-1. **`core/f350/parser_contai.py`** — funciones para leer auxiliar y
-   balance desde bytes (no desde archivo, porque Streamlit recibe el
-   PDF como upload).
-2. **`core/f350/autorretencion.py`** — cálculo sobre cuenta 4 con
-   selección automática de tarifa según fecha de la declaración.
-3. **Nueva página `10_Retencion_Fuente.py`** con:
-   - Lista de declaraciones existentes (filtrada por empresa)
-   - Botón "Nueva declaración" → selección de mes/año
-   - Subida de PDFs (`st.file_uploader`)
-   - Vista previa de movimientos clasificados
-   - Botón "Procesar y guardar"
-   - Guarda en `f350_declaraciones` y `f350_movimientos_declaracion`
+#### Página Streamlit — `app_pages/10_Retencion_Fuente.py` (reemplaza placeholder)
+- ✅ 4 pestañas: **Declaraciones**, **Nueva declaración**, **Configuración**,
+  **Catálogo CIIU**.
+- ✅ Tab Declaraciones: listado completo con tabla, ver detalle
+  (estado, totales, movimientos con confianza, cambio de estado),
+  botón generar PDF con `st.download_button`, eliminación con
+  confirmación.
+- ✅ Tab Nueva declaración: selector año/mes, cálculo automático de
+  tarifa (catálogo o manual), 2 file_uploaders, input subcuentas a
+  excluir, vista previa de movimientos clasificados con confianza,
+  botón guardar (idempotente).
+- ✅ Tab Configuración: form con CIIU, autorretenedor, exonerado 114-1,
+  tarifa manual, representante, email, notas. Registra cambios de
+  CIIU en historial automáticamente. Muestra tabla de historial.
+- ✅ Tab Catálogo CIIU: buscador con filtro por código o nombre.
+- ✅ Sidebar: muestra CIIU configurado, flags de autorretenedor/exonerado
+  y UVT del año actual.
 
-### Verificación
-- Subir los PDFs de marzo 2026 de SILLA TRES.
-- Comparar contra los totales conocidos:
-  - Retenciones a terceros (20 movs): $12.388.012
-  - Autorretención 1.1% sobre cuenta 4: $7.993.164
-  - Total: $20.381.176
+#### Tests — `tests/test_f350.py`
+- ✅ 25 tests cubriendo nit_utils, clasificador, casillas, autorretención
+  y PDF (smoke test). Todos pasan en 0.09s.
 
----
+### Decisión sobre tarifas vigentes
+Las tarifas del Dec. 0261/2023 + 0242/2024 (vigentes desde 8-may-2026)
+**no se cargaron automáticamente** porque no tengo el listado oficial
+verificado. La migración 012 deja placeholders con tarifa NULL para que
+la UI obligue al contador a configurar la tarifa manual por empresa
+hasta que llegue el listado oficial.
 
-## Sesión 4 — Generación del F350 y revisión
+Para cargarlas en el futuro: crear `013_f350_tarifas_dec_0261_2023.sql`
+con UPDATEs sobre los registros que tienen `vigencia_desde='2026-05-08'`
+y `tarifa_autorretencion IS NULL`.
 
-**Objetivo:** generar el PDF del F350 y permitir revisión visual.
+### Tareas que debes hacer tú para activar todo
+1. Subir todos los archivos al repo.
+2. Aplicar `012_f350_catalogo_ciiu_tarifas.sql` en Supabase SQL Editor.
+3. Reemplazar `app_pages/10_Retencion_Fuente.py` con la versión nueva.
+4. Hacer commit y push — Railway redeplega automáticamente.
+5. En la app: ir a Configuración → Módulos, habilitar "Retención en
+   la Fuente" para tus empresas-cliente.
+6. Probar con SILLA TRES marzo 2026 — verificar que los totales
+   coinciden con los del .exe.
 
-### Entregables
-1. **`core/f350/pdf_f350.py`** — generador del PDF estilo DIAN con
-   marca de agua.
-2. **Página `10_Retencion_Fuente.py`** con:
-   - Ficha de Diligenciamiento con valores por casilla y botones
-     "Copiar" al lado de cada uno.
-   - Pestaña "Movimientos" con filtro por estado y confianza
-     (resaltar los de confianza media/baja en color).
-   - Posibilidad de reclasificar manualmente un movimiento.
-   - Botón "📄 Generar PDF F350" → descarga del PDF.
-   - Botón "Marcar como presentada" → cambia estado a 'Presentada'.
+### Verificación de la sesión
+- En Supabase: `SELECT COUNT(*) FROM f350_catalogo_ciiu` debe dar ~100
+  filas (50 del 0572 + 50 placeholders 0261/0242).
+- `SELECT f350_tarifa_vigente('5611', '2026-01-15')` → `0.0350`
+  (vigente Dec. 0572).
+- `SELECT f350_tarifa_vigente('5611', '2026-06-01')` → `NULL`
+  (placeholder 0261 pendiente).
+- En la web: la página F350 muestra 4 pestañas, el aviso normativo
+  visible en expander, y se puede crear una empresa, configurarle CIIU,
+  procesar un PDF y generar F350.
 
 ---
 
