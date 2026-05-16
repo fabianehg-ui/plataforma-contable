@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import io
+from datetime import date
 import streamlit as st
 import pandas as pd
 
@@ -43,11 +44,22 @@ from core.procesadores.procesador_pos import (
     datos_punto_embebido_a_xlsx,
     info_datos_punto_embebido,
 )
-from core.procesadores.parser_token_dian import parsear_token_dian
+from core.procesadores.parser_token_dian import (
+    parsear_token_dian,
+    parsear_notas_credito_token,
+    generar_lineas_nc_pos,
+)
 from core.procesadores.comparador_pos_token import (
     comparar_pos_token,
     resumen_comparacion,
     aplicar_elecciones_al_plano,
+)
+from core.procesadores.procesador_stl import (
+    procesar_stl,
+    cargar_config_stl,
+    plano_a_tsv_bytes as stl_plano_tsv,
+    plano_a_csv_bytes as stl_plano_csv,
+    plano_a_xlsx_bytes as stl_plano_xlsx,
 )
 
 
@@ -178,10 +190,11 @@ st.markdown("---")
 # Tabs principales
 # ============================================================
 
-tab_separado, tab_unico, tab_token = st.tabs([
+tab_separado, tab_unico, tab_token, tab_stl = st.tabs([
     "1️⃣ Procesar (subir reportes por separado)",
     "2️⃣ Procesar (Excel todo en uno)",
     "3️⃣ Conciliar con Token DIAN",
+    "4️⃣ Ventas STL (mayoristas)",
 ])
 
 
@@ -553,6 +566,12 @@ with tab_token:
                             sucursales=sucursales,
                             prefijos_omitidos=prefijos_omitidos,
                         )
+                        # También parsear las NC del mismo archivo
+                        resultado_nc = parsear_notas_credito_token(
+                            fuente=archivo_token.getvalue(),
+                            nit_empresa=nit_empresa,
+                            sucursales=sucursales,
+                        )
                     except Exception as e:
                         st.error(f"❌ Error procesando el Token: {e}")
                         st.exception(e)
@@ -573,8 +592,10 @@ with tab_token:
                 st.session_state["resultado_token"] = {
                     "df_cmp": df_cmp,
                     "resultado_tk": resultado_tk,
+                    "resultado_nc": resultado_nc,
                     "nombre_token": archivo_token.name,
                     "tolerancia": int(tolerancia),
+                    "incluir_nc": True,  # default: incluir NC en plano final
                 }
                 # Limpiar elecciones previas
                 st.session_state.pop("token_elecciones", None)
@@ -912,6 +933,215 @@ with tab_token:
                         st.session_state["resultado_token"]["df_cmp"] = df_cmp_act
                         df_cmp = df_cmp_act
 
+            # ----- Paso 2.5: Notas Crédito POS -----
+            resultado_nc = res_tk.get("resultado_nc")
+            if resultado_nc is not None:
+                st.markdown("---")
+                st.markdown("### 🔄 Notas Crédito POS")
+
+                df_nc = resultado_nc.get("detalle_nc")
+                df_omitidas = resultado_nc.get("nc_omitidas")
+                nc_no_map = resultado_nc.get("nc_no_mapeadas", {})
+
+                # Métricas
+                cn1, cn2, cn3 = st.columns(3)
+                cn1.metric(
+                    "✅ NC contabilizables",
+                    f"{len(df_nc) if df_nc is not None else 0:,}",
+                )
+                if df_nc is not None and len(df_nc):
+                    total_nc = int(df_nc["total_bruto"].sum())
+                else:
+                    total_nc = 0
+                cn2.metric(
+                    "Total a devolver",
+                    f"$ {total_nc:,.0f}".replace(",", "."),
+                )
+                cantidad_no_map = sum(len(v) for v in nc_no_map.values())
+                cn3.metric(
+                    "⚠️ Sin mapear",
+                    f"{cantidad_no_map:,}",
+                )
+
+                if cantidad_no_map > 0:
+                    st.warning(
+                        f"Hay {cantidad_no_map} NC con prefijo que NO está mapeado "
+                        f"en el maestro de sucursales. No se contabilizarán "
+                        f"automáticamente. Prefijos: "
+                        f"{', '.join(nc_no_map.keys())}"
+                    )
+
+                if df_omitidas is not None and len(df_omitidas) > 0:
+                    total_omit = int(df_omitidas['total_bruto'].sum())
+                    with st.expander(
+                        f"📦 {len(df_omitidas)} NC omitidas sin prefijo "
+                        f"(${total_omit:,}".replace(",", ".") + ") — "
+                        f"se suben manualmente",
+                        expanded=False,
+                    ):
+                        st.caption(
+                            "Estas NC vienen sin prefijo en el Token DIAN. NO se "
+                            "contabilizan automáticamente. El contador las sube "
+                            "manualmente al sistema interno. Se muestran aquí solo "
+                            "como referencia/control."
+                        )
+                        # Métricas por motivo
+                        motivos = df_omitidas.groupby("motivo").agg(
+                            docs=("folio", "count"),
+                            total=("total_bruto", "sum"),
+                        ).reset_index()
+                        st.dataframe(motivos, hide_index=True, use_container_width=True)
+
+                        st.markdown("**Detalle:**")
+                        df_omit_show = df_omitidas.copy()
+                        if hasattr(df_omit_show["fecha"].iloc[0] if len(df_omit_show) else None, "strftime"):
+                            df_omit_show["fecha"] = pd.to_datetime(df_omit_show["fecha"]).dt.strftime("%Y-%m-%d")
+                        df_omit_show["total_bruto"] = df_omit_show["total_bruto"].astype(int)
+                        st.dataframe(
+                            df_omit_show,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "fecha":        st.column_config.TextColumn("Fecha", width="small"),
+                                "folio":        st.column_config.TextColumn("Folio"),
+                                "nit_receptor": st.column_config.TextColumn("NIT"),
+                                "cliente":      st.column_config.TextColumn("Cliente"),
+                                "total_bruto":  st.column_config.NumberColumn("Total", format="$ %d"),
+                                "motivo":       st.column_config.TextColumn("Motivo"),
+                            },
+                        )
+
+                # Vista detallada vs consolidada
+                if df_nc is not None and len(df_nc) > 0:
+                    modo_nc = st.radio(
+                        "Vista de Notas Crédito",
+                        ["Por sucursal-mes (consolidado)", "Detalle por NC"],
+                        horizontal=True,
+                        key="modo_vista_nc",
+                    )
+
+                    if modo_nc == "Por sucursal-mes (consolidado)":
+                        df_nc_consol = (
+                            df_nc.groupby(
+                                ["sucursal_cc", "sucursal_nombre", "prefijo"],
+                                dropna=False,
+                            ).agg(
+                                docs=("folio", "count"),
+                                total_devuelto=("total_bruto", "sum"),
+                                base_total=("base_teorica", "sum"),
+                                inc_total=("inc_teorico", "sum"),
+                            ).reset_index()
+                            .sort_values("total_devuelto", ascending=False)
+                        )
+                        df_nc_show = df_nc_consol.copy()
+                        df_nc_show["total_devuelto"] = df_nc_show["total_devuelto"].astype(int)
+                        df_nc_show["base_total"] = df_nc_show["base_total"].astype(int)
+                        df_nc_show["inc_total"] = df_nc_show["inc_total"].astype(int)
+                        st.dataframe(
+                            df_nc_show,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "sucursal_cc":    st.column_config.TextColumn("CC", width="small"),
+                                "sucursal_nombre":st.column_config.TextColumn("Sucursal"),
+                                "prefijo":        st.column_config.TextColumn("Prefijo NC", width="small"),
+                                "docs":           st.column_config.NumberColumn("# NC", width="small"),
+                                "total_devuelto": st.column_config.NumberColumn("Total devuelto", format="$ %d"),
+                                "base_total":     st.column_config.NumberColumn("Base", format="$ %d"),
+                                "inc_total":      st.column_config.NumberColumn("INC", format="$ %d"),
+                            },
+                        )
+
+                        # Descarga consolidada NC
+                        col_nc1, col_nc2 = st.columns(2)
+                        with col_nc1:
+                            csv_nc = df_nc_show.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+                            st.download_button(
+                                "📥 CSV NC por sucursal",
+                                data=csv_nc,
+                                file_name="notas_credito_pos_sucursales.csv",
+                                mime="text/csv",
+                                use_container_width=True,
+                                key="dl_csv_nc_consol",
+                            )
+                        with col_nc2:
+                            buf = io.BytesIO()
+                            df_nc_show.to_excel(buf, index=False, engine="openpyxl",
+                                                sheet_name="NC por sucursal")
+                            st.download_button(
+                                "📊 Excel NC por sucursal",
+                                data=buf.getvalue(),
+                                file_name="notas_credito_pos_sucursales.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                key="dl_xls_nc_consol",
+                            )
+
+                    else:
+                        # Detalle por NC
+                        df_nc_show = df_nc[[
+                            "fecha", "prefijo", "folio", "sucursal_nombre",
+                            "nit_receptor", "cliente",
+                            "total_bruto", "base_teorica", "inc_teorico",
+                        ]].copy()
+                        df_nc_show["fecha"] = pd.to_datetime(df_nc_show["fecha"]).dt.strftime("%Y-%m-%d")
+                        for c in ["total_bruto", "base_teorica", "inc_teorico"]:
+                            df_nc_show[c] = df_nc_show[c].astype(int)
+                        df_nc_show = df_nc_show.sort_values(["fecha", "prefijo", "folio"])
+                        st.dataframe(
+                            df_nc_show,
+                            use_container_width=True,
+                            hide_index=True,
+                            height=400,
+                            column_config={
+                                "fecha":          st.column_config.TextColumn("Fecha", width="small"),
+                                "prefijo":        st.column_config.TextColumn("Prefijo", width="small"),
+                                "folio":          st.column_config.TextColumn("Folio", width="small"),
+                                "sucursal_nombre":st.column_config.TextColumn("Sucursal"),
+                                "nit_receptor":   st.column_config.TextColumn("NIT", width="small"),
+                                "cliente":        st.column_config.TextColumn("Cliente"),
+                                "total_bruto":    st.column_config.NumberColumn("Total", format="$ %d"),
+                                "base_teorica":   st.column_config.NumberColumn("Base", format="$ %d"),
+                                "inc_teorico":    st.column_config.NumberColumn("INC", format="$ %d"),
+                            },
+                        )
+
+                        # Descarga detalle NC
+                        col_nc1, col_nc2 = st.columns(2)
+                        with col_nc1:
+                            csv_nc = df_nc_show.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+                            st.download_button(
+                                "📥 CSV detalle NC",
+                                data=csv_nc,
+                                file_name="notas_credito_pos_detalle.csv",
+                                mime="text/csv",
+                                use_container_width=True,
+                                key="dl_csv_nc_det",
+                            )
+                        with col_nc2:
+                            buf = io.BytesIO()
+                            df_nc_show.to_excel(buf, index=False, engine="openpyxl",
+                                                sheet_name="Detalle NC")
+                            st.download_button(
+                                "📊 Excel detalle NC",
+                                data=buf.getvalue(),
+                                file_name="notas_credito_pos_detalle.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                key="dl_xls_nc_det",
+                            )
+
+                # Checkbox para incluir o no las NC en el plano final
+                incluir_nc = st.checkbox(
+                    "✏️ Incluir Notas Crédito en el plano final",
+                    value=res_tk.get("incluir_nc", True),
+                    help="Si activas, las NC POS se sumarán al plano contable con "
+                         "asiento Db 41754001 (devoluciones), Db INC, Cr caja sucursal. "
+                         "El comprobante es '498' (distinto del POS '497').",
+                    key="chk_incluir_nc",
+                )
+                st.session_state["resultado_token"]["incluir_nc"] = incluir_nc
+
             # ----- Paso 3: generar plano final -----
             st.markdown("---")
             st.markdown("### 🎯 Generar plano final con las elecciones")
@@ -937,7 +1167,36 @@ with tab_token:
                         df_final = aplicar_elecciones_al_plano(
                             plano_pos_actual, df_cmp, sucursales,
                         )
+
+                        # Si el contador activó el checkbox, sumar las líneas NC
+                        incluir_nc = res_tk.get("incluir_nc", False)
+                        nc_lineas_agregadas = 0
+                        nc_monto_agregado = 0
+                        if incluir_nc and res_tk.get("resultado_nc"):
+                            df_nc_detalle = res_tk["resultado_nc"].get("detalle_nc")
+                            if df_nc_detalle is not None and len(df_nc_detalle) > 0:
+                                df_lineas_nc = generar_lineas_nc_pos(
+                                    df_nc_detalle, sucursales,
+                                )
+                                if len(df_lineas_nc) > 0:
+                                    df_lineas_nc["VALOR"] = pd.to_numeric(
+                                        df_lineas_nc["VALOR"], errors="coerce"
+                                    ).fillna(0).astype(int)
+                                    nc_lineas_agregadas = len(df_lineas_nc)
+                                    nc_monto_agregado = int(
+                                        df_lineas_nc[df_lineas_nc["TR"] == "2"]["VALOR"].sum()
+                                    )
+                                    df_final = pd.concat(
+                                        [df_final, df_lineas_nc],
+                                        ignore_index=True,
+                                    )
+                                    df_final = df_final.sort_values(
+                                        ["FECHA", "CENTRO DE COSTO", "TR"]
+                                    ).reset_index(drop=True)
+
                         st.session_state["resultado_token"]["df_final"] = df_final
+                        st.session_state["resultado_token"]["nc_lineas_agregadas"] = nc_lineas_agregadas
+                        st.session_state["resultado_token"]["nc_monto_agregado"] = nc_monto_agregado
                     except Exception as e:
                         st.error(f"❌ Error generando el plano final: {e}")
                         st.exception(e)
@@ -946,6 +1205,15 @@ with tab_token:
             df_final = res_tk.get("df_final")
             if df_final is not None and len(df_final) > 0:
                 st.markdown("#### 📋 Plano final")
+
+                # Mensaje si se incluyeron NC
+                nc_agregadas = res_tk.get("nc_lineas_agregadas", 0)
+                if nc_agregadas > 0:
+                    st.info(
+                        f"📌 Se incluyeron **{nc_agregadas}** líneas de Notas Crédito "
+                        f"(devoluciones por $ {res_tk.get('nc_monto_agregado', 0):,.0f}"
+                        .replace(",", ".") + ") en el plano final."
+                    )
 
                 df_final_int = df_final.copy()
                 df_final_int["VALOR"] = pd.to_numeric(df_final_int["VALOR"], errors="coerce").fillna(0).astype(int)
@@ -995,4 +1263,218 @@ with tab_token:
 
             if st.button("🔄 Procesar otro Token", key="reset_token"):
                 st.session_state.pop("resultado_token", None)
+                st.rerun()
+
+
+# ============================================================
+# PESTAÑA 4: VENTAS STL (mayoristas)
+# ============================================================
+
+with tab_stl:
+    st.markdown("### 🏢 Ventas STL — Flujo mayorista")
+    st.caption(
+        "Procesa las ventas STL (Jerónimo Martins, Éxito, Vaquita, Euro, etc.) "
+        "y las NC STL (NC2xxx) directamente desde el Excel del Token DIAN. "
+        "Detecta automáticamente las tarifas de IVA (19%, 5%, sin IVA, mixto) "
+        "y genera el plano con discriminación por tarifa."
+    )
+
+    # Configuración cargada
+    try:
+        config_stl = cargar_config_stl()
+    except Exception as e:
+        st.error(f"❌ No se pudo cargar config_stl.json: {e}")
+        st.stop()
+
+    with st.expander("⚙️ Configuración actual (config_stl.json)", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown(
+                f"**Comprobante venta:** `{config_stl['comprobante_stl']}`  \n"
+                f"**Comprobante NC:** `{config_stl['comprobante_nc_stl']}`  \n"
+                f"**Centro de costos:** `{config_stl['cc_default']}`  \n"
+                f"**Cartera (CxC):** `{config_stl['cta_cxc']}`  \n"
+                f"**NIT empresa:** `{config_stl['nit_empresa']}`"
+            )
+        with col_b:
+            st.markdown("**Cuentas por tarifa de IVA:**")
+            for tarifa, ctas in config_stl["cuentas_por_tarifa_iva"].items():
+                st.markdown(
+                    f"- **{ctas['etiqueta']}**: Ingreso `{ctas['cta_ingreso']}`, "
+                    f"IVA `{ctas['cta_iva'] or '—'}`, IVA Dev `{ctas.get('cta_iva_dev') or '—'}`"
+                )
+        st.caption(
+            "Para editar: modifica `core/data/config_stl.json` y reinicia la app."
+        )
+
+    # Subir Token
+    st.markdown("---")
+    st.markdown("### 📂 Cargar Token DIAN")
+    archivo_stl = st.file_uploader(
+        "Sube el Excel del Token DIAN del mes (.xlsx)",
+        type=["xlsx", "xls"],
+        key="stl_token_uploader",
+    )
+
+    if archivo_stl is None:
+        st.info("👆 Sube el Excel del Token DIAN para empezar.")
+    else:
+        # Selector de mes/año
+        col_periodo1, col_periodo2 = st.columns(2)
+        with col_periodo1:
+            anio_stl = st.number_input(
+                "Año", min_value=2020, max_value=2030, value=date.today().year,
+                key="stl_anio",
+            )
+        with col_periodo2:
+            mes_stl = st.selectbox(
+                "Mes",
+                options=list(range(1, 13)),
+                index=max(0, date.today().month - 2),  # mes anterior por defecto
+                format_func=lambda m: [
+                    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+                ][m-1],
+                key="stl_mes",
+            )
+
+        if st.button("🚀 Procesar STL del mes", type="primary", key="stl_procesar"):
+            with st.spinner("Procesando Token DIAN..."):
+                try:
+                    resultado_stl = procesar_stl(
+                        fuente_token=archivo_stl.getvalue(),
+                        config=config_stl,
+                        anio=int(anio_stl),
+                        mes=int(mes_stl),
+                    )
+                    st.session_state["resultado_stl"] = resultado_stl
+                    st.session_state["resultado_stl_periodo"] = f"{int(anio_stl)}-{int(mes_stl):02d}"
+                except Exception as e:
+                    st.error(f"❌ Error procesando: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+
+        # Mostrar resultado si existe
+        if "resultado_stl" in st.session_state:
+            r = st.session_state["resultado_stl"]
+            periodo = st.session_state.get("resultado_stl_periodo", "?")
+
+            st.markdown("---")
+            st.markdown(f"### 📊 Resultado — período {periodo}")
+
+            # Métricas principales
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Facturas STL", r["metadatos"]["facturas_procesadas"])
+            col2.metric("NC STL", r["metadatos"]["ncs_procesadas"])
+            col3.metric("Líneas plano", r["metadatos"]["lineas_plano"])
+            col4.metric(
+                "Cuadre",
+                "✅ Cuadra" if r["cuadre"]["cuadra"] else "❌ NO cuadra",
+                delta=f"${r['cuadre']['diferencia']:,.2f}" if not r["cuadre"]["cuadra"] else None,
+            )
+
+            # Totales
+            col_a, col_b = st.columns(2)
+            col_a.metric("Total débitos",  f"${r['cuadre']['debitos']:,.0f}")
+            col_b.metric("Total créditos", f"${r['cuadre']['creditos']:,.0f}")
+
+            # Resumen por tarifa
+            st.markdown("#### 🧾 Distribución por tarifa de IVA")
+            rt = r["resumen_por_tarifa"]
+            df_rt = pd.DataFrame([
+                {"Tarifa": "Sin IVA",
+                 "Facturas": rt["sin_iva"]["facs"],
+                 "Base":     rt["sin_iva"]["base"],
+                 "IVA":      0},
+                {"Tarifa": "IVA 19% puro",
+                 "Facturas": rt["iva_19"]["facs"],
+                 "Base":     rt["iva_19"]["base"],
+                 "IVA":      rt["iva_19"]["iva"]},
+                {"Tarifa": "IVA 5% puro",
+                 "Facturas": rt["iva_5"]["facs"],
+                 "Base":     rt["iva_5"]["base"],
+                 "IVA":      rt["iva_5"]["iva"]},
+                {"Tarifa": "Mixto (19% + s/IVA)",
+                 "Facturas": rt["mixto"]["facs"],
+                 "Base":     "—",
+                 "IVA":      "—"},
+            ])
+            st.dataframe(df_rt, use_container_width=True, hide_index=True)
+
+            # Resumen por cliente
+            st.markdown("#### 👥 Por cliente")
+            rc = r["resumen_por_cliente"]
+            if rc:
+                df_rc = pd.DataFrame([
+                    {"NIT": nit,
+                     "Cliente": datos["nombre"][:40],
+                     "Facturas": datos["facturas"],
+                     "$ Facturas": datos["total"],
+                     "$ IVA": datos["iva"],
+                     "NCs": datos["ncs"],
+                     "$ NC": datos["total_nc"]}
+                    for nit, datos in rc.items()
+                ]).sort_values("$ Facturas", ascending=False)
+                st.dataframe(df_rc, use_container_width=True, hide_index=True)
+
+            # NC STL
+            if r["resumen_nc"]["facs"] > 0:
+                st.markdown("#### 📝 Notas crédito STL")
+                st.info(
+                    f"**{r['resumen_nc']['facs']} NC STL** detectadas — "
+                    f"Total: **${r['resumen_nc']['total']:,.0f}** "
+                    f"(IVA: ${r['resumen_nc']['iva']:,.0f}). "
+                    f"Cada NC reversa la misma cuenta de venta original."
+                )
+
+            # Alertas
+            if r["alertas"]:
+                st.markdown("#### ⚠️ Alertas")
+                st.warning(
+                    f"Se detectaron {len(r['alertas'])} facturas con problemas "
+                    f"(no se incluyeron en el plano)."
+                )
+                st.dataframe(pd.DataFrame(r["alertas"]),
+                             use_container_width=True, hide_index=True)
+
+            # Vista previa del plano
+            with st.expander("👀 Vista previa del plano (primeras 30 líneas)", expanded=False):
+                st.dataframe(r["plano"].head(30), use_container_width=True,
+                             hide_index=True)
+
+            # Descargas
+            st.markdown("---")
+            st.markdown("### 📥 Descargar plano")
+
+            nombre_archivo = f"plano_STL_{periodo}"
+            col_d1, col_d2, col_d3 = st.columns(3)
+            with col_d1:
+                st.download_button(
+                    "📄 TXT (TAB)",
+                    data=stl_plano_tsv(r["plano"]),
+                    file_name=f"{nombre_archivo}.txt",
+                    mime="text/tab-separated-values",
+                    use_container_width=True,
+                )
+            with col_d2:
+                st.download_button(
+                    "📄 CSV (coma)",
+                    data=stl_plano_csv(r["plano"]),
+                    file_name=f"{nombre_archivo}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            with col_d3:
+                st.download_button(
+                    "📊 Excel (con resumen)",
+                    data=stl_plano_xlsx(r["plano"], resumen=r),
+                    file_name=f"{nombre_archivo}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    use_container_width=True,
+                )
+
+            if st.button("🔄 Procesar otro mes", key="reset_stl"):
+                st.session_state.pop("resultado_stl", None)
+                st.session_state.pop("resultado_stl_periodo", None)
                 st.rerun()
