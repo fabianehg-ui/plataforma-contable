@@ -43,6 +43,12 @@ from core.procesadores.procesador_pos import (
     datos_punto_embebido_a_xlsx,
     info_datos_punto_embebido,
 )
+from core.procesadores.parser_token_dian import parsear_token_dian
+from core.procesadores.comparador_pos_token import (
+    comparar_pos_token,
+    resumen_comparacion,
+    aplicar_elecciones_al_plano,
+)
 
 
 # ============================================================
@@ -172,9 +178,10 @@ st.markdown("---")
 # Tabs principales
 # ============================================================
 
-tab_separado, tab_unico = st.tabs([
+tab_separado, tab_unico, tab_token = st.tabs([
     "1️⃣ Procesar (subir reportes por separado)",
     "2️⃣ Procesar (Excel todo en uno)",
+    "3️⃣ Conciliar con Token DIAN",
 ])
 
 
@@ -452,3 +459,375 @@ with tab_unico:
         if st.button("🔄 Procesar otro archivo", key="reset_uni"):
             st.session_state.pop("resultado_pos_unico", None)
             st.rerun()
+
+
+# ============================================================
+# TAB 3: Conciliación POS vs Token DIAN
+# ============================================================
+
+with tab_token:
+    st.markdown("### 🔄 Conciliar ventas POS vs Token DIAN")
+    st.caption(
+        "Sube el archivo del Token DIAN para cruzarlo contra el plano POS "
+        "procesado en las pestañas anteriores. Detectamos las diferencias "
+        "por día y sucursal, y tú decides qué fuente usar."
+    )
+
+    # ----- Paso 0: validar que hay un plano POS procesado -----
+    plano_pos_actual = None
+    nombre_plano = ""
+    res_sep_actual = st.session_state.get("resultado_pos_separado")
+    res_uni_actual = st.session_state.get("resultado_pos_unico")
+    if res_sep_actual is not None:
+        plano_pos_actual = res_sep_actual["df"]
+        nombre_plano = res_sep_actual["nombre"]
+    elif res_uni_actual is not None:
+        plano_pos_actual = res_uni_actual["df"]
+        nombre_plano = res_uni_actual["nombre"]
+
+    if plano_pos_actual is None or len(plano_pos_actual) == 0:
+        st.warning(
+            "⚠️ Primero procesa el POS en la pestaña 1 o 2. Después regresa "
+            "aquí para cargar el Token DIAN y conciliarlos."
+        )
+    else:
+        st.success(
+            f"✅ Plano POS cargado de la pestaña anterior: "
+            f"**{len(plano_pos_actual)}** líneas · "
+            f"**{plano_pos_actual['FECHA'].nunique()}** días distintos"
+        )
+
+        # ----- Paso 1: subir el Token -----
+        st.markdown("#### 📥 Sube el reporte del Token DIAN")
+        st.caption(
+            "Es el Excel que descargas desde el portal DIAN > Reportes > "
+            "Token. Debe traer todas las facturas electrónicas emitidas "
+            "por la empresa en el período."
+        )
+
+        archivo_token = st.file_uploader(
+            "Excel del Token DIAN (.xlsx)",
+            type=["xlsx"],
+            key="file_token_dian",
+        )
+
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            tolerancia = st.number_input(
+                "Tolerancia en pesos para considerar 'cuadran'",
+                min_value=0,
+                max_value=10000,
+                value=100,
+                step=10,
+                help="Diferencias menores a este monto se consideran "
+                     "redondeos y no se marcan como conflicto. Default $100.",
+            )
+        with col_t2:
+            omitir_stl = st.checkbox(
+                "Omitir prefijo STL (recomendado)",
+                value=True,
+                help="STL son facturas con IVA variable que se procesan "
+                     "por flujo Henko separado.",
+            )
+
+        prefijos_omitidos = ("STL",) if omitir_stl else ()
+
+        if archivo_token is not None:
+            procesar_token = st.button(
+                "🚀 Procesar Token y comparar",
+                type="primary",
+                key="btn_procesar_token",
+            )
+
+            if procesar_token:
+                with st.spinner("Leyendo el Token DIAN..."):
+                    try:
+                        sucursales = cargar_datos_punto_embebido()
+                        nit_empresa = emp.get("nit", "").strip()
+                        if not nit_empresa:
+                            st.error("❌ No se encontró el NIT de la empresa activa.")
+                            st.stop()
+                        resultado_tk = parsear_token_dian(
+                            fuente=archivo_token.getvalue(),
+                            nit_empresa=nit_empresa,
+                            sucursales=sucursales,
+                            prefijos_omitidos=prefijos_omitidos,
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Error procesando el Token: {e}")
+                        st.exception(e)
+                        st.stop()
+
+                with st.spinner("Comparando POS vs Token..."):
+                    try:
+                        df_cmp = comparar_pos_token(
+                            plano_pos_actual,
+                            resultado_tk["agregado_fecha_prefijo"],
+                            tolerancia_pesos=int(tolerancia),
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Error comparando: {e}")
+                        st.exception(e)
+                        st.stop()
+
+                st.session_state["resultado_token"] = {
+                    "df_cmp": df_cmp,
+                    "resultado_tk": resultado_tk,
+                    "nombre_token": archivo_token.name,
+                    "tolerancia": int(tolerancia),
+                }
+                # Limpiar elecciones previas
+                st.session_state.pop("token_elecciones", None)
+
+        # ----- Paso 2: mostrar resultado de la comparación -----
+        res_tk = st.session_state.get("resultado_token")
+        if res_tk:
+            df_cmp = res_tk["df_cmp"]
+            resultado_tk = res_tk["resultado_tk"]
+
+            st.markdown("---")
+            st.markdown("### 📊 Resultado de la conciliación")
+
+            resumen = resumen_comparacion(df_cmp)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Celdas comparadas", f"{resumen['total_celdas']:,}")
+            c2.metric("✅ Coinciden", f"{resumen['coincide']:,}")
+            c3.metric("⚠️ Difieren", f"{resumen['difiere']:,}")
+            c4.metric(
+                "🔴 Solo en una fuente",
+                f"{resumen['solo_pos'] + resumen['solo_token']:,}",
+            )
+
+            c5, c6, c7 = st.columns(3)
+            c5.metric(
+                "Total POS",
+                f"$ {resumen['total_pos']:,.0f}".replace(",", "."),
+            )
+            c6.metric(
+                "Total Token",
+                f"$ {resumen['total_token']:,.0f}".replace(",", "."),
+            )
+            c7.metric(
+                "Diferencia total",
+                f"$ {resumen['diferencia']:,.0f}".replace(",", "."),
+                delta=None,
+            )
+
+            with st.expander("📝 Log del Token", expanded=False):
+                for l in resultado_tk["log"]:
+                    st.text(l)
+                if resultado_tk["prefijos_no_mapeados"]:
+                    st.warning(
+                        f"Prefijos no mapeados (ignorados): "
+                        f"{resultado_tk['prefijos_no_mapeados']}"
+                    )
+
+            # ----- Filtros para la tabla de comparación -----
+            st.markdown("### 🔍 Decisión por celda (día × sucursal)")
+            st.caption(
+                "Filtra el detalle y elige qué fuente usar en cada caso "
+                "que requiera atención. Los casos 'coinciden' no necesitan "
+                "intervención."
+            )
+
+            col_f1, col_f2, col_f3 = st.columns(3)
+            with col_f1:
+                mostrar_coincidencias = st.checkbox(
+                    "Mostrar también los que coinciden",
+                    value=False,
+                    help="Por defecto solo se ven los casos que difieren o están en una sola fuente.",
+                )
+            with col_f2:
+                filtro_sucursal = st.multiselect(
+                    "Filtrar por sucursal",
+                    options=sorted(df_cmp["sucursal_nombre"].dropna().unique().tolist()),
+                    default=[],
+                )
+            with col_f3:
+                # Para el rango de fechas, asegurarse de tener fechas válidas
+                fechas_validas = pd.to_datetime(df_cmp["fecha"], errors="coerce").dropna()
+                if len(fechas_validas) > 0:
+                    f_min = fechas_validas.min().date()
+                    f_max = fechas_validas.max().date()
+                    rango = st.date_input(
+                        "Rango de fechas",
+                        value=(f_min, f_max),
+                        min_value=f_min,
+                        max_value=f_max,
+                    )
+                else:
+                    rango = None
+
+            # Aplicar filtros
+            df_filt = df_cmp.copy()
+            if not mostrar_coincidencias:
+                df_filt = df_filt[df_filt["estado"] != "coincide"]
+            if filtro_sucursal:
+                df_filt = df_filt[df_filt["sucursal_nombre"].isin(filtro_sucursal)]
+            if rango and isinstance(rango, tuple) and len(rango) == 2:
+                f_ini, f_fin = rango
+                df_filt = df_filt[
+                    (pd.to_datetime(df_filt["fecha"]).dt.date >= f_ini) &
+                    (pd.to_datetime(df_filt["fecha"]).dt.date <= f_fin)
+                ]
+
+            if len(df_filt) == 0:
+                st.info(
+                    "👍 No hay diferencias en el rango seleccionado. "
+                    "Marca '🗸 Mostrar también los que coinciden' si quieres ver todo."
+                )
+            else:
+                st.caption(
+                    f"Mostrando **{len(df_filt)}** celdas. La columna "
+                    f"'fuente_elegida' es la que el sistema usará para generar "
+                    f"el plano final. Puedes cambiar cada valor."
+                )
+
+                # Editor con dropdowns para elegir fuente
+                df_editar = df_filt[[
+                    "fecha", "sucursal_nombre", "prefijo",
+                    "total_pos", "total_token", "diferencia",
+                    "estado", "fuente_recomendada", "fuente_elegida",
+                ]].copy()
+
+                # Formatear columnas numéricas a string para mejor lectura
+                df_editar["fecha"] = pd.to_datetime(df_editar["fecha"]).dt.strftime("%Y-%m-%d")
+                df_editar["total_pos"] = df_editar["total_pos"].astype(int)
+                df_editar["total_token"] = df_editar["total_token"].astype(int)
+                df_editar["diferencia"] = df_editar["diferencia"].astype(int)
+
+                editado = st.data_editor(
+                    df_editar,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=400,
+                    disabled=[
+                        "fecha", "sucursal_nombre", "prefijo",
+                        "total_pos", "total_token", "diferencia",
+                        "estado", "fuente_recomendada",
+                    ],
+                    column_config={
+                        "fecha":              st.column_config.TextColumn("Fecha", width="small"),
+                        "sucursal_nombre":    st.column_config.TextColumn("Sucursal"),
+                        "prefijo":            st.column_config.TextColumn("Prefijo", width="small"),
+                        "total_pos":          st.column_config.NumberColumn("Total POS", format="$ %d"),
+                        "total_token":        st.column_config.NumberColumn("Total Token", format="$ %d"),
+                        "diferencia":         st.column_config.NumberColumn("Diferencia", format="$ %d"),
+                        "estado":             st.column_config.TextColumn("Estado"),
+                        "fuente_recomendada": st.column_config.TextColumn("Recomendada"),
+                        "fuente_elegida":     st.column_config.SelectboxColumn(
+                            "✏️ Fuente elegida",
+                            options=["pos", "token"],
+                            required=True,
+                            help="Elige qué fuente contabilizar para esta celda",
+                        ),
+                    },
+                    key="editor_token",
+                )
+
+                # Aplicar las elecciones editadas al df_cmp original
+                # (sólo afecta las filas que están en el df filtrado)
+                if editado is not None:
+                    # mapear (fecha_str, sucursal_nombre) → fuente_elegida
+                    elecciones = {}
+                    for _, r in editado.iterrows():
+                        elecciones[(r["fecha"], r["sucursal_nombre"])] = r["fuente_elegida"]
+                    # actualizar df_cmp en sesión
+                    df_cmp_act = df_cmp.copy()
+                    df_cmp_act["fecha_str"] = pd.to_datetime(df_cmp_act["fecha"]).dt.strftime("%Y-%m-%d")
+                    df_cmp_act["fuente_elegida"] = df_cmp_act.apply(
+                        lambda r: elecciones.get(
+                            (r["fecha_str"], r["sucursal_nombre"]),
+                            r["fuente_elegida"],
+                        ),
+                        axis=1,
+                    )
+                    df_cmp_act = df_cmp_act.drop(columns=["fecha_str"])
+                    st.session_state["resultado_token"]["df_cmp"] = df_cmp_act
+                    df_cmp = df_cmp_act
+
+            # ----- Paso 3: generar plano final -----
+            st.markdown("---")
+            st.markdown("### 🎯 Generar plano final con las elecciones")
+
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
+                cuenta_token = (df_cmp["fuente_elegida"] == "token").sum()
+                st.metric("Celdas que usarán Token", f"{cuenta_token:,}")
+            with col_g2:
+                cuenta_pos = (df_cmp["fuente_elegida"] == "pos").sum()
+                st.metric("Celdas que usarán POS", f"{cuenta_pos:,}")
+
+            generar_final = st.button(
+                "✨ Generar plano final",
+                type="primary",
+                key="btn_generar_final",
+            )
+
+            if generar_final:
+                with st.spinner("Generando plano final..."):
+                    try:
+                        sucursales = cargar_datos_punto_embebido()
+                        df_final = aplicar_elecciones_al_plano(
+                            plano_pos_actual, df_cmp, sucursales,
+                        )
+                        st.session_state["resultado_token"]["df_final"] = df_final
+                    except Exception as e:
+                        st.error(f"❌ Error generando el plano final: {e}")
+                        st.exception(e)
+                        st.stop()
+
+            df_final = res_tk.get("df_final")
+            if df_final is not None and len(df_final) > 0:
+                st.markdown("#### 📋 Plano final")
+
+                df_final_int = df_final.copy()
+                df_final_int["VALOR"] = pd.to_numeric(df_final_int["VALOR"], errors="coerce").fillna(0).astype(int)
+                total_db = int(df_final_int[df_final_int["TR"] == "1"]["VALOR"].sum())
+                total_cr = int(df_final_int[df_final_int["TR"] == "2"]["VALOR"].sum())
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Líneas plano final", f"{len(df_final):,}")
+                c2.metric("Total Db", f"$ {total_db:,.0f}".replace(",", "."))
+                c3.metric("Total Cr", f"$ {total_cr:,.0f}".replace(",", "."))
+
+                if total_db == total_cr:
+                    st.success(
+                        f"✅ Cuadre perfecto: Db = Cr = $ {total_db:,.0f}".replace(",", ".")
+                    )
+                else:
+                    st.error(
+                        f"❌ DESCUADRE: diferencia $ {total_db - total_cr:,.0f}".replace(",", ".")
+                    )
+
+                st.dataframe(df_final, use_container_width=True, height=400)
+
+                # Descarga
+                tsv_bytes = dataframe_a_plano_tsv(
+                    df_final, incluir_encabezado_excel=incluir_enc_excel,
+                )
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    st.download_button(
+                        "📥 Descargar plano final (.txt)",
+                        data=tsv_bytes,
+                        file_name=f"plano_pos_conciliado_{nombre_plano}.txt",
+                        mime="text/tab-separated-values",
+                        type="primary",
+                        use_container_width=True,
+                    )
+                with col_d2:
+                    buffer = io.BytesIO()
+                    df_final.to_excel(buffer, index=False, engine="openpyxl")
+                    st.download_button(
+                        "📊 Descargar como Excel",
+                        data=buffer.getvalue(),
+                        file_name=f"plano_pos_conciliado_{nombre_plano}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+
+            if st.button("🔄 Procesar otro Token", key="reset_token"):
+                st.session_state.pop("resultado_token", None)
+                st.rerun()
