@@ -54,13 +54,26 @@ from core.procesadores.comparador_pos_token import (
     resumen_comparacion,
     aplicar_elecciones_al_plano,
 )
-from core.procesadores.procesador_stl import (
-    procesar_stl,
-    cargar_config_stl,
-    plano_a_tsv_bytes as stl_plano_tsv,
-    plano_a_csv_bytes as stl_plano_csv,
-    plano_a_xlsx_bytes as stl_plano_xlsx,
-)
+
+# ── Import defensivo del procesador STL ──
+# Si por algún motivo no está disponible (deploy parcial, falta config_stl.json),
+# la pestaña STL mostrará un mensaje en lugar de tirar la página entera.
+_STL_DISPONIBLE = True
+_STL_ERROR = None
+_STL_TRACEBACK = None
+try:
+    from core.procesadores.procesador_stl import (
+        procesar_stl,
+        cargar_config_stl,
+        plano_a_tsv_bytes as stl_plano_tsv,
+        plano_a_csv_bytes as stl_plano_csv,
+        plano_a_xlsx_bytes as stl_plano_xlsx,
+    )
+except Exception as _e:
+    import traceback as _tb
+    _STL_DISPONIBLE = False
+    _STL_ERROR = f"{type(_e).__name__}: {_e}"
+    _STL_TRACEBACK = _tb.format_exc()
 
 
 # ============================================================
@@ -1271,6 +1284,19 @@ with tab_token:
 # ============================================================
 
 with tab_stl:
+    if not _STL_DISPONIBLE:
+        st.error(
+            "🚫 **Módulo STL no disponible**\n\n"
+            f"**Error:** `{_STL_ERROR}`\n\n"
+            "Verifica que estos archivos existan en el repo:\n"
+            "- `core/procesadores/procesador_stl.py`\n"
+            "- `core/data/config_stl.json`"
+        )
+        if _STL_TRACEBACK:
+            with st.expander("📋 Traceback completo", expanded=True):
+                st.code(_STL_TRACEBACK, language="python")
+        st.stop()
+
     st.markdown("### 🏢 Ventas STL — Flujo mayorista")
     st.caption(
         "Procesa las ventas STL (Jerónimo Martins, Éxito, Vaquita, Euro, etc.) "
