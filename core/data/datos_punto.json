@@ -1,8 +1,8 @@
 {
   "_meta": {
     "descripcion": "Maestro de sucursales POS embebido. Incluye prefijo_token DIAN.",
-    "total": 25,
-    "comentario": "Cuando abran un punto nuevo, agrega aquí una entrada nueva. Las cuentas, CC y clase deben coincidir con la realidad contable de la empresa. El prefijo_token es el código de prefijo DIAN que usa la sucursal en facturación electrónica. Para JIPER las facturas con prefijo \"STL\" se omiten (se procesan aparte por flujo Henko)."
+    "total": 26,
+    "comentario": "Cuando abran un punto nuevo, agrega aquí una entrada nueva. Las cuentas, CC y clase deben coincidir con la realidad contable de la empresa. El prefijo_token es el código de prefijo DIAN que usa la sucursal en facturación electrónica. El prefijo_token_nc es el prefijo DIAN de las notas crédito de esa sucursal (puede ser vacío si la sede no emite NCs separadas). cta_devoluciones es la cuenta del PUC para devoluciones POS (4175xx). Para JIPER las facturas con prefijo \"STL\" se omiten (se procesan aparte por flujo Henko)."
   },
   "sucursales": [
     {
@@ -14,7 +14,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "IND"
+      "prefijo_token": "IND",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCI"
     },
     {
       "comprobante": "497",
@@ -25,7 +27,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "OVI"
+      "prefijo_token": "OVI",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCOD"
     },
     {
       "comprobante": "497",
@@ -36,7 +40,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "TES"
+      "prefijo_token": "TES",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCT"
     },
     {
       "comprobante": "497",
@@ -47,7 +53,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "LUC"
+      "prefijo_token": "LUC",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCLU"
     },
     {
       "comprobante": "497",
@@ -58,7 +66,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "EST"
+      "prefijo_token": "EST",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCES"
     },
     {
       "comprobante": "497",
@@ -69,7 +79,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "VIV"
+      "prefijo_token": "VIV",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCVI"
     },
     {
       "comprobante": "497",
@@ -80,7 +92,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "LAU"
+      "prefijo_token": "LAU",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCL"
     },
     {
       "comprobante": "497",
@@ -91,7 +105,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "LLA"
+      "prefijo_token": "LLA",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCLG"
     },
     {
       "comprobante": "497",
@@ -102,7 +118,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "POB"
+      "prefijo_token": "POB",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": ""
     },
     {
       "comprobante": "497",
@@ -113,7 +131,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "MIXY"
+      "prefijo_token": "MIXY",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCMX"
     },
     {
       "comprobante": "497",
@@ -124,7 +144,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "CIU"
+      "prefijo_token": "CIU",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCR"
     },
     {
       "comprobante": "497",
@@ -135,7 +157,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "FAB"
+      "prefijo_token": "FAB",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCFA"
     },
     {
       "comprobante": "497",
@@ -146,7 +170,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "MOLI"
+      "prefijo_token": "MOLI",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCM"
     },
     {
       "comprobante": "497",
@@ -157,7 +183,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "UNIC"
+      "prefijo_token": "UNIC",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCU"
     },
     {
       "comprobante": "497",
@@ -168,7 +196,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "VE"
+      "prefijo_token": "VE",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCVE"
     },
     {
       "comprobante": "497",
@@ -179,7 +209,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "MED"
+      "prefijo_token": "MED",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCMD"
     },
     {
       "comprobante": "497",
@@ -190,7 +222,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "MIL"
+      "prefijo_token": "MIL",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCMO"
     },
     {
       "comprobante": "497",
@@ -201,7 +235,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "SANTA LEÑA",
-      "prefijo_token": "NO"
+      "prefijo_token": "NO",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCNK"
     },
     {
       "comprobante": "497",
@@ -212,7 +248,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MTE"
+      "prefijo_token": "MTE",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NC_MTE"
     },
     {
       "comprobante": "497",
@@ -223,7 +261,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MRE"
+      "prefijo_token": "MRE",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": ""
     },
     {
       "comprobante": "497",
@@ -234,7 +274,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MVI"
+      "prefijo_token": "MVI",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NC_MVI"
     },
     {
       "comprobante": "497",
@@ -245,7 +287,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MLA"
+      "prefijo_token": "MLA",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NC_MLA"
     },
     {
       "comprobante": "497",
@@ -256,7 +300,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MFA"
+      "prefijo_token": "MFA",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NC_MFA"
     },
     {
       "comprobante": "497",
@@ -267,7 +313,9 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MMA"
+      "prefijo_token": "MMA",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": ""
     },
     {
       "comprobante": "497",
@@ -278,7 +326,22 @@
       "cta_base_v": "41401501",
       "cta_ico": "24800505",
       "clase": "RESTAURANTE MILAGROS",
-      "prefijo_token": "MMI"
+      "prefijo_token": "MMI",
+      "cta_devoluciones": "41754001",
+      "prefijo_token_nc": "NCML"
+    },
+    {
+      "comprobante": "497",
+      "nombre_reporte": "INSTITUCIONAL",
+      "sede": "INSTITUCIONAL",
+      "cc": "001004",
+      "cuenta_caja": "11051001",
+      "cta_base_v": "41401501",
+      "cta_ico": "24800505",
+      "clase": "INSTITUCIONAL",
+      "prefijo_token": "",
+      "prefijo_token_nc": "NC",
+      "cta_devoluciones": "41754001"
     }
   ]
 }
