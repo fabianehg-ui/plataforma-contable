@@ -74,6 +74,7 @@ COL_INC            = "IC"
 COL_TOTAL          = "Total"
 
 TIPO_FACTURA_E     = "Factura electrónica"
+TIPO_NOTA_CREDITO  = "Nota de crédito electrónica"
 
 # Tarifa INC vigente Santa Leña / Milagros (puede pasarse por parámetro)
 TARIFA_INC_DEFAULT = 0.08
@@ -457,3 +458,316 @@ def agregar_plano_pos_por_fecha_cc(df_plano: pd.DataFrame) -> pd.DataFrame:
     agg["total_pos"] = agg["total_pos"].astype(float)
     agg = agg.dropna(subset=["fecha"]).reset_index(drop=True)
     return agg
+
+
+# ============================================================
+# Parser de Notas Crédito (función paralela a parsear_token_dian)
+# ============================================================
+
+def parsear_notas_credito_token(
+    fuente,
+    nit_empresa: str,
+    sucursales: List,
+    tarifa_inc: float = TARIFA_INC_DEFAULT,
+) -> dict:
+    """
+    Parsea las Notas Crédito Electrónicas del Token DIAN.
+
+    Las NC tienen prefijos propios (NCVI, NCLU, NCT, NCFA, etc.) que NO
+    coinciden con los prefijos de venta. En `datos_punto.json` cada sucursal
+    tiene un campo `prefijo_token_nc` que mapea el prefijo NC al CC.
+
+    Reglas:
+      - Solo `Nota de crédito electrónica`.
+      - Solo cuando JIPER es emisor (NIT Emisor = nit_empresa).
+      - Solo prefijos NC mapeados en el maestro (`prefijo_token_nc`).
+      - Las NC SIN prefijo se omiten siempre (NO se contabilizan automáticamente):
+          * Si folio empieza por "NC2" → motivo "STL (flujo Henko)".
+          * Otro folio → motivo "interna (subida manual)".
+        En ambos casos quedan en `nc_omitidas` para que el contador las
+        suba a la contabilidad por separado.
+      - Igual que las facturas: el INC del Token siempre viene en 0 para
+        las NC, así que recalculamos: base = total/1.08, inc = base*0.08.
+
+    Args:
+        fuente: ruta, bytes o file-like del Excel del Token DIAN.
+        nit_empresa: NIT de la empresa (solo lo que ella emitió).
+        sucursales: lista de Sucursal del maestro.
+        tarifa_inc: tarifa INC para el desglose (default 0.08 = 8%).
+
+    Returns:
+        dict con:
+            'detalle_nc': DataFrame con una fila por cada NC POS, con
+                columnas: fecha, prefijo, folio, sucursal_cc,
+                sucursal_nombre, clase, nit_receptor, cliente,
+                total_bruto, base_teorica, inc_teorico.
+            'nc_omitidas': DataFrame con las NC sin prefijo (STL e internas).
+                Columnas: fecha, folio, nit_receptor, cliente, total_bruto,
+                motivo. NO se contabilizan; quedan para referencia.
+            'nc_stl': alias de nc_omitidas filtrado por motivo STL
+                (mantenido por compatibilidad con código anterior).
+            'nc_no_mapeadas': dict prefijo→list[dict] con NCs cuyo prefijo
+                NO está en el maestro (acción requerida del contador).
+            'total_filas_leidas': int
+            'log': list[str]
+    """
+    nit_empresa = str(nit_empresa).strip()
+
+    # Indexar el maestro por prefijo_token_nc
+    sucs_por_prefijo_nc: dict = {}
+    for s in sucursales:
+        pref_nc = (getattr(s, "prefijo_token_nc", "") or "").strip().upper()
+        if pref_nc:
+            sucs_por_prefijo_nc[pref_nc] = s
+
+    log: List[str] = []
+    log.append(f"📋 Maestro: {len(sucs_por_prefijo_nc)} sucursales con prefijo_token_nc registrado.")
+
+    wb = _abrir_excel(fuente)
+    ws = wb.active
+
+    # Localizar encabezado (mismo que en parsear_token_dian)
+    encabezado_iter = ws.iter_rows(min_row=1, max_row=1, values_only=True)
+    encabezado = next(encabezado_iter, None)
+    if not encabezado:
+        raise ValueError("El Excel del Token está vacío o sin encabezado.")
+    encabezado = [str(c).strip() if c is not None else "" for c in encabezado]
+
+    def idx_col(nombre: str) -> int:
+        try:
+            return encabezado.index(nombre)
+        except ValueError:
+            raise ValueError(f"Columna '{nombre}' no encontrada en el Token.")
+
+    i_tipo     = idx_col(COL_TIPO_DOC)
+    i_folio    = idx_col(COL_FOLIO)
+    i_prefijo  = idx_col(COL_PREFIJO)
+    i_fecha    = idx_col(COL_FECHA_EMISION)
+    i_emisor   = idx_col(COL_NIT_EMISOR)
+    i_receptor = idx_col(COL_NIT_RECEPTOR)
+    # Columna 12 = "Nombre Receptor"
+    i_nombre_rec = 12
+    i_total    = idx_col(COL_TOTAL)
+
+    filas_nc_pos = []
+    filas_nc_omitidas = []      # STL + sin prefijo (subidas manualmente por el contador)
+    nc_no_mapeadas: dict = {}   # solo prefijos NC desconocidos (errores reales)
+    total_filas = 0
+
+    for fila in ws.iter_rows(min_row=2, values_only=True):
+        total_filas += 1
+        if not fila or fila[i_tipo] is None:
+            continue
+
+        tipo_doc = str(fila[i_tipo]).strip()
+        if tipo_doc != TIPO_NOTA_CREDITO:
+            continue
+
+        nit_emi = str(fila[i_emisor] or "").strip()
+        if nit_emi != nit_empresa:
+            continue
+
+        prefijo = _normalizar_prefijo(fila[i_prefijo])
+        folio = str(fila[i_folio] or "").strip()
+        fecha = _parsear_fecha_token(fila[i_fecha])
+        total = _to_number(fila[i_total])
+        nit_rec = str(fila[i_receptor] or "").strip()
+        cliente = ""
+        if i_nombre_rec < len(fila) and fila[i_nombre_rec]:
+            cliente = str(fila[i_nombre_rec]).strip()
+
+        if not fecha or total <= 0:
+            continue
+
+        # NC SIN PREFIJO: se omiten del flujo automático.
+        # Pueden ser de dos tipos:
+        #   - STL/Henko (folio "NC2xxx") → se procesarán con módulo STL futuro.
+        #   - Internas (folio distinto)  → el contador las sube manualmente.
+        # En ambos casos quedan reportadas para referencia, no se contabilizan.
+        if not prefijo:
+            if folio.upper().startswith("NC2"):
+                motivo = "STL (flujo Henko)"
+            else:
+                motivo = "interna (subida manual)"
+            filas_nc_omitidas.append({
+                "fecha":         fecha,
+                "folio":         folio,
+                "nit_receptor":  nit_rec,
+                "cliente":       cliente,
+                "total_bruto":   float(round(total)),
+                "motivo":        motivo,
+            })
+            continue
+
+        # NC POS con prefijo desconocido (error real: alguien emitió con prefijo
+        # nuevo que no está en el maestro → hay que ajustar el maestro)
+        if prefijo not in sucs_por_prefijo_nc:
+            nc_no_mapeadas.setdefault(prefijo, []).append({
+                "fecha": fecha, "folio": folio, "total": total, "cliente": cliente,
+            })
+            continue
+
+        suc = sucs_por_prefijo_nc[prefijo]
+        desglose = _desglosar_total(total, tarifa_inc=tarifa_inc)
+
+        filas_nc_pos.append({
+            "fecha":           fecha,
+            "prefijo":         prefijo,
+            "folio":           folio,
+            "sucursal_cc":     suc.cc,
+            "sucursal_nombre": suc.nombre_reporte,
+            "clase":           suc.clase,
+            "nit_receptor":    nit_rec,
+            "cliente":         cliente,
+            "total_bruto":     float(round(total)),
+            "base_teorica":    desglose["base_teorica"],
+            "inc_teorico":     desglose["inc_teorico"],
+            "estado_desglose": desglose["estado_desglose"],
+        })
+
+    # DataFrames
+    df_pos = pd.DataFrame(filas_nc_pos, columns=[
+        "fecha", "prefijo", "folio", "sucursal_cc", "sucursal_nombre",
+        "clase", "nit_receptor", "cliente",
+        "total_bruto", "base_teorica", "inc_teorico", "estado_desglose",
+    ])
+    df_omitidas = pd.DataFrame(filas_nc_omitidas, columns=[
+        "fecha", "folio", "nit_receptor", "cliente", "total_bruto", "motivo",
+    ])
+
+    log.append(f"📊 Notas Crédito procesadas:")
+    log.append(f"   - NC POS contabilizables: {len(df_pos):,}")
+    if len(df_pos):
+        log.append(f"     · Total: ${df_pos['total_bruto'].sum():,.0f}".replace(",", "."))
+    log.append(f"   - NC omitidas (sin prefijo): {len(df_omitidas):,}")
+    if len(df_omitidas):
+        log.append(f"     · Total: ${df_omitidas['total_bruto'].sum():,.0f}".replace(",", "."))
+        # Desglosar por motivo
+        for motivo, sub in df_omitidas.groupby("motivo"):
+            log.append(f"     · {motivo}: {len(sub)} doc(s), ${sub['total_bruto'].sum():,.0f}".replace(",", "."))
+    if nc_no_mapeadas:
+        cant_no_map = sum(len(v) for v in nc_no_mapeadas.values())
+        log.append(
+            f"   - ⚠️ NC con prefijo no mapeado: {cant_no_map:,} "
+            f"({list(nc_no_mapeadas.keys())})"
+        )
+
+    return {
+        "detalle_nc":      df_pos,
+        "nc_omitidas":     df_omitidas,
+        "nc_stl":          df_omitidas[df_omitidas["motivo"].str.startswith("STL")] if len(df_omitidas) else df_omitidas,  # compat
+        "nc_no_mapeadas":  nc_no_mapeadas,
+        "total_filas_leidas": total_filas,
+        "log":             log,
+    }
+
+
+# ============================================================
+# Generación de líneas contables para NC POS
+# ============================================================
+
+def generar_lineas_nc_pos(
+    df_nc: pd.DataFrame,
+    sucursales: List,
+    comprobante_default: str = "498",
+) -> pd.DataFrame:
+    """
+    Genera las líneas del plano contable a partir de las NC POS.
+
+    Asiento por cada NC:
+        Db cta_devoluciones (41754001) ← base_teorica
+        Db cta_ico (24800505)          ← inc_teorico
+        Cr cuenta_caja sucursal        ← total_bruto
+
+    Args:
+        df_nc: DataFrame de `parsear_notas_credito_token()['detalle_nc']`.
+        sucursales: lista de Sucursal (para tomar las cuentas).
+        comprobante_default: código de comprobante para las NC (default '498',
+            distinto del POS que es '497').
+
+    Returns:
+        DataFrame con las mismas 11 columnas que el plano POS:
+            CUENTA, COMPROBANTE, FECHA, DOCUMENTO, DOC REFERENCIA, NIT,
+            DETALLE, TR, VALOR, BASE, CENTRO DE COSTO.
+    """
+    suc_por_cc = {s.cc: s for s in sucursales}
+
+    filas = []
+    for _, r in df_nc.iterrows():
+        cc = str(r["sucursal_cc"])
+        suc = suc_por_cc.get(cc)
+        if not suc:
+            continue
+        if not r["fecha"] or r["total_bruto"] <= 0:
+            continue
+
+        fecha_str = (
+            r["fecha"].strftime("%m/%d/%Y")
+            if hasattr(r["fecha"], "strftime")
+            else str(r["fecha"])
+        )
+        base = int(round(r["base_teorica"]))
+        inc = int(round(r["inc_teorico"]))
+        total = int(round(r["total_bruto"]))
+
+        # Ajuste de redondeo: si base + inc != total, ajustar la base
+        suma = base + inc
+        if suma != total:
+            base += (total - suma)
+
+        documento = f"{r['prefijo']}{r['folio']}"[:14]  # prefijo ya empieza por NC; acotar a 14 chars
+        nit_rec = (r.get("nit_receptor") or "222222222").strip() or "222222222"
+        detalle = f"NC POS {suc.nombre_reporte}"
+
+        cta_dev = suc.cta_devoluciones or "41754001"
+
+        # Db devoluciones (base)
+        if base > 0:
+            filas.append({
+                "CUENTA":          cta_dev,
+                "COMPROBANTE":     comprobante_default,
+                "FECHA":           fecha_str,
+                "DOCUMENTO":       documento,
+                "DOC REFERENCIA":  documento,
+                "NIT":             nit_rec,
+                "DETALLE":         detalle,
+                "TR":              "1",
+                "VALOR":           base,
+                "BASE":            base,
+                "CENTRO DE COSTO": cc,
+            })
+        # Db INC
+        if inc > 0:
+            filas.append({
+                "CUENTA":          suc.cta_ico,
+                "COMPROBANTE":     comprobante_default,
+                "FECHA":           fecha_str,
+                "DOCUMENTO":       documento,
+                "DOC REFERENCIA":  documento,
+                "NIT":             nit_rec,
+                "DETALLE":         detalle,
+                "TR":              "1",
+                "VALOR":           inc,
+                "BASE":            base,
+                "CENTRO DE COSTO": cc,
+            })
+        # Cr caja (total)
+        filas.append({
+            "CUENTA":          suc.cuenta_caja,
+            "COMPROBANTE":     comprobante_default,
+            "FECHA":           fecha_str,
+            "DOCUMENTO":       documento,
+            "DOC REFERENCIA":  documento,
+            "NIT":             nit_rec,
+            "DETALLE":         detalle,
+            "TR":              "2",
+            "VALOR":           total,
+            "BASE":            0,
+            "CENTRO DE COSTO": cc,
+        })
+
+    df_lineas = pd.DataFrame(filas, columns=[
+        "CUENTA", "COMPROBANTE", "FECHA", "DOCUMENTO", "DOC REFERENCIA",
+        "NIT", "DETALLE", "TR", "VALOR", "BASE", "CENTRO DE COSTO",
+    ])
+    return df_lineas
