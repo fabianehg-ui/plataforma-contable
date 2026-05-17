@@ -1658,24 +1658,46 @@ with tab_stl:
             # Resumen por tarifa
             st.markdown("#### 🧾 Distribución por tarifa de IVA")
             rt = r["resumen_por_tarifa"]
-            df_rt = pd.DataFrame([
+
+            # Helper: lee una tarifa de forma defensiva
+            def _t(key, campo, default=0):
+                return (rt.get(key) or {}).get(campo, default)
+
+            filas_rt = [
                 {"Tarifa": "Sin IVA",
-                 "Facturas": rt["sin_iva"]["facs"],
-                 "Base":     rt["sin_iva"]["base"],
+                 "Facturas": _t("sin_iva", "facs"),
+                 "Base":     _t("sin_iva", "base"),
                  "IVA":      0},
                 {"Tarifa": "IVA 19% puro",
-                 "Facturas": rt["iva_19"]["facs"],
-                 "Base":     rt["iva_19"]["base"],
-                 "IVA":      rt["iva_19"]["iva"]},
+                 "Facturas": _t("iva_19", "facs"),
+                 "Base":     _t("iva_19", "base"),
+                 "IVA":      _t("iva_19", "iva")},
                 {"Tarifa": "IVA 5% puro",
-                 "Facturas": rt["iva_5"]["facs"],
-                 "Base":     rt["iva_5"]["base"],
-                 "IVA":      rt["iva_5"]["iva"]},
+                 "Facturas": _t("iva_5", "facs"),
+                 "Base":     _t("iva_5", "base"),
+                 "IVA":      _t("iva_5", "iva")},
                 {"Tarifa": "Mixto (19% + s/IVA)",
-                 "Facturas": rt["mixto"]["facs"],
+                 "Facturas": _t("mixto", "facs"),
                  "Base":     "—",
                  "IVA":      "—"},
-            ])
+            ]
+            # Mostrar INC 8% y "Otro" solo si tienen movimientos (solo
+            # las trae el procesador desde XMLs; las STL puras de Token no)
+            if _t("inc_8", "facs") or _t("inc_8", "iva"):
+                filas_rt.append({
+                    "Tarifa":   "INC 8%",
+                    "Facturas": _t("inc_8", "facs"),
+                    "Base":     _t("inc_8", "base"),
+                    "IVA":      _t("inc_8", "iva"),
+                })
+            if _t("otro", "facs") or _t("otro", "iva"):
+                filas_rt.append({
+                    "Tarifa":   "Otro",
+                    "Facturas": _t("otro", "facs"),
+                    "Base":     _t("otro", "base"),
+                    "IVA":      _t("otro", "iva"),
+                })
+            df_rt = pd.DataFrame(filas_rt)
             st.dataframe(df_rt, use_container_width=True, hide_index=True)
 
             # Resumen por cliente
