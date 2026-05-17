@@ -420,16 +420,38 @@ if "pos_df" in st.session_state:
 
                 st.dataframe(df_disp, use_container_width=True, hide_index=True, height=600)
 
-                buf = io.BytesIO()
-                df_comp.to_excel(buf, index=False, engine="openpyxl")
-                buf.seek(0)
-                st.download_button(
-                    "⬇️ Descargar reporte de auditoría (Excel)",
-                    data=buf.getvalue(),
-                    file_name=f"auditoria_pos_vs_token_{fd}_a_{fh}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
+                # Excel formateado con colores y subtotales
+                from core.procesadores.reporte_auditoria_xlsx import generar_excel_auditoria
+                empresa_nombre = (empresa.get("nombre") if empresa else "JIPER S.A.S") or "JIPER S.A.S"
+                empresa_nit = (empresa.get("nit") if empresa else "901038325") or "901038325"
+
+                try:
+                    xlsx_bytes = generar_excel_auditoria(
+                        df_comp,
+                        fecha_desde=str(fd),
+                        fecha_hasta=str(fh),
+                        empresa_nombre=empresa_nombre,
+                        empresa_nit=empresa_nit,
+                    )
+                    st.download_button(
+                        "⬇️ Descargar reporte de auditoría (Excel formateado)",
+                        data=xlsx_bytes,
+                        file_name=f"auditoria_pos_vs_token_{fd}_a_{fh}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"⚠️ No se pudo generar Excel formateado ({e}). Descargando Excel simple.")
+                    buf = io.BytesIO()
+                    df_comp.to_excel(buf, index=False, engine="openpyxl")
+                    buf.seek(0)
+                    st.download_button(
+                        "⬇️ Descargar reporte de auditoría (Excel)",
+                        data=buf.getvalue(),
+                        file_name=f"auditoria_pos_vs_token_{fd}_a_{fh}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
 
 
 # ─── Reset ──────────────────────────────────────────────────
