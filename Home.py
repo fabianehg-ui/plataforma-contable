@@ -174,6 +174,12 @@ asistente_ventas_c13 = st.Page(
     icon="🛍️",
     url_path="ventas-c13",
 )
+asistente_pos = st.Page(
+    "app_pages/4b_Ingresos_POS.py",
+    title="Ventas POS",
+    icon="🧾",
+    url_path="ventas-pos",
+)
 asistente_pila = st.Page(
     "app_pages/5_PILA.py",
     title="PILA",
@@ -241,6 +247,7 @@ nav = st.navigation(
             asistente_nomina,
             asistente_prov,
             asistente_ventas_c13,
+            asistente_pos,
             asistente_pila,
         ],
         "📊 Herramientas Tributarias": [
