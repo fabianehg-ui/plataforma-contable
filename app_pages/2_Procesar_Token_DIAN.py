@@ -103,20 +103,21 @@ def _ofrecer_descarga_plano(df, fuente, f_desde, f_hasta):
 
 
 def _extraer_plano_pos(pos_obj):
-    """Extrae el DataFrame del resultado del procesador POS (que puede tener varios formatos)."""
+    """Extrae el DataFrame del resultado del procesador POS.
+    Soporta múltiples formatos para compatibilidad."""
     if pos_obj is None:
         return None
+    # Formato nuevo: dict con clave 'plano'
+    if isinstance(pos_obj, dict) and "plano" in pos_obj:
+        return pos_obj["plano"]
+    # Formato tuple (compatibilidad)
     if isinstance(pos_obj, tuple):
         return pos_obj[0]
+    # Formato DataFrame directo
     if isinstance(pos_obj, pd.DataFrame):
         return pos_obj
     if hasattr(pos_obj, "plano_df"):
         return pos_obj.plano_df
-    # Como último recurso, si es algo iterable buscar el primer DataFrame
-    if hasattr(pos_obj, "__iter__"):
-        for x in pos_obj:
-            if isinstance(x, pd.DataFrame):
-                return x
     return None
 
 
@@ -128,10 +129,13 @@ st.markdown("## 📁 Paso 1 — Sube los archivos del mes")
 col_a, col_b = st.columns(2)
 with col_a:
     st.markdown("### 🏪 Excel POS")
+    if not POS_DISPONIBLE:
+        st.error(f"⚠️ Procesador POS no disponible. Error de import: {POS_ERROR}")
     archivo_pos = st.file_uploader(
         "Henko / Quinto Sentido (multi-hoja)",
         type=["xlsx", "xlsm"],
         key="up_pos",
+        disabled=not POS_DISPONIBLE,
     )
     if archivo_pos:
         st.success(f"✅ POS: {archivo_pos.name}")
@@ -154,13 +158,25 @@ if archivo_pos is not None and "pos_resultado" not in st.session_state:
     else:
         with st.spinner("Procesando reporte POS..."):
             try:
-                # procesar_pos_antiguo recibe bytes y devuelve (df_plano, log)
-                resultado_pos = procesar_pos_antiguo(archivo_pos.read())
-                st.session_state["pos_resultado"] = resultado_pos
-                st.success("✅ POS procesado")
+                # procesar_pos_antiguo devuelve (df_plano, log, sucs_no_encontradas)
+                df_plano_pos, log_pos, sucs_no_enc = procesar_pos_antiguo(archivo_pos)
+                st.session_state["pos_resultado"] = {
+                    "plano": df_plano_pos,
+                    "log": log_pos,
+                    "sucs_no_encontradas": sucs_no_enc,
+                }
+                if df_plano_pos is None or len(df_plano_pos) == 0:
+                    st.warning("⚠️ El procesador POS no produjo ninguna línea. Revisa el log.")
+                else:
+                    st.success(f"✅ POS procesado: {len(df_plano_pos):,} líneas en plano.")
+                if sucs_no_enc:
+                    with st.expander(f"⚠️ {len(sucs_no_enc)} sucursales no encontradas en DATOS PUNTO", expanded=False):
+                        st.json(sucs_no_enc[:30])
+                with st.expander("📋 Log del procesador POS", expanded=False):
+                    st.code("\n".join(log_pos))
             except Exception as e:
                 st.error(f"❌ Error procesando POS: {e}")
-                with st.expander("Detalle"):
+                with st.expander("Detalle del error", expanded=True):
                     import traceback
                     st.code(traceback.format_exc())
 
