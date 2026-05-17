@@ -898,6 +898,11 @@ def procesar_stl_desde_xmls(
         "iva_5":   {"facs": 0, "base": 0.0, "iva": 0.0},
         "inc_8":   {"facs": 0, "base": 0.0, "iva": 0.0},
         "otro":    {"facs": 0, "base": 0.0, "iva": 0.0},
+        # 'mixto' = factura que tiene a la vez líneas gravadas y no gravadas.
+        # Se llena en la lógica de _agregar_lineas_documento cuando una misma
+        # factura aporta a más de una tarifa. La UI (4b_Ingresos_POS.py) la
+        # lee, así que SIEMPRE debe existir aunque venga en 0.
+        "mixto":   {"facs": 0},
     }
 
     def _agregar_lineas_documento(factura, es_nc, lineas_out):
