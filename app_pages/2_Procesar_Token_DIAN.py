@@ -1,19 +1,22 @@
 """
 app_pages/2_Procesar_Token_DIAN.py
 
-Módulo unificado de procesamiento DIAN:
-  - Sube Excel POS (Henko/Quinto Sentido) → procesa con procesador_pos antiguo
-  - Sube Excel Token DIAN → procesa con procesador_ventas_excel_token
-  - Genera plano contable: a elegir POS o Token
-  - Genera comparativo de auditoría: Base POS vs Token Neto por sucursal y clase
-  - Genera lista de CUFEs MIXTAS para descargar XMLs en la extensión Chrome
+MÓDULO ÚNICO: Procesar DIAN
+
+Flujo lineal:
+  1️⃣ Cargar Excel del Token DIAN (obligatorio)
+  2️⃣ Filtrar rango de fechas
+  3️⃣ Procesar Token (genera plano contable consolidado)
+  4️⃣ Descargar plano contable Token (TSV o Excel)
+  5️⃣ [Opcional] Cargar Excel POS para AUDITORÍA comparativa
+  6️⃣ Generar listas MIXTAS para extensión Chrome
 """
 from __future__ import annotations
 
 import io
 import json
 import sys
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,189 +30,97 @@ from auth.login import require_auth, sidebar_user_info
 from auth.empresas import seleccionar_empresa_sidebar, require_empresa
 
 from core.procesadores import lector_excel_token as lex
-from core.procesadores import procesador_ventas_excel_token as pve     # v1, legacy
-from core.procesadores import procesador_ventas_excel_token_v2 as pve2 # v2 nuevo
+from core.procesadores import procesador_ventas_excel_token_v2 as pve2
 from core.procesadores import comparativo_pos_token_v2 as cmp_aud
 from core.procesadores import generador_listas_cufes as glc
 
-# Procesador POS antiguo (Henko/Quinto Sentido)
+# Importar procesador POS antiguo (puede fallar si faltan dependencias)
 try:
     from core.procesadores.procesador_pos import procesar_pos as procesar_pos_antiguo
-    POS_DISPONIBLE = True
-except ImportError as e:
-    POS_DISPONIBLE = False
-    POS_ERROR = str(e)
+    POS_OK = True
+    POS_ERR = ""
+except Exception as e:
+    POS_OK = False
+    POS_ERR = str(e)
 
 
-# ─── Setup ───────────────────────────────────────────────────
+# ─── Auth y setup ────────────────────────────────────────────
 require_auth()
 seleccionar_empresa_sidebar()
 sidebar_user_info()
 empresa = require_empresa()
-
-st.title("📥 Procesar DIAN")
-st.caption("Cierre contable mensual + comparativo de auditoría POS vs Token DIAN.")
-
 NIT_EMPRESA = (empresa.get("nit") if empresa else None) or "901038325"
 
-# Cargar mapeos
+st.title("📥 Procesar DIAN")
+st.caption("Cierre contable mensual desde el Excel del Token DIAN, con auditoría opcional contra POS.")
+
+
+# ─── Verificar archivos de configuración ─────────────────────
 RUTA_MAPEO = ROOT / "mapeo_prefijos_token.json"
+RUTA_DSE = ROOT / "mapeo_dse_conceptos.json"
+
 if not RUTA_MAPEO.exists():
-    st.error(f"❌ No se encontró el archivo de mapeo: {RUTA_MAPEO}")
+    st.error(f"❌ Falta archivo de configuración: `mapeo_prefijos_token.json` (debe estar en la raíz del repo, al nivel de Home.py).")
+    st.stop()
+if not RUTA_DSE.exists():
+    st.error(f"❌ Falta archivo de configuración: `mapeo_dse_conceptos.json` (debe estar en la raíz del repo).")
     st.stop()
 
-MAPEO_VENTAS = pve.cargar_mapeo_desde_json(str(RUTA_MAPEO))
-MAPEO_COMPLETO = pve.cargar_mapeo_completo(str(RUTA_MAPEO))
+# Cargar mapeo completo (ventas + NCs) para el comparativo
+with open(RUTA_MAPEO) as _f:
+    _mapeo_raw = json.load(_f)
+MAPEO_COMPLETO = {}
+for _item in _mapeo_raw.get("mapeos", []):
+    MAPEO_COMPLETO[_item["prefijo"].upper()] = {
+        "cc": _item.get("cc", ""),
+        "nombre": _item.get("sede", ""),
+        "sede": _item.get("sede", ""),
+        "clase": _item.get("clase", ""),
+        "tipo": _item.get("tipo", "venta"),
+        "comprobante": _item.get("comprobante", ""),
+        "cuenta_caja": _item.get("cuenta_caja", ""),
+        "cta_base_v": _item.get("cta_base_v", ""),
+        "cta_ico": _item.get("cta_ico", ""),
+    }
 
 
-# ─── Helpers ─────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════
+# PASO 1 — Cargar Excel Token DIAN
+# ════════════════════════════════════════════════════════════
+st.markdown("## 1️⃣ Excel del Token DIAN")
 
-def _ofrecer_descarga_plano(df, fuente, f_desde, f_hasta):
-    """Genera TSV + XLSX y los ofrece para descarga. Valida cuadre."""
-    plano = df.copy()
-    plano["VALOR"] = pd.to_numeric(plano["VALOR"].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
-    deb = plano[plano["TR"].astype(str) == "1"]["VALOR"].sum()
-    cre = plano[plano["TR"].astype(str) == "2"]["VALOR"].sum()
-    diff = abs(deb - cre)
-    if diff < 100:
-        st.success(f"✅ Plano cuadra: Db ${deb:,.0f} = Cr ${cre:,.0f}")
-    else:
-        st.error(f"⚠️ Plano NO cuadra: Db ${deb:,.0f} ≠ Cr ${cre:,.0f} (dif ${diff:,.0f})")
+archivo_token = st.file_uploader(
+    "Sube el archivo .xlsx exportado del portal DIAN con tu Token",
+    type=["xlsx"],
+    key="up_token_v6",
+)
 
-    tsv = df.to_csv(sep="\t", index=False).encode("utf-8-sig")
-    buf = io.BytesIO()
-    df.to_excel(buf, index=False, engine="openpyxl")
-    buf.seek(0)
-
-    col_d1, col_d2 = st.columns(2)
-    with col_d1:
-        st.download_button(
-            f"⬇️ Plano TSV",
-            data=tsv,
-            file_name=f"plano_{fuente}_{f_desde}_a_{f_hasta}.tsv",
-            mime="text/tab-separated-values",
-            use_container_width=True,
-            key=f"dl_tsv_{fuente}",
-        )
-    with col_d2:
-        st.download_button(
-            f"⬇️ Plano Excel",
-            data=buf.getvalue(),
-            file_name=f"plano_{fuente}_{f_desde}_a_{f_hasta}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key=f"dl_xlsx_{fuente}",
-        )
-
-
-def _extraer_plano_pos(pos_obj):
-    """Extrae el DataFrame del resultado del procesador POS.
-    Soporta múltiples formatos para compatibilidad."""
-    if pos_obj is None:
-        return None
-    # Formato nuevo: dict con clave 'plano'
-    if isinstance(pos_obj, dict) and "plano" in pos_obj:
-        return pos_obj["plano"]
-    # Formato tuple (compatibilidad)
-    if isinstance(pos_obj, tuple):
-        return pos_obj[0]
-    # Formato DataFrame directo
-    if isinstance(pos_obj, pd.DataFrame):
-        return pos_obj
-    if hasattr(pos_obj, "plano_df"):
-        return pos_obj.plano_df
-    return None
-
-
-# ============================================================
-# SECCIÓN 1: SUBIR ARCHIVOS
-# ============================================================
-st.markdown("## 📁 Paso 1 — Sube los archivos del mes")
-
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown("### 🏪 Excel POS")
-    if not POS_DISPONIBLE:
-        st.error(f"⚠️ Procesador POS no disponible. Error de import: {POS_ERROR}")
-    archivo_pos = st.file_uploader(
-        "Henko / Quinto Sentido (multi-hoja)",
-        type=["xlsx", "xlsm"],
-        key="up_pos",
-        disabled=not POS_DISPONIBLE,
-    )
-    if archivo_pos:
-        st.success(f"✅ POS: {archivo_pos.name}")
-
-with col_b:
-    st.markdown("### 🧾 Excel Token DIAN")
-    archivo_token = st.file_uploader(
-        "Exportar a Excel del portal DIAN",
-        type=["xlsx"],
-        key="up_token",
-    )
-    if archivo_token:
-        st.success(f"✅ Token: {archivo_token.name}")
-
-
-# Procesar POS si está subido
-if archivo_pos is not None and "pos_resultado" not in st.session_state:
-    if not POS_DISPONIBLE:
-        st.error(f"❌ El procesador POS antiguo no está disponible: {POS_ERROR}")
-    else:
-        with st.spinner("Procesando reporte POS..."):
-            try:
-                # procesar_pos_antiguo devuelve (df_plano, log, sucs_no_encontradas)
-                df_plano_pos, log_pos, sucs_no_enc = procesar_pos_antiguo(archivo_pos)
-                st.session_state["pos_resultado"] = {
-                    "plano": df_plano_pos,
-                    "log": log_pos,
-                    "sucs_no_encontradas": sucs_no_enc,
-                }
-                if df_plano_pos is None or len(df_plano_pos) == 0:
-                    st.warning("⚠️ El procesador POS no produjo ninguna línea. Revisa el log.")
-                else:
-                    st.success(f"✅ POS procesado: {len(df_plano_pos):,} líneas en plano.")
-                if sucs_no_enc:
-                    with st.expander(f"⚠️ {len(sucs_no_enc)} sucursales no encontradas en DATOS PUNTO", expanded=False):
-                        st.json(sucs_no_enc[:30])
-                with st.expander("📋 Log del procesador POS", expanded=False):
-                    st.code("\n".join(log_pos))
-            except Exception as e:
-                st.error(f"❌ Error procesando POS: {e}")
-                with st.expander("Detalle del error", expanded=True):
-                    import traceback
-                    st.code(traceback.format_exc())
-
-# Procesar Token si está subido
 if archivo_token is not None and "token_df" not in st.session_state:
-    with st.spinner("Leyendo Excel del Token..."):
-        try:
+    try:
+        with st.spinner("📖 Leyendo Excel..."):
             df_token = lex.leer_excel_token(archivo_token)
-            st.session_state["token_df"] = df_token
-            st.success(f"✅ Token leído: {len(df_token):,} documentos.")
-        except Exception as e:
-            st.error(f"❌ Error leyendo Token: {e}")
+        st.session_state["token_df"] = df_token
+    except Exception as e:
+        st.error(f"❌ Error leyendo Token: {e}")
+        st.stop()
 
-# Si nada está subido aún, detener acá
-if "pos_resultado" not in st.session_state and "token_df" not in st.session_state:
-    st.info("☝️ Sube al menos uno de los archivos para continuar.")
+if "token_df" not in st.session_state:
+    st.info("⬆️ Sube el Excel del Token para continuar.")
     st.stop()
 
+df_token = st.session_state["token_df"]
+st.success(f"✅ Excel cargado: **{len(df_token):,}** documentos totales.")
 
-# ============================================================
-# SECCIÓN 2: FILTRO DE RANGO (si hay Token)
-# ============================================================
+
+# ════════════════════════════════════════════════════════════
+# PASO 2 — Rango de fechas
+# ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 📅 Paso 2 — Rango de fechas a procesar")
+st.markdown("## 2️⃣ Rango de fechas")
 
-if "token_df" in st.session_state:
-    df_token = st.session_state["token_df"]
-    fechas = df_token["fecha_emision"].dropna()
-    fecha_min = fechas.min().date() if len(fechas) > 0 else date.today()
-    fecha_max = fechas.max().date() if len(fechas) > 0 else date.today()
-else:
-    fecha_min = date(2026, 1, 1)
-    fecha_max = date.today()
+fechas = df_token["fecha_emision"].dropna()
+fecha_min = fechas.min().date() if len(fechas) > 0 else date.today()
+fecha_max = fechas.max().date() if len(fechas) > 0 else date.today()
 
 col_f1, col_f2 = st.columns(2)
 with col_f1:
@@ -217,221 +128,272 @@ with col_f1:
 with col_f2:
     f_hasta = st.date_input("Hasta", value=fecha_max, min_value=fecha_min, max_value=fecha_max, format="YYYY-MM-DD")
 
+df_token_filt = lex.filtrar_por_rango(df_token, f_desde, f_hasta)
+df_emit = df_token_filt[df_token_filt["grupo"].str.lower() == "emitido"]
+df_recb = df_token_filt[df_token_filt["grupo"].str.lower() == "recibido"]
 
-# ============================================================
-# SECCIÓN 3: PROCESAR TOKEN (si está)
-# ============================================================
-if "token_df" in st.session_state:
-    df_token = st.session_state["token_df"]
-    df_token_filt = lex.filtrar_por_rango(df_token, f_desde, f_hasta)
-    df_token_emit = df_token_filt[df_token_filt["grupo"].str.lower() == "emitido"]
-
-    st.markdown("---")
-    st.markdown("## 🧾 Paso 3 — Procesar Token DIAN")
-
-    if st.button("⚙️ Procesar Token", use_container_width=True, type="primary"):
-        with st.spinner("Procesando con consolidación POS + STL + DSE..."):
-            res_token = pve2.procesar_ventas_v2(
-                df_token_filt,
-                str(RUTA_MAPEO),
-                str(ROOT / "mapeo_dse_conceptos.json"),
-            )
-        st.session_state["token_resultado"] = res_token
-        st.session_state["token_emit_filt"] = df_token_filt[df_token_filt["grupo"].str.lower() == "emitido"]
-        st.session_state["token_filt_full"] = df_token_filt
-
-    if "token_resultado" in st.session_state:
-        rv = st.session_state["token_resultado"]
-        res = rv.resumen()
-
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Asientos POS (consolidados)", f"{res['asientos_pos']:,}")
-        col_m2.metric("STL detalladas", f"{res['stl_detalladas']:,}")
-        col_m3.metric("NCs STL", f"{res['ncs_stl_detalladas']:,}")
-        col_m4.metric("DSE procesados", f"{res['dse_procesados']:,}")
-
-        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
-        col_m5.metric("Base POS", f"${res['total_base_pos']:,.0f}")
-        col_m6.metric("Base STL", f"${res['total_base_stl']:,.0f}")
-        col_m7.metric("Total DSE", f"${res['total_dse']:,.0f}")
-        col_m8.metric("Líneas plano", f"{res['lineas_plano']:,}")
-
-        st.caption(
-            f"💡 Propina omitida (10%): ${res['total_propina_pos']:,.0f} · "
-            f"NCs POS: ${res['total_nc_base_pos']:,.0f}"
-        )
-
-        if res["dse_sin_concepto"]:
-            with st.expander(f"⚠️ {res['dse_sin_concepto']} DSE sin concepto mapeado", expanded=False):
-                st.caption(
-                    "Agrega estos NITs al archivo `mapeo_dse_conceptos.json` con su concepto correspondiente "
-                    "(ARRENDAMIENTOS, SERVICIOS_PROFESIONALES, TRANSPORTE, etc.)"
-                )
-                nits_no_map = {}
-                for f in rv.sin_concepto_dse:
-                    k = (f.nit_receptor, f.nombre_receptor)
-                    nits_no_map[k] = nits_no_map.get(k, 0) + 1
-                df_no_map = pd.DataFrame([
-                    {"NIT": nit, "Nombre": n, "Docs": c}
-                    for (nit, n), c in sorted(nits_no_map.items(), key=lambda x: -x[1])
-                ])
-                st.dataframe(df_no_map, use_container_width=True, hide_index=True)
-
-        if res["mixtas"]:
-            st.warning(f"⚠️ {res['mixtas']} MIXTAS — descargar XML (sección al final)")
-        if res["sin_sucursal"]:
-            st.warning(f"⚠️ {res['sin_sucursal']} sin sucursal mapeada")
+st.caption(f"📦 En rango: **{len(df_token_filt):,}** docs ({len(df_emit):,} emitidos, {len(df_recb):,} recibidos)")
 
 
-# ============================================================
-# SECCIÓN 4: GENERAR PLANO CONTABLE
-# ============================================================
-hay_pos = "pos_resultado" in st.session_state
-hay_token = "token_resultado" in st.session_state
+# ════════════════════════════════════════════════════════════
+# PASO 3 — Procesar Token
+# ════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("## 3️⃣ Procesar Token DIAN")
 
-if hay_pos or hay_token:
-    st.markdown("---")
-    st.markdown("## 📄 Paso 4 — Generar plano contable")
-
-    opciones = []
-    if hay_pos:    opciones.append("Desde POS (reporte Henko)")
-    if hay_token:  opciones.append("Desde Token DIAN")
-    if not opciones:
-        st.info("Procesa al menos POS o Token para generar plano.")
-    else:
-        eleccion = st.radio("¿Qué fuente uso para el plano?", opciones, horizontal=True)
-
-        if "Desde POS" in eleccion:
-            plano_df = _extraer_plano_pos(st.session_state["pos_resultado"])
-            if plano_df is None or len(plano_df) == 0:
-                st.warning("El plano POS está vacío.")
-            else:
-                st.success(f"✅ Plano POS: {len(plano_df):,} líneas")
-                _ofrecer_descarga_plano(plano_df, "pos", f_desde, f_hasta)
-        else:  # Desde Token
-            rv = st.session_state["token_resultado"]
-            if rv.plano_df is None or len(rv.plano_df) == 0:
-                st.warning("El plano Token está vacío.")
-            else:
-                st.success(f"✅ Plano Token: {len(rv.plano_df):,} líneas")
-                _ofrecer_descarga_plano(rv.plano_df, "token", f_desde, f_hasta)
+if st.button("⚙️ Procesar Token (consolidado POS + STL + DSE)", type="primary", use_container_width=True):
+    with st.spinner("Procesando..."):
+        try:
+            res = pve2.procesar_ventas_v2(df_token_filt, str(RUTA_MAPEO), str(RUTA_DSE))
+            st.session_state["token_res"] = res
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
+            with st.expander("Detalle"):
+                import traceback
+                st.code(traceback.format_exc())
 
 
-# ============================================================
-# SECCIÓN 5: COMPARATIVO DE AUDITORÍA
-# ============================================================
-if hay_pos and hay_token:
-    st.markdown("---")
-    st.markdown("## 🔍 Paso 5 — Comparativo de auditoría POS vs Token")
-    st.caption("Compara base POS (cajas) vs base Token neta (FE − NC) por sucursal, "
-               "con subtotales por clase (SANTA LEÑA, RESTAURANTE MILAGROS, STL).")
+if "token_res" in st.session_state:
+    rv = st.session_state["token_res"]
+    res = rv.resumen()
 
-    if st.button("🔍 Generar comparativo", use_container_width=True):
-        plano_pos = _extraer_plano_pos(st.session_state["pos_resultado"])
-        if plano_pos is None or len(plano_pos) == 0:
-            st.error("No hay plano POS para extraer la base.")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Asientos POS", f"{res['asientos_pos']:,}")
+    c2.metric("STL detalladas", f"{res['stl_detalladas']:,}")
+    c3.metric("DSE procesados", f"{res['dse_procesados']:,}")
+    c4.metric("Líneas plano", f"{res['lineas_plano']:,}")
+
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Base POS", f"${res['total_base_pos']:,.0f}")
+    c6.metric("INC 8%", f"${res['total_inc_pos']:,.0f}")
+    c7.metric("Base STL", f"${res['total_base_stl']:,.0f}")
+    c8.metric("Total DSE", f"${res['total_dse']:,.0f}")
+
+    st.caption(
+        f"Propina omitida: ${res['total_propina_pos']:,.0f} · "
+        f"NCs POS: ${res['total_nc_base_pos']:,.0f} · "
+        f"MIXTAS: {res['mixtas']}"
+    )
+
+    if res["dse_sin_concepto"]:
+        with st.expander(f"⚠️ {res['dse_sin_concepto']} DSE sin concepto mapeado", expanded=False):
+            st.caption("Agrega estos NITs a `mapeo_dse_conceptos.json` con su concepto.")
+            nits = {}
+            for f in rv.sin_concepto_dse:
+                k = (f.nit_receptor, f.nombre_receptor)
+                nits[k] = nits.get(k, 0) + 1
+            df_no = pd.DataFrame([
+                {"NIT": nit, "Nombre": n, "Docs": c}
+                for (nit, n), c in sorted(nits.items(), key=lambda x: -x[1])
+            ])
+            st.dataframe(df_no, use_container_width=True, hide_index=True)
+
+
+# ════════════════════════════════════════════════════════════
+# PASO 4 — Descargar plano contable Token
+# ════════════════════════════════════════════════════════════
+if "token_res" in st.session_state:
+    rv = st.session_state["token_res"]
+    if rv.plano_df is not None and len(rv.plano_df) > 0:
+        st.markdown("---")
+        st.markdown("## 4️⃣ Descargar plano contable Token")
+
+        # Validar cuadre
+        plano = rv.plano_df.copy()
+        plano["V"] = pd.to_numeric(plano["VALOR"].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        deb = plano[plano["TR"] == "1"]["V"].sum()
+        cre = plano[plano["TR"] == "2"]["V"].sum()
+        diff = abs(deb - cre)
+        if diff < 100:
+            st.success(f"✅ Plano cuadra: Db ${deb:,.0f} = Cr ${cre:,.0f}  (dif ${diff:,.0f} de redondeo)")
         else:
-            base_pos_por_cc = cmp_aud.extraer_base_pos_por_sucursal(plano_pos)
-            df_token_emit = st.session_state["token_emit_filt"]
-            with st.spinner("Construyendo comparativo..."):
-                df_comp = cmp_aud.construir_comparativo(df_token_emit, base_pos_por_cc, MAPEO_COMPLETO)
-            st.session_state["comparativo_df"] = df_comp
+            st.error(f"⚠️ Plano NO cuadra: dif ${diff:,.0f}")
 
-    if "comparativo_df" in st.session_state:
-        df_comp = st.session_state["comparativo_df"]
-
-        df_disp = df_comp.copy()
-        for c in ["Base POS", "Base Token FE", "Base NC Token", "Token Neto", "Diferencia"]:
-            df_disp[c] = df_disp[c].apply(lambda v: f"${v:,.0f}" if pd.notna(v) and v != "" else "")
-        df_disp["Efectividad %"] = df_disp["Efectividad %"].apply(
-            lambda v: f"{v:.2f}%" if pd.notna(v) else "—"
-        )
-
-        st.dataframe(df_disp, use_container_width=True, hide_index=True)
-
+        tsv = rv.plano_df.to_csv(sep="\t", index=False).encode("utf-8-sig")
         buf = io.BytesIO()
-        df_comp.to_excel(buf, index=False, engine="openpyxl")
+        rv.plano_df.to_excel(buf, index=False, engine="openpyxl")
         buf.seek(0)
-        st.download_button(
-            "⬇️ Descargar reporte auditoría (Excel)",
-            data=buf.getvalue(),
-            file_name=f"auditoria_pos_vs_token_{f_desde}_a_{f_hasta}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
+
+        d1, d2 = st.columns(2)
+        with d1:
+            st.download_button(
+                f"⬇️ Plano TSV ({len(rv.plano_df):,} líneas)",
+                data=tsv,
+                file_name=f"plano_token_{f_desde}_a_{f_hasta}.tsv",
+                mime="text/tab-separated-values",
+                use_container_width=True,
+            )
+        with d2:
+            st.download_button(
+                f"⬇️ Plano Excel ({len(rv.plano_df):,} líneas)",
+                data=buf.getvalue(),
+                file_name=f"plano_token_{f_desde}_a_{f_hasta}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
 
 
-# ============================================================
-# SECCIÓN 6: LISTAS DE CUFEs MIXTAS (para extensión Chrome)
-# ============================================================
-if "token_filt_full" in st.session_state:
-    st.markdown("---")
-    st.markdown("## 🗂️ Paso 6 — Lista de CUFEs MIXTAS para XML")
-    st.caption("Compras y ventas que NO tienen tarifa de IVA deducible desde el Excel. "
-               "Estas necesitan descargar XML para clasificación detallada.")
+# ════════════════════════════════════════════════════════════
+# PASO 5 — Auditoría comparativa POS vs Token (OPCIONAL)
+# ════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("## 5️⃣ Auditoría comparativa POS vs Token")
+st.caption(
+    "Sube el Excel POS (Henko/Quinto Sentido) para generar el reporte de auditoría. "
+    "**Solo se usa para el comparativo** — no genera plano contable POS aquí."
+)
 
-    if st.button("📋 Calcular MIXTAS"):
-        with st.spinner("Analizando..."):
-            df_filt = st.session_state["token_filt_full"]
-            st.session_state["lista_compras_mixtas"] = glc.generar_lista_compras_mixtas(df_filt)
-            st.session_state["lista_ventas_mixtas"] = glc.generar_lista_ventas_mixtas(df_filt)
+if not POS_OK:
+    st.error(f"⚠️ Procesador POS no disponible: {POS_ERR}")
+else:
+    archivo_pos = st.file_uploader(
+        "Excel POS multi-hoja (Henko / Quinto Sentido / Milagros)",
+        type=["xlsx", "xlsm"],
+        key="up_pos_v6",
+    )
 
-    if "lista_compras_mixtas" in st.session_state:
-        lc = st.session_state["lista_compras_mixtas"]
-        lv = st.session_state["lista_ventas_mixtas"]
-
-        col_x, col_y = st.columns(2)
-        with col_x:
-            st.metric("Compras MIXTAS", f"{len(lc):,}")
-            if lc:
-                payload = {
-                    "meta": {
-                        "rol": "recibidos_mixtas",
-                        "fecha_desde": str(f_desde),
-                        "fecha_hasta": str(f_hasta),
-                        "total_cufes": len(lc),
-                    },
-                    "cufes": lc,
+    if archivo_pos is not None and "pos_res" not in st.session_state:
+        with st.spinner("Procesando POS para extraer bases por sucursal..."):
+            try:
+                df_plano_pos, log_pos, sucs_no = procesar_pos_antiguo(archivo_pos)
+                st.session_state["pos_res"] = {
+                    "plano": df_plano_pos,
+                    "log": log_pos,
+                    "sucs_no": sucs_no,
                 }
-                st.download_button(
-                    f"⬇️ Lista compras MIXTAS",
-                    data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                    file_name=f"cufes_compras_mixtas_{f_desde}_a_{f_hasta}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                )
+            except Exception as e:
+                st.error(f"❌ Error procesando POS: {e}")
+                with st.expander("Detalle del error", expanded=True):
+                    import traceback
+                    st.code(traceback.format_exc())
 
-        with col_y:
-            st.metric("Ventas MIXTAS", f"{len(lv):,}")
-            if lv:
-                payload = {
-                    "meta": {
-                        "rol": "emitidos_mixtas",
-                        "fecha_desde": str(f_desde),
-                        "fecha_hasta": str(f_hasta),
-                        "total_cufes": len(lv),
-                    },
-                    "cufes": lv,
-                }
-                st.download_button(
-                    f"⬇️ Lista ventas MIXTAS",
-                    data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                    file_name=f"cufes_ventas_mixtas_{f_desde}_a_{f_hasta}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                )
+    if "pos_res" in st.session_state:
+        pos_data = st.session_state["pos_res"]
+        df_plano_pos = pos_data["plano"]
 
+        if df_plano_pos is None or len(df_plano_pos) == 0:
+            st.warning("⚠️ El procesador POS no generó líneas. Revisa el log.")
+            with st.expander("Log del procesador POS", expanded=True):
+                st.code("\n".join(pos_data.get("log", [])))
+        else:
+            st.success(f"✅ POS procesado: {len(df_plano_pos):,} líneas")
+
+            if pos_data.get("sucs_no"):
+                with st.expander(f"⚠️ {len(pos_data['sucs_no'])} sucursales POS no encontradas en DATOS PUNTO"):
+                    st.json(pos_data["sucs_no"][:30])
+
+            with st.expander("📋 Log del procesador POS"):
+                st.code("\n".join(pos_data.get("log", [])))
+
+            # Generar comparativo si tenemos ambos
+            if "token_res" in st.session_state:
+                if st.button("🔍 Generar reporte de auditoría", use_container_width=True):
+                    with st.spinner("Construyendo comparativo..."):
+                        base_pos_cc = cmp_aud.extraer_base_pos_por_sucursal(df_plano_pos)
+                        df_comp = cmp_aud.construir_comparativo(df_emit, base_pos_cc, MAPEO_COMPLETO)
+                        st.session_state["comp_df"] = df_comp
+
+                if "comp_df" in st.session_state:
+                    df_comp = st.session_state["comp_df"]
+                    st.markdown("### 📊 Reporte de auditoría")
+
+                    # Mostrar tabla formateada
+                    df_disp = df_comp.copy()
+                    for c in ["Base POS", "Base Token FE", "Base NC Token", "Token Neto", "Diferencia"]:
+                        if c in df_disp.columns:
+                            df_disp[c] = df_disp[c].apply(
+                                lambda v: f"${v:,.0f}" if pd.notna(v) and v != "" else ""
+                            )
+                    if "Efectividad %" in df_disp.columns:
+                        df_disp["Efectividad %"] = df_disp["Efectividad %"].apply(
+                            lambda v: f"{v:.2f}%" if pd.notna(v) else "—"
+                        )
+
+                    st.dataframe(df_disp, use_container_width=True, hide_index=True, height=600)
+
+                    # Descargar Excel
+                    buf = io.BytesIO()
+                    df_comp.to_excel(buf, index=False, engine="openpyxl")
+                    buf.seek(0)
+                    st.download_button(
+                        "⬇️ Descargar reporte auditoría (Excel)",
+                        data=buf.getvalue(),
+                        file_name=f"auditoria_pos_vs_token_{f_desde}_a_{f_hasta}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+            else:
+                st.info("☝️ Procesa primero el Token (paso 3) para habilitar el comparativo.")
+
+
+# ════════════════════════════════════════════════════════════
+# PASO 6 — Lista CUFEs MIXTAS (descarga XML por extensión Chrome)
+# ════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("## 6️⃣ Lista de CUFEs MIXTAS (para extensión Chrome)")
+st.caption("Compras y ventas con mezcla de tarifas IVA. Necesitan XML para clasificación detallada.")
+
+if st.button("📋 Calcular MIXTAS"):
+    with st.spinner("Analizando..."):
+        st.session_state["mix_compras"] = glc.generar_lista_compras_mixtas(df_token_filt)
+        st.session_state["mix_ventas"] = glc.generar_lista_ventas_mixtas(df_token_filt)
+
+if "mix_compras" in st.session_state:
+    lc = st.session_state["mix_compras"]
+    lv = st.session_state["mix_ventas"]
+
+    cx, cy = st.columns(2)
+    with cx:
+        st.metric("Compras MIXTAS", f"{len(lc):,}")
+        if lc:
+            payload = {
+                "meta": {
+                    "rol": "recibidos_mixtas",
+                    "fecha_desde": str(f_desde),
+                    "fecha_hasta": str(f_hasta),
+                    "total_cufes": len(lc),
+                },
+                "cufes": lc,
+            }
+            st.download_button(
+                "⬇️ Lista compras MIXTAS",
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                file_name=f"cufes_compras_mixtas_{f_desde}_a_{f_hasta}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+
+    with cy:
+        st.metric("Ventas MIXTAS", f"{len(lv):,}")
+        if lv:
+            payload = {
+                "meta": {
+                    "rol": "emitidos_mixtas",
+                    "fecha_desde": str(f_desde),
+                    "fecha_hasta": str(f_hasta),
+                    "total_cufes": len(lv),
+                },
+                "cufes": lv,
+            }
+            st.download_button(
+                "⬇️ Lista ventas MIXTAS",
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                file_name=f"cufes_ventas_mixtas_{f_desde}_a_{f_hasta}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+
+    if lc or lv:
         st.info(
-            f"💡 Esos {len(lc) + len(lv):,} XMLs son los que necesitas descargar "
-            f"con la extensión Chrome (~{(len(lc) + len(lv)) / 8 / 60:.1f} min)."
+            f"💡 Total: {len(lc) + len(lv):,} XMLs a descargar con la extensión Chrome "
+            f"(~{(len(lc) + len(lv)) / 8 / 60:.1f} min)."
         )
 
 
 # ─── Reset ──────────────────────────────────────────────────
 st.markdown("---")
 if st.button("🔄 Limpiar y procesar otro mes"):
-    for k in ["pos_resultado", "token_df", "token_resultado", "token_emit_filt",
-              "token_filt_full", "comparativo_df", "lista_compras_mixtas",
-              "lista_ventas_mixtas"]:
-        st.session_state.pop(k, None)
+    for k in list(st.session_state.keys()):
+        if k.startswith(("token_", "pos_", "comp_", "mix_")):
+            st.session_state.pop(k, None)
     st.rerun()
