@@ -547,34 +547,84 @@ if "mix_compras" in st.session_state:
 
 
 # ════════════════════════════════════════════════════════════
-# PASO 6B — Procesar XMLs de STL descargados
+# PASO 6B — Procesar captura DIAN (JSON o ZIP) → plano STL detallado
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 6️⃣B Procesar XMLs de STL descargados")
+st.markdown("## 6️⃣B Procesar captura DIAN → plano STL detallado")
 st.caption(
-    "Sube el ZIP de la extensión Chrome con TODAS las STL emitidas. "
-    "Genera plano contable con IVA discriminado real por línea (reemplaza el procesamiento STL desde Excel)."
+    "Sube el archivo de la extensión Chrome (JSON v1.1+ o ZIP legacy) que contiene "
+    "los XMLs de las STL. Genera plano con IVA discriminado real por línea "
+    "(reemplaza el procesamiento STL desde Excel del Token)."
 )
 
-stl_zip = st.file_uploader(
-    "ZIP de XMLs de STL emitidas",
-    type=["zip"],
-    key="stl_xml_zip",
+stl_file = st.file_uploader(
+    "JSON de captura DIAN (extensión v1.1+) o ZIP de XMLs",
+    type=["json", "zip"],
+    key="stl_capture_file",
+    help="JSON: formato nuevo de la extensión (recomendado). ZIP: formato anterior.",
 )
 
-if stl_zip is not None:
-    if st.button("⚙️ Procesar XMLs STL", use_container_width=True):
+if stl_file is not None:
+    if st.button("⚙️ Procesar captura → STL", use_container_width=True):
         from core.procesadores import procesador_stl_xml as stl_xml
-        with st.spinner("Procesando XMLs de STL..."):
+        from core.procesadores import lector_captura_dian as lcd
+
+        with st.spinner("Procesando captura..."):
             try:
-                zb = stl_zip.read()
-                res_stl = stl_xml.procesar_zip_xmls_stl(zb)
+                file_bytes = stl_file.read()
+                if stl_file.name.lower().endswith(".json"):
+                    # Formato nuevo (JSON)
+                    captura = lcd.cargar_captura(file_bytes)
+                    resumen_cap = lcd.resumen_captura(captura)
+                    st.session_state["captura_resumen"] = resumen_cap
+                    st.session_state["captura_data"] = captura
+
+                    # Procesar STL del JSON
+                    res_stl = stl_xml.procesar_captura_json(captura, solo_prefijo="STL")
+                else:
+                    # Formato ZIP (legacy)
+                    res_stl = stl_xml.procesar_zip_xmls_stl(file_bytes)
+
                 st.session_state["stl_res"] = res_stl
             except Exception as e:
                 st.error(f"❌ Error: {e}")
                 import traceback
                 with st.expander("Detalle"):
                     st.code(traceback.format_exc())
+
+# Mostrar resumen de captura si se cargó JSON
+if "captura_resumen" in st.session_state:
+    with st.expander("📋 Resumen de la captura DIAN", expanded=False):
+        rc = st.session_state["captura_resumen"]
+        st.write(f"**Periodo:** {rc['fecha_desde']} a {rc['fecha_hasta']}")
+        st.write(f"**Versión extensión:** {rc.get('version_extension', '?')}")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Documentos", f"{rc['total_documentos']:,}")
+        col2.metric("XMLs descargados", f"{rc['xmls_descargados']:,}")
+        col3.metric("Fallidos", f"{rc['fallidos']:,}")
+
+        if rc.get('tipos'):
+            st.markdown("**Tipos:**")
+            for t, n in rc['tipos'].items():
+                st.write(f"  • {t}: {n}")
+        if rc.get('prefijos_top10'):
+            st.markdown("**Prefijos (top 10):**")
+            for p, n in rc['prefijos_top10'].items():
+                st.write(f"  • {p}: {n}")
+
+    # Botón para descargar ZIP de XMLs (útil si el usuario los necesita sueltos)
+    if "captura_data" in st.session_state:
+        if st.button("📦 Generar ZIP con todos los XMLs descargados"):
+            from core.procesadores import lector_captura_dian as lcd
+            with st.spinner("Empaquetando..."):
+                zip_bytes = lcd.generar_zip_xmls(st.session_state["captura_data"])
+                st.download_button(
+                    f"⬇️ Descargar ZIP de XMLs ({len(zip_bytes):,} bytes)",
+                    data=zip_bytes,
+                    file_name=f"xmls_{f_desde}_a_{f_hasta}.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                )
 
 if "stl_res" in st.session_state:
     res_stl = st.session_state["stl_res"]
@@ -670,22 +720,26 @@ if lista_unicos:
     )
 
 # ════════════════════════════════════════════════════════════
-# PASO 8 — Cargar XMLs y actualizar maestro
+# PASO 8 — Cargar captura DIAN y actualizar maestro de terceros
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 8️⃣ Cargar XMLs descargados y actualizar maestro de terceros")
-st.caption("Sube el ZIP que descargó la extensión Chrome. Extrae régimen, ciudad y dirección de cada proveedor.")
-
-xml_zip = st.file_uploader(
-    "ZIP de XMLs descargados por extensión Chrome",
-    type=["zip"],
-    key="xml_maestro_zip",
+st.markdown("## 8️⃣ Cargar captura DIAN → actualizar maestro de terceros")
+st.caption(
+    "Sube el archivo de la extensión Chrome (JSON v1.1+ o ZIP legacy). "
+    "Extrae régimen, ciudad y dirección de cada proveedor."
 )
 
-if xml_zip is not None:
-    if st.button("🔍 Procesar XMLs y actualizar maestro", use_container_width=True):
+xml_file = st.file_uploader(
+    "JSON de captura DIAN o ZIP de XMLs",
+    type=["json", "zip"],
+    key="xml_maestro_file",
+)
+
+if xml_file is not None:
+    if st.button("🔍 Procesar captura y actualizar maestro", use_container_width=True):
         import zipfile
         import io as _io
+        from core.procesadores import lector_captura_dian as lcd
 
         nuevos = 0
         actualizados = 0
@@ -693,30 +747,47 @@ if xml_zip is not None:
         log_proc = []
 
         try:
-            zb = xml_zip.read()
-            with zipfile.ZipFile(_io.BytesIO(zb)) as zf:
-                for nombre in zf.namelist():
-                    # La extensión descarga ZIPs anidados (ZIP de ZIPs)
-                    if not nombre.endswith(".zip"):
-                        continue
+            zb = xml_file.read()
+
+            if xml_file.name.lower().endswith(".json"):
+                # ─── Formato nuevo: JSON ─────────────────────
+                captura = lcd.cargar_captura(zb)
+                for cufe, xml_str, _pdf in lcd.iter_xmls(captura):
                     try:
-                        inner_bytes = zf.read(nombre)
-                        with zipfile.ZipFile(_io.BytesIO(inner_bytes)) as inner_zf:
-                            for inner_name in inner_zf.namelist():
-                                if inner_name.endswith(".xml"):
-                                    xml_bytes = inner_zf.read(inner_name)
-                                    xml_str = xml_bytes.decode("utf-8", errors="ignore")
-                                    parsed = mt.extraer_datos_tercero_de_xml(xml_str)
-                                    if parsed:
-                                        es_nuevo = mt.actualizar_maestro_desde_xml(maestro, parsed)
-                                        if es_nuevo:
-                                            nuevos += 1
-                                        else:
-                                            actualizados += 1
-                                    break  # 1 XML por ZIP basta
+                        parsed = mt.extraer_datos_tercero_de_xml(xml_str)
+                        if parsed:
+                            es_nuevo = mt.actualizar_maestro_desde_xml(maestro, parsed)
+                            if es_nuevo:
+                                nuevos += 1
+                            else:
+                                actualizados += 1
                     except Exception as e:
                         errores += 1
-                        log_proc.append(f"{nombre}: {e}")
+                        log_proc.append(f"CUFE {cufe[:20]}...: {e}")
+            else:
+                # ─── Formato legacy: ZIP de ZIPs ─────────────
+                with zipfile.ZipFile(_io.BytesIO(zb)) as zf:
+                    for nombre in zf.namelist():
+                        if not nombre.endswith(".zip"):
+                            continue
+                        try:
+                            inner_bytes = zf.read(nombre)
+                            with zipfile.ZipFile(_io.BytesIO(inner_bytes)) as inner_zf:
+                                for inner_name in inner_zf.namelist():
+                                    if inner_name.endswith(".xml"):
+                                        xml_bytes = inner_zf.read(inner_name)
+                                        xml_str = xml_bytes.decode("utf-8", errors="ignore")
+                                        parsed = mt.extraer_datos_tercero_de_xml(xml_str)
+                                        if parsed:
+                                            es_nuevo = mt.actualizar_maestro_desde_xml(maestro, parsed)
+                                            if es_nuevo:
+                                                nuevos += 1
+                                            else:
+                                                actualizados += 1
+                                        break  # 1 XML por ZIP basta
+                        except Exception as e:
+                            errores += 1
+                            log_proc.append(f"{nombre}: {e}")
 
             # Guardar maestro
             mt.guardar_maestro_terceros(maestro, str(RUTA_MAESTRO))
@@ -756,7 +827,7 @@ if xml_zip is not None:
                         st.text(e)
 
         except Exception as e:
-            st.error(f"❌ Error procesando ZIP: {e}")
+            st.error(f"❌ Error procesando archivo: {e}")
             with st.expander("Detalle"):
                 import traceback
                 st.code(traceback.format_exc())
