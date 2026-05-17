@@ -314,7 +314,7 @@ def procesar_ventas_excel(
 
         # Generar 3 líneas del asiento
         comp = fac.comprobante or "497"
-        fecha_str = fac.fecha.strftime("%d/%m/%Y")
+        fecha_str = fac.fecha.strftime("%m/%d/%Y")
         detalle = f"{DETALLE_PREFIJO}{fac.nombre_sucursal or prefijo}"
 
         # Total contable = base + INC + IVA + otros (omite propina)

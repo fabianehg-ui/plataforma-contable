@@ -499,7 +499,7 @@ def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
        Cr CAJA               = (nc_total) - regresa al cliente
     """
     out = []
-    fecha_str = g["fecha"].strftime("%d/%m/%Y")
+    fecha_str = g["fecha"].strftime("%m/%d/%Y")
     comp = g["comprobante"]
     detalle_base = f"{DETALLE_POS_PREFIJO}{g['nombre_sucursal']} {fecha_str}"
     doc = f"POS-{g['prefijo']}-{g['fecha'].strftime('%Y%m%d')}"
@@ -607,7 +607,7 @@ def _generar_lineas_factura_detallada(fac: FacturaTokenV2, es_nc: bool) -> List[
     """Genera asiento factura por factura (para STL y NCs STL)."""
     info = fac.sucursal_info
     comp = info.get("comprobante", "497")
-    fecha_str = fac.fecha.strftime("%d/%m/%Y")
+    fecha_str = fac.fecha.strftime("%m/%d/%Y")
     cc = info.get("cc", "")
     detalle = f"{DETALLE_STL_PREFIJO}{fac.nombre_receptor[:30]} ({fac.folio})"
     doc = f"{fac.prefijo}{fac.folio}"
@@ -715,7 +715,7 @@ def _generar_lineas_dse(fac: FacturaTokenV2, mapeo_dse: dict) -> List[dict]:
     cuenta_info = mapeo_dse["cuentas"].get(concepto, {"cuenta": "519595"})
     cuenta_gasto = cuenta_info["cuenta"]
 
-    fecha_str = fac.fecha.strftime("%d/%m/%Y")
+    fecha_str = fac.fecha.strftime("%m/%d/%Y")
     detalle = f"{concepto} - {fac.nombre_receptor[:35]}"
     doc = f"{fac.prefijo}{fac.folio}"
 
