@@ -791,3 +791,348 @@ def plano_a_xlsx_bytes(df: pd.DataFrame, resumen: dict | None = None) -> bytes:
 
     buf.seek(0)
     return buf.read()
+
+
+# ============================================================
+# PROCESADOR DESDE XMLs (versión preciso por línea)
+# ============================================================
+
+def procesar_stl_desde_xmls(
+    fuente_zip,
+    config: dict | None = None,
+    anio: int | None = None,
+    mes: int | None = None,
+    nit_empresa: str | None = None,
+) -> dict:
+    """
+    Procesa STL leyendo los XMLs reales del ZIP descargado de la DIAN.
+
+    Ventajas sobre procesar_stl (que usa Token):
+      - Lee CADA LÍNEA del XML con su tarifa REAL (no calculada)
+      - Genera líneas contables granulares: una por (tarifa, tipo_impuesto) de cada factura
+      - Detecta automáticamente STL y NC STL (NC2xxx) en el mismo ZIP
+      - Distingue IVA (01) vs INC (04)
+      - Detecta ZIPs corruptos (folios duplicados)
+
+    Args:
+        fuente_zip: bytes, ruta o file-like del ZIP con los XMLs.
+        config: configuración cargada de config_stl.json.
+        anio, mes: filtros opcionales (si no se pasan, procesa todo).
+        nit_empresa: override del NIT emisor.
+
+    Returns:
+        dict con misma estructura que procesar_stl + 'fuente': 'xmls'
+    """
+    from core.procesadores.parser_xml_stl import procesar_zip_xmls_stl
+
+    if config is None:
+        config = cargar_config_stl()
+    if nit_empresa is None:
+        nit_empresa = str(config["nit_empresa"])
+
+    cuentas_tarifa = config["cuentas_por_tarifa_iva"]
+    cta_cxc        = config["cta_cxc"]
+    comprobante_v  = str(config["comprobante_stl"])
+    comprobante_nc = str(config["comprobante_nc_stl"])
+    cc_default     = config["cc_default"]
+
+    log = []
+
+    # ─── Leer ZIP de XMLs ───
+    # NO filtramos por NIT aquí — clasificaremos por folio (STL vs NC2)
+    # Los XMLs descargados manualmente del portal son SIEMPRE emitidos por JIPER
+    # (porque solo se descargan los propios)
+    resultado_zip = procesar_zip_xmls_stl(fuente_zip)
+    log.extend(resultado_zip["log"])
+
+    if resultado_zip["duplicados"] > 0:
+        log.append(
+            f"🚨 ALERTA CRÍTICA: {resultado_zip['duplicados']} XMLs DUPLICADOS detectados. "
+            f"El ZIP parece estar corrupto (descarga incorrecta). Verifica la fuente."
+        )
+
+    # ─── Clasificar STL vs NC STL ───
+    stl_facturas = []
+    stl_ncs      = []
+
+    for f in resultado_zip["facturas"]:
+        if f.get("es_duplicado"):
+            continue  # ignorar duplicados (mismo folio repetido)
+
+        folio = f["folio"]
+        fecha = f["fecha"]
+
+        # Filtro de mes/año si se pidió
+        if anio and fecha and fecha.year != anio:
+            continue
+        if mes and fecha and fecha.month != mes:
+            continue
+
+        # Clasificar:
+        #  - Factura STL: tipo factura + folio empieza por "STL"
+        #  - NC STL: tipo NC + folio empieza por "NC2" (sin prefijo en columna)
+        if f["tipo_doc"] == "factura" and folio.upper().startswith("STL"):
+            stl_facturas.append(f)
+        elif f["tipo_doc"] == "nota_credito" and folio.upper().startswith("NC2"):
+            stl_ncs.append(f)
+        # otros documentos se ignoran (FEs POS, NCs POS, etc.)
+
+    log.append(f"🏢 Facturas STL detectadas: {len(stl_facturas)}")
+    log.append(f"📝 NC STL detectadas (NC2xxx): {len(stl_ncs)}")
+
+    # ─── Inferir período si no se dio ───
+    if anio is None or mes is None:
+        fechas = [f["fecha"] for f in stl_facturas + stl_ncs if f["fecha"]]
+        if fechas:
+            ultima = max(fechas)
+            anio = anio or ultima.year
+            mes  = mes or ultima.month
+
+    # ─── Generar líneas contables ───
+    lineas_facturas = []
+    lineas_ncs      = []
+    alertas         = []
+    resumen_tarifa  = {
+        "sin_iva": {"facs": 0, "base": 0.0},
+        "iva_19":  {"facs": 0, "base": 0.0, "iva": 0.0},
+        "iva_5":   {"facs": 0, "base": 0.0, "iva": 0.0},
+        "inc_8":   {"facs": 0, "base": 0.0, "iva": 0.0},
+        "otro":    {"facs": 0, "base": 0.0, "iva": 0.0},
+    }
+
+    def _agregar_lineas_documento(factura, es_nc, lineas_out):
+        """Agrega líneas contables para una factura/NC granular por tarifa."""
+        from collections import defaultdict
+        folio   = factura["folio"]
+        fecha   = factura["fecha"]
+        fecha_str = fecha.strftime("%m/%d/%Y") if fecha else ""
+        nit_rec = factura["nit_receptor"]
+        nombre  = (factura["nombre_receptor"] or "")[:50]
+        total   = round(factura["totales"]["payable"], 2)
+
+        if total <= 0:
+            alertas.append({
+                "tipo": "doc_total_cero", "folio": folio,
+                "mensaje": "Total <= 0, se ignora",
+            })
+            return False
+
+        # Documento: solo número (sin prefijo)
+        if folio.upper().startswith("STL"):
+            documento = folio[3:]
+        elif folio.upper().startswith("NC"):
+            documento = ''.join(c for c in folio if c.isdigit())
+        else:
+            documento = folio
+        doc_ref = folio  # con prefijo
+        detalle_base = ("NC " if es_nc else "FACT ") + f"{folio} - {nombre[:30]}"
+        comprobante = comprobante_nc if es_nc else comprobante_v
+
+        # Agrupar líneas por (tax_scheme, tarifa)
+        # Esto permite que si una factura tiene 10 ítems al 19% y 5 al 0%,
+        # solo se generen 2 líneas contables agregadas (más limpio que 15).
+        grupos = defaultdict(lambda: {"base": 0.0, "iva": 0.0, "n_lineas": 0})
+        for ln in factura["lineas"]:
+            scheme = ln.get("tax_scheme")
+            tarifa = round(ln["tarifa_pct"], 2)
+            key = (scheme, tarifa)
+            grupos[key]["base"] += ln["base_gravada"]
+            grupos[key]["iva"]  += ln["iva"]
+            grupos[key]["n_lineas"] += 1
+
+        # ── Cartera (siempre primera línea) ──
+        if es_nc:
+            # NC: Crédito a cartera (reversa)
+            lineas_out.append({
+                "CUENTA":          cta_cxc,
+                "COMPROBANTE":     comprobante,
+                "FECHA":           fecha_str,
+                "DOCUMENTO":       documento,
+                "DOC REFERENCIA":  doc_ref,
+                "NIT":             nit_rec,
+                "DETALLE":         detalle_base,
+                "TR":              "2",
+                "VALOR":           total,
+                "BASE":            "",
+                "CENTRO DE COSTO": cc_default,
+            })
+        else:
+            # Factura: Débito a cartera
+            lineas_out.append({
+                "CUENTA":          cta_cxc,
+                "COMPROBANTE":     comprobante,
+                "FECHA":           fecha_str,
+                "DOCUMENTO":       documento,
+                "DOC REFERENCIA":  doc_ref,
+                "NIT":             nit_rec,
+                "DETALLE":         detalle_base,
+                "TR":              "1",
+                "VALOR":           total,
+                "BASE":            "",
+                "CENTRO DE COSTO": cc_default,
+            })
+
+        # ── Líneas por tarifa ──
+        # TR para factura: Crédito=2 (ventas). Para NC: Débito=1 (reversa ventas).
+        tr_ingreso = "1" if es_nc else "2"
+
+        for (scheme, tarifa), datos in grupos.items():
+            base = round(datos["base"], 2)
+            iva  = round(datos["iva"], 2)
+            if base <= 0 and iva <= 0:
+                continue
+
+            # Resolver cuenta de ingreso
+            tarifa_key = str(int(round(tarifa)))
+            etiqueta_tarifa = f"{tarifa}%"
+
+            # IVA en general usa cuentas_tarifa por tarifa
+            if scheme == "01" and tarifa_key in cuentas_tarifa:
+                cta_ing = cuentas_tarifa[tarifa_key]["cta_ingreso"]
+                cta_iva = cuentas_tarifa[tarifa_key].get("cta_iva")
+                cta_iva_dev = cuentas_tarifa[tarifa_key].get("cta_iva_dev") or cta_iva
+
+                # Línea de ingreso
+                lineas_out.append({
+                    "CUENTA":          cta_ing,
+                    "COMPROBANTE":     comprobante,
+                    "FECHA":           fecha_str,
+                    "DOCUMENTO":       documento,
+                    "DOC REFERENCIA":  doc_ref,
+                    "NIT":             nit_rec,
+                    "DETALLE":         detalle_base + (f" (IVA {etiqueta_tarifa})" if tarifa > 0 else " (sin IVA)"),
+                    "TR":              tr_ingreso,
+                    "VALOR":           base,
+                    "BASE":            "",
+                    "CENTRO DE COSTO": cc_default,
+                })
+
+                # Línea de IVA (si aplica)
+                if iva > 0 and cta_iva:
+                    lineas_out.append({
+                        "CUENTA":          cta_iva_dev if es_nc else cta_iva,
+                        "COMPROBANTE":     comprobante,
+                        "FECHA":           fecha_str,
+                        "DOCUMENTO":       documento,
+                        "DOC REFERENCIA":  doc_ref,
+                        "NIT":             nit_rec,
+                        "DETALLE":         detalle_base + f" (IVA {etiqueta_tarifa})",
+                        "TR":              tr_ingreso,
+                        "VALOR":           iva,
+                        "BASE":            base,
+                        "CENTRO DE COSTO": cc_default,
+                    })
+
+                # Estadística
+                if tarifa == 0:
+                    resumen_tarifa["sin_iva"]["facs"] += (1 if not es_nc else 0)
+                    resumen_tarifa["sin_iva"]["base"] += base
+                elif int(round(tarifa)) == 19:
+                    resumen_tarifa["iva_19"]["facs"] += (1 if not es_nc else 0)
+                    resumen_tarifa["iva_19"]["base"] += base
+                    resumen_tarifa["iva_19"]["iva"]  += iva
+                elif int(round(tarifa)) == 5:
+                    resumen_tarifa["iva_5"]["facs"] += (1 if not es_nc else 0)
+                    resumen_tarifa["iva_5"]["base"] += base
+                    resumen_tarifa["iva_5"]["iva"]  += iva
+            elif scheme is None or tarifa == 0:
+                # Sin impuesto (exento)
+                cta_ing = cuentas_tarifa.get("0", {}).get("cta_ingreso")
+                if cta_ing:
+                    lineas_out.append({
+                        "CUENTA":          cta_ing,
+                        "COMPROBANTE":     comprobante,
+                        "FECHA":           fecha_str,
+                        "DOCUMENTO":       documento,
+                        "DOC REFERENCIA":  doc_ref,
+                        "NIT":             nit_rec,
+                        "DETALLE":         detalle_base + " (sin IVA)",
+                        "TR":              tr_ingreso,
+                        "VALOR":           base,
+                        "BASE":            "",
+                        "CENTRO DE COSTO": cc_default,
+                    })
+                    resumen_tarifa["sin_iva"]["facs"] += (1 if not es_nc else 0)
+                    resumen_tarifa["sin_iva"]["base"] += base
+            else:
+                # Tarifa no configurada (ej. INC 8%) → alerta
+                alertas.append({
+                    "tipo":    "tarifa_no_configurada",
+                    "folio":   folio,
+                    "mensaje": f"Tarifa {tarifa}% / scheme {scheme} no está en config_stl.json. Línea ignorada.",
+                })
+
+        return True
+
+    for f in stl_facturas:
+        _agregar_lineas_documento(f, es_nc=False, lineas_out=lineas_facturas)
+    for f in stl_ncs:
+        _agregar_lineas_documento(f, es_nc=True, lineas_out=lineas_ncs)
+
+    # ─── Construir plano y verificar cuadre ───
+    todas_lineas = lineas_facturas + lineas_ncs
+    plano = pd.DataFrame(todas_lineas, columns=COLUMNAS_PLANO) if todas_lineas else pd.DataFrame(columns=COLUMNAS_PLANO)
+
+    if len(plano) > 0:
+        debitos  = plano[plano["TR"] == "1"]["VALOR"].sum()
+        creditos = plano[plano["TR"] == "2"]["VALOR"].sum()
+    else:
+        debitos = creditos = 0.0
+    diferencia = round(debitos - creditos, 2)
+
+    cuadre = {
+        "debitos":    round(debitos, 2),
+        "creditos":   round(creditos, 2),
+        "diferencia": diferencia,
+        "cuadra":     abs(diferencia) < TOLERANCIA_PESOS,
+    }
+
+    log.append(f"💰 Total débitos:  ${debitos:,.2f}")
+    log.append(f"💰 Total créditos: ${creditos:,.2f}")
+    log.append(f"📐 Cuadre: {'✅' if cuadre['cuadra'] else '❌'}")
+
+    # ─── Resumen por cliente ───
+    resumen_cliente = {}
+    for f in stl_facturas:
+        nit = f["nit_receptor"]
+        if nit not in resumen_cliente:
+            resumen_cliente[nit] = {"nombre": f["nombre_receptor"], "facturas": 0, "total": 0.0, "iva": 0.0, "ncs": 0, "total_nc": 0.0}
+        resumen_cliente[nit]["facturas"] += 1
+        resumen_cliente[nit]["total"] += f["totales"]["payable"]
+        # IVA total de la factura
+        iva_total = sum(ln["iva"] for ln in f["lineas"])
+        resumen_cliente[nit]["iva"] += iva_total
+    for f in stl_ncs:
+        nit = f["nit_receptor"]
+        if nit not in resumen_cliente:
+            resumen_cliente[nit] = {"nombre": f["nombre_receptor"], "facturas": 0, "total": 0.0, "iva": 0.0, "ncs": 0, "total_nc": 0.0}
+        resumen_cliente[nit]["ncs"] += 1
+        resumen_cliente[nit]["total_nc"] += f["totales"]["payable"]
+
+    resumen_nc = {
+        "facs":  len(stl_ncs),
+        "total": sum(f["totales"]["payable"] for f in stl_ncs),
+        "iva":   sum(sum(ln["iva"] for ln in f["lineas"]) for f in stl_ncs),
+    }
+
+    return {
+        "plano":               plano,
+        "lineas_stl_facturas": pd.DataFrame(lineas_facturas, columns=COLUMNAS_PLANO) if lineas_facturas else pd.DataFrame(columns=COLUMNAS_PLANO),
+        "lineas_nc_stl":       pd.DataFrame(lineas_ncs, columns=COLUMNAS_PLANO) if lineas_ncs else pd.DataFrame(columns=COLUMNAS_PLANO),
+        "resumen_por_tarifa":  resumen_tarifa,
+        "resumen_nc":          resumen_nc,
+        "resumen_por_cliente": resumen_cliente,
+        "alertas":             alertas,
+        "cuadre":              cuadre,
+        "log":                 log,
+        "fuente":              "xmls",
+        "duplicados_zip":      resultado_zip["duplicados"],
+        "metadatos": {
+            "anio": anio,
+            "mes":  mes,
+            "facturas_procesadas": len(stl_facturas),
+            "ncs_procesadas":      len(stl_ncs),
+            "lineas_plano":        len(plano),
+            "fuente":              "XMLs reales (UBL DIAN)",
+        },
+    }
