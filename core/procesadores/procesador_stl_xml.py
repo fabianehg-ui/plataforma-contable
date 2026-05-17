@@ -329,10 +329,13 @@ def _parsear_linea_xml(line_node) -> Optional[LineaSTL]:
 # ─── Procesamiento del ZIP ──────────────────────────────────
 def procesar_zip_xmls_stl(zip_bytes: bytes) -> ResultadoSTL:
     """
-    Procesa un ZIP de XMLs descargados por la extensión Chrome.
+    Procesa un ZIP de XMLs descargados por la extensión Chrome (formato antiguo).
 
     El ZIP de la extensión es: ZIP exterior → contiene ZIPs por documento → cada
     ZIP interno tiene el .xml + .pdf de esa STL.
+
+    NOTA: Si tu extensión genera JSON (v1.1+), usa `procesar_captura_json` en su
+    lugar — es más eficiente.
 
     Args:
         zip_bytes: bytes del ZIP descargado.
@@ -372,6 +375,50 @@ def procesar_zip_xmls_stl(zip_bytes: bytes) -> ResultadoSTL:
         return resultado
 
     # Generar plano contable
+    _generar_plano_resultado(resultado)
+    return resultado
+
+
+def procesar_captura_json(
+    captura: dict,
+    solo_prefijo: Optional[str] = "STL",
+) -> ResultadoSTL:
+    """
+    Procesa el JSON de captura DIAN (formato extensión v1.1+) y genera el plano
+    contable de las STL.
+
+    Args:
+        captura: dict cargado con lector_captura_dian.cargar_captura()
+        solo_prefijo: si se especifica, filtra solo documentos con ese prefijo
+                      (default "STL"). Pasar None procesa todos los XMLs.
+
+    Returns:
+        ResultadoSTL con facturas parseadas + plano contable + numeración.
+    """
+    from . import lector_captura_dian as lcd
+
+    resultado = ResultadoSTL()
+
+    # Si filtramos por prefijo, obtener los CUFEs válidos primero
+    cufes_validos = None
+    if solo_prefijo:
+        cufes_validos = set(lcd.buscar_cufes_de_prefijo(captura, solo_prefijo))
+
+    for cufe, xml_str, _pdf in lcd.iter_xmls(captura):
+        if cufes_validos is not None and cufe not in cufes_validos:
+            continue
+        factura = parsear_xml_stl(xml_str)
+        if factura is None:
+            resultado.errores.append(f"No se pudo parsear CUFE {cufe[:20]}...")
+            continue
+        resultado.facturas.append(factura)
+
+    _generar_plano_resultado(resultado)
+    return resultado
+
+
+def _generar_plano_resultado(resultado: ResultadoSTL) -> None:
+    """Helper: genera el plano contable a partir de resultado.facturas."""
     filas = []
     for fac in resultado.facturas:
         filas.extend(_generar_lineas_factura(fac))
@@ -385,8 +432,6 @@ def procesar_zip_xmls_stl(zip_bytes: bytes) -> ResultadoSTL:
         resultado.plano_df = aplicar_numeracion(resultado.plano_df)
     else:
         resultado.plano_df = pd.DataFrame(columns=COLUMNAS_PLANO)
-
-    return resultado
 
 
 def _generar_lineas_factura(fac: FacturaSTL) -> list[dict]:
