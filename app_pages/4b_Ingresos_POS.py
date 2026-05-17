@@ -1278,6 +1278,211 @@ with tab_token:
                 st.session_state.pop("resultado_token", None)
                 st.rerun()
 
+    # ============================================================
+    # REPORTE COMPARATIVO TOTAL POS vs DIAN
+    # ============================================================
+    st.markdown("---")
+    st.markdown("### 📊 Reporte Comparativo Total — POS vs DIAN")
+    st.caption(
+        "Cuadro comparativo: lo reportado por POS vs lo emitido a DIAN "
+        "(facturas - notas crédito). La diferencia debería ser ≈ $0. "
+        "Si supera el umbral configurado, se marca como ALERTA."
+    )
+
+    with st.expander("ℹ️ ¿Cómo funciona este reporte?", expanded=False):
+        st.markdown(
+            "**Compara, por sucursal:**\n"
+            "- **[A] POS reportado** = créditos de cuentas de venta en el plano POS\n"
+            "- **[B] FE POS DIAN** = facturas electrónicas en el Token (prefijo POS)\n"
+            "- **[C] NC POS DIAN** = notas crédito en el Token (prefijo NC POS)\n"
+            "- **[D] NETO DIAN** = B − C\n"
+            "- **[E] DIFERENCIA** = A − D\n\n"
+            "**Idealmente E ≈ $0.** Si hay diferencias grandes, indica:\n"
+            "- Ventas POS no facturadas electrónicamente\n"
+            "- Diferencias de redondeo\n"
+            "- Reportes POS que incluyen montos no facturables\n"
+            "- Facturas DIAN no reflejadas en el POS"
+        )
+
+    try:
+        from core.procesadores.reporte_comparativo_pos import (
+            construir_reporte_comparativo, reporte_a_xlsx
+        )
+        _REPORTE_COMP_DISPONIBLE = True
+    except Exception as _e_rep:
+        _REPORTE_COMP_DISPONIBLE = False
+        st.error(f"⚠️ El módulo de reporte comparativo no está disponible: {_e_rep}")
+
+    if _REPORTE_COMP_DISPONIBLE:
+        # Recoger inputs: plano POS y Token
+        plano_disponible = st.session_state.get("df_plano_pos_actual")
+        if plano_disponible is None:
+            # buscar el plano en otras claves de sesión
+            for key in ["resultado_pos_separado", "resultado_pos_unico", "resultado_token"]:
+                if key in st.session_state and isinstance(st.session_state[key], dict):
+                    if "df_plano" in st.session_state[key]:
+                        plano_disponible = st.session_state[key]["df_plano"]
+                        break
+                    if "df" in st.session_state[key]:
+                        plano_disponible = st.session_state[key]["df"]
+                        break
+
+        col_rep1, col_rep2 = st.columns(2)
+        with col_rep1:
+            archivo_token_rep = st.file_uploader(
+                "📂 Excel del Token DIAN",
+                type=["xlsx", "xls"],
+                key="reporte_comp_token",
+                help="Mismo Token DIAN del mes a comparar"
+            )
+        with col_rep2:
+            if plano_disponible is not None and not plano_disponible.empty:
+                st.success(f"✅ Plano POS detectado ({len(plano_disponible)} líneas)")
+                usar_plano_sesion = True
+            else:
+                st.info("👆 Procesa primero el POS en las pestañas 1 o 2 (o sube el plano)")
+                usar_plano_sesion = False
+                plano_uploaded = st.file_uploader(
+                    "📂 O sube un plano POS (.xlsx o .csv)",
+                    type=["xlsx", "csv"],
+                    key="reporte_comp_plano",
+                )
+                if plano_uploaded:
+                    if plano_uploaded.name.lower().endswith(".xlsx"):
+                        plano_disponible = pd.read_excel(plano_uploaded)
+                    else:
+                        plano_disponible = pd.read_csv(plano_uploaded)
+                    st.success(f"✅ Plano cargado ({len(plano_disponible)} líneas)")
+
+        col_per1, col_per2, col_per3 = st.columns(3)
+        with col_per1:
+            anio_rep = st.number_input(
+                "Año", min_value=2020, max_value=2030,
+                value=date.today().year, key="rep_anio"
+            )
+        with col_per2:
+            mes_rep = st.selectbox(
+                "Mes",
+                options=list(range(1, 13)),
+                index=max(0, date.today().month - 2),
+                format_func=lambda m: [
+                    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+                ][m-1],
+                key="rep_mes",
+            )
+        with col_per3:
+            umbral_alerta = st.number_input(
+                "Umbral alerta ($)",
+                min_value=0, value=50_000, step=10_000,
+                key="rep_umbral",
+                help="Si la diferencia supera este monto, se marca como alerta"
+            )
+
+        if st.button("📊 Generar reporte comparativo", type="primary",
+                     key="generar_reporte_comp", disabled=archivo_token_rep is None or plano_disponible is None):
+            with st.spinner("Generando reporte..."):
+                try:
+                    # Cargar datos_punto
+                    import json
+                    from pathlib import Path
+                    dp_path = Path(__file__).resolve().parents[1] / "core" / "data" / "datos_punto.json"
+                    with open(dp_path) as f:
+                        datos_punto_json = json.load(f)
+
+                    reporte = construir_reporte_comparativo(
+                        df_plano_pos=plano_disponible,
+                        fuente_token=archivo_token_rep.getvalue(),
+                        datos_punto=datos_punto_json["sucursales"],
+                        nit_empresa=str(emp.get("nit", "901038325")),
+                        anio=int(anio_rep), mes=int(mes_rep),
+                        umbral_alerta=float(umbral_alerta),
+                    )
+                    st.session_state["reporte_comp_resultado"] = reporte
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+                    import traceback
+                    with st.expander("Traceback"):
+                        st.code(traceback.format_exc())
+
+        # Mostrar resultado
+        if "reporte_comp_resultado" in st.session_state:
+            rep = st.session_state["reporte_comp_resultado"]
+            totales = rep["totales"]
+
+            st.markdown("---")
+
+            # Alerta principal si descuadre
+            if totales["alerta_total"]:
+                st.error(
+                    f"🔴 **ALERTA: Diferencia total significativa**\n\n"
+                    f"La diferencia entre POS reportado y DIAN es de "
+                    f"**${abs(totales['diferencia_total']):,.0f}**, que supera "
+                    f"el umbral de ${rep['umbral_alerta']:,.0f}.\n\n"
+                    f"⚠️ Esto NO debería pasar. Revisa las sucursales con mayor diferencia."
+                )
+            else:
+                st.success(
+                    f"✅ **Cuadre dentro del umbral**\n\n"
+                    f"Diferencia total: ${totales['diferencia_total']:,.0f} "
+                    f"(umbral: ${rep['umbral_alerta']:,.0f})"
+                )
+
+            # Métricas globales
+            st.markdown("#### 💼 Totales globales")
+            col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+            col_g1.metric("[A] POS Reportado",       f"${totales['pos_total']:,.0f}")
+            col_g2.metric("[B] FE POS DIAN",         f"${totales['fe_total']:,.0f}")
+            col_g3.metric("[C] NC POS DIAN",         f"${totales['nc_total']:,.0f}")
+            col_g4.metric("[D] Neto DIAN",           f"${totales['neto_dian_total']:,.0f}")
+            col_g5.metric("[E] Diferencia",          f"${totales['diferencia_total']:,.0f}",
+                          delta="🔴" if totales["alerta_total"] else "✅")
+
+            # Tabla por sucursal
+            st.markdown("#### 🏬 Por sucursal")
+            df_rep = rep["df_comparativo"].copy()
+            # Formato bonito de moneda
+            for col in ["POS_REPORTADO", "FE_DIAN", "NC_DIAN", "NETO_DIAN", "DIFERENCIA"]:
+                df_rep[col] = df_rep[col].apply(lambda v: f"${v:,.0f}")
+            st.dataframe(df_rep, use_container_width=True, hide_index=True)
+
+            # Alertas detalladas
+            if rep["alertas"]:
+                st.markdown(f"#### 🚨 Sucursales con diferencias > umbral ({len(rep['alertas'])})")
+                df_alertas = pd.DataFrame(rep["alertas"])
+                df_alertas["diferencia"] = df_alertas["diferencia"].apply(lambda v: f"${v:,.0f}")
+                st.dataframe(df_alertas, use_container_width=True, hide_index=True)
+
+            # Prefijos huérfanos (STL, NC STL)
+            if rep["fe_huerfanas"] or rep["nc_huerfanas"]:
+                with st.expander("📦 Prefijos NO mapeados como POS (STL, etc.)", expanded=False):
+                    st.caption("Estos prefijos están en el Token pero NO son del flujo POS. Son procesados aparte (ej. STL, DSE).")
+                    df_huer = pd.DataFrame([
+                        {"Tipo": "FE", "Prefijo": p, "Docs": d["docs"], "Total": f"${d['total']:,.0f}"}
+                        for p, d in rep["fe_huerfanas"].items()
+                    ] + [
+                        {"Tipo": "NC", "Prefijo": p or "(sin prefijo)", "Docs": d["docs"], "Total": f"${d['total']:,.0f}"}
+                        for p, d in rep["nc_huerfanas"].items()
+                    ])
+                    if len(df_huer):
+                        st.dataframe(df_huer, use_container_width=True, hide_index=True)
+
+            # Descarga
+            st.markdown("---")
+            st.markdown("#### 📥 Descargar reporte")
+            xlsx_bytes = reporte_a_xlsx(rep)
+            st.download_button(
+                "📊 Descargar Excel completo",
+                data=xlsx_bytes,
+                file_name=f"reporte_comparativo_POS_DIAN_{rep['periodo']['anio']}-{rep['periodo']['mes']:02d}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
+            if st.button("🔄 Generar otro reporte", key="reset_reporte_comp"):
+                st.session_state.pop("reporte_comp_resultado", None)
+                st.rerun()
+
 
 # ============================================================
 # PESTAÑA 4: VENTAS STL (mayoristas)
@@ -1333,17 +1538,41 @@ with tab_stl:
             "Para editar: modifica `core/data/config_stl.json` y reinicia la app."
         )
 
-    # Subir Token
+    # Subir Token (obligatorio) + ZIP de XMLs (opcional, más preciso)
     st.markdown("---")
-    st.markdown("### 📂 Cargar Token DIAN")
-    archivo_stl = st.file_uploader(
-        "Sube el Excel del Token DIAN del mes (.xlsx)",
-        type=["xlsx", "xls"],
-        key="stl_token_uploader",
-    )
+    st.markdown("### 📂 Cargar fuentes de datos")
 
-    if archivo_stl is None:
-        st.info("👆 Sube el Excel del Token DIAN para empezar.")
+    col_fuente1, col_fuente2 = st.columns(2)
+    with col_fuente1:
+        archivo_stl = st.file_uploader(
+            "📄 Excel del Token DIAN (.xlsx)",
+            type=["xlsx", "xls"],
+            key="stl_token_uploader",
+            help="Fuente base — calcula tarifas por estimación"
+        )
+    with col_fuente2:
+        archivo_zip_xml = st.file_uploader(
+            "📦 ZIP de XMLs DIAN (opcional, más preciso)",
+            type=["zip"],
+            key="stl_zip_xml_uploader",
+            help="Si subes el ZIP de XMLs descargados manualmente del portal, "
+                 "se procesarán línea por línea con tarifas REALES (sin estimación)."
+        )
+
+    # Mostrar info de qué se va a usar
+    if archivo_zip_xml is not None:
+        st.success(
+            "🎯 **Modo preciso activado**: se usará el ZIP de XMLs (línea por línea con tarifas reales). "
+            "El Token DIAN solo se usará para validación cruzada."
+        )
+    elif archivo_stl is not None:
+        st.info(
+            "📊 **Modo estándar**: se usará el Token DIAN. "
+            "Para mayor precisión sube también el ZIP de XMLs (las tarifas se leerán línea por línea)."
+        )
+
+    if archivo_stl is None and archivo_zip_xml is None:
+        st.info("👆 Sube al menos el Token DIAN para empezar.")
     else:
         # Selector de mes/año
         col_periodo1, col_periodo2 = st.columns(2)
@@ -1365,14 +1594,25 @@ with tab_stl:
             )
 
         if st.button("🚀 Procesar STL del mes", type="primary", key="stl_procesar"):
-            with st.spinner("Procesando Token DIAN..."):
+            with st.spinner("Procesando..."):
                 try:
-                    resultado_stl = procesar_stl(
-                        fuente_token=archivo_stl.getvalue(),
-                        config=config_stl,
-                        anio=int(anio_stl),
-                        mes=int(mes_stl),
-                    )
+                    if archivo_zip_xml is not None:
+                        # Modo preciso: usar XMLs
+                        from core.procesadores.procesador_stl import procesar_stl_desde_xmls
+                        resultado_stl = procesar_stl_desde_xmls(
+                            fuente_zip=archivo_zip_xml.getvalue(),
+                            config=config_stl,
+                            anio=int(anio_stl),
+                            mes=int(mes_stl),
+                        )
+                    else:
+                        # Modo estándar: usar Token
+                        resultado_stl = procesar_stl(
+                            fuente_token=archivo_stl.getvalue(),
+                            config=config_stl,
+                            anio=int(anio_stl),
+                            mes=int(mes_stl),
+                        )
                     st.session_state["resultado_stl"] = resultado_stl
                     st.session_state["resultado_stl_periodo"] = f"{int(anio_stl)}-{int(mes_stl):02d}"
                 except Exception as e:
@@ -1387,6 +1627,17 @@ with tab_stl:
 
             st.markdown("---")
             st.markdown(f"### 📊 Resultado — período {periodo}")
+
+            # Fuente usada
+            if r.get("fuente") == "xmls":
+                st.success("🎯 Procesado desde **XMLs reales** (línea por línea, tarifas exactas)")
+                if r.get("duplicados_zip", 0) > 0:
+                    st.warning(
+                        f"⚠️ El ZIP contenía {r['duplicados_zip']} XMLs duplicados "
+                        f"(mismo folio repetido). Se ignoraron los duplicados."
+                    )
+            else:
+                st.info("📊 Procesado desde **Token DIAN** (tarifas estimadas por aproximación)")
 
             # Métricas principales
             col1, col2, col3, col4 = st.columns(4)
