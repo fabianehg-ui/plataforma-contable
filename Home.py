@@ -150,17 +150,11 @@ asistente_caja = st.Page(
     icon="💵",
     url_path="caja-menor",
 )
-asistente_compras_dian = st.Page(
-    "app_pages/2_Compras_DIAN.py",
-    title="Compras DIAN",
-    icon="🛒",
-    url_path="compras-dian",
-)
-asistente_compras_eg = st.Page(
-    "app_pages/3a_Compras_y_Egresos.py",
-    title="Compras y Egresos",
-    icon="📊",
-    url_path="compras-egresos",
+asistente_token_dian = st.Page(
+    "app_pages/2_Procesar_Token_DIAN.py",
+    title="Procesar Token DIAN",
+    icon="📥",
+    url_path="procesar-token-dian",
 )
 asistente_nomina = st.Page(
     "app_pages/3_Nomina.py",
@@ -180,23 +174,11 @@ asistente_ventas_c13 = st.Page(
     icon="🛍️",
     url_path="ventas-c13",
 )
-asistente_pos = st.Page(
-    "app_pages/4b_Ingresos_POS.py",
-    title="Ingresos POS",
-    icon="🧾",
-    url_path="ingresos-pos",
-)
 asistente_pila = st.Page(
     "app_pages/5_PILA.py",
     title="PILA",
     icon="📎",
     url_path="pila",
-)
-asistente_dian_xml = st.Page(
-    "app_pages/5a_DIAN_XML.py",
-    title="DIAN XML",
-    icon="📥",
-    url_path="dian-xml",
 )
 
 # ----- Sección: Herramientas Tributarias -----
@@ -255,14 +237,11 @@ nav = st.navigation(
         "": [pagina_inicio],
         "🤖 Asistente Contable": [
             asistente_caja,
-            asistente_compras_dian,
-            asistente_compras_eg,
+            asistente_token_dian,
             asistente_nomina,
             asistente_prov,
             asistente_ventas_c13,
-            asistente_pos,
             asistente_pila,
-            asistente_dian_xml,
         ],
         "📊 Herramientas Tributarias": [
             trib_exogena,
