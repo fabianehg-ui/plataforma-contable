@@ -84,6 +84,9 @@ class SesionDIAN:
         desde_ms: Optional[int] = None,
         hasta_ms: Optional[int] = None,
         on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None,
+        corte_temprano: bool = True,
+        max_paginas: Optional[int] = None,
     ) -> List[dict]:
         """
         Lista TODOS los documentos del catálogo, opcionalmente filtrando por
@@ -94,15 +97,13 @@ class SesionDIAN:
             tipos: lista de DocumentTypeId (['01','91','92','05']). Default: todos.
             desde_ms, hasta_ms: epoch ms para filtrar por EmissionDate. None = sin filtro.
             on_progress: callback(etiqueta, actual, total) para reportar avance.
+            on_log: callback(mensaje_str) para logs detallados (debug).
+            corte_temprano: si True, para cuando una página entera viene
+                anterior al rango (asume orden DESC). Si False, pagina todo.
+            max_paginas: tope de páginas por tipo. None = sin tope.
 
         Returns:
             lista de dicts con la fila completa de la API, filtrados.
-
-        Cómo funciona:
-            La API devuelve documentos ordenados por fecha DESC (más recientes
-            primero). Para evitar paginar las 17.241 facturas cuando solo
-            necesitamos un mes, paginamos hasta que una página entera venga
-            anterior al rango pedido — "corte temprano".
         """
         if tipos is None:
             tipos = list(TIPOS_DOC.keys())
@@ -110,7 +111,8 @@ class SesionDIAN:
         resultados: List[dict] = []
         for tipo in tipos:
             self._listar_un_tipo(
-                tipo, desde_ms, hasta_ms, resultados, on_progress
+                tipo, desde_ms, hasta_ms, resultados,
+                on_progress, on_log, corte_temprano, max_paginas,
             )
         return resultados
 
@@ -121,17 +123,37 @@ class SesionDIAN:
         hasta_ms: Optional[int],
         out: List[dict],
         on_progress: Optional[Callable],
+        on_log: Optional[Callable],
+        corte_temprano: bool,
+        max_paginas: Optional[int],
     ):
         etiqueta = TIPOS_DOC.get(tipo, tipo)
+        _log = on_log if on_log else (lambda *a, **k: None)
+
         primera = self._pedir_pagina(start=0, length=PAGE_SIZE, tipo=tipo)
         total = primera["recordsFiltered"]
+        _log(f"[{tipo} {etiqueta}] recordsFiltered = {total}, data len = {len(primera['data'])}")
         if total == 0:
             if on_progress:
                 on_progress(etiqueta, 0, 0)
             return
 
         total_paginas = (total + PAGE_SIZE - 1) // PAGE_SIZE
+        if max_paginas:
+            total_paginas = min(total_paginas, max_paginas)
         ya_en_rango = False
+        out_inicial = len(out)
+
+        # Log de la primera fila para inspección
+        if primera["data"]:
+            ej = primera["data"][0]
+            _log(
+                f"[{tipo}] Primera fila ejemplo: "
+                f"SerieAndNumber={ej.get('SerieAndNumber')!r}, "
+                f"EmissionDate={ej.get('EmissionDate')!r}, "
+                f"SenderCode={ej.get('SenderCode')!r}, "
+                f"ReceiverCode={ej.get('ReceiverCode')!r}"
+            )
 
         def procesar_pagina(filas: List[dict]) -> dict:
             nonlocal ya_en_rango
@@ -139,7 +161,6 @@ class SesionDIAN:
             for fila in filas:
                 emision = parsear_fecha_dian_ms(fila.get("EmissionDate"))
                 if emision is None:
-                    # Sin fecha confiable: lo incluimos por seguridad
                     out.append(fila)
                     stats["sin_fecha"] += 1
                     continue
@@ -156,6 +177,7 @@ class SesionDIAN:
         stats = procesar_pagina(primera["data"])
         if stats["matches"] > 0:
             ya_en_rango = True
+        _log(f"[{tipo}] Página 1: matches={stats['matches']} antiguos={stats['antiguos']} nuevos={stats['nuevos']} sin_fecha={stats['sin_fecha']}")
 
         if on_progress:
             on_progress(etiqueta, 1, total_paginas)
@@ -163,8 +185,8 @@ class SesionDIAN:
         for p in range(1, total_paginas):
             try:
                 r = self._pedir_pagina(start=p * PAGE_SIZE, length=PAGE_SIZE, tipo=tipo)
-            except ErrorDIAN:
-                # No reventar todo el listado por un error transitorio
+            except ErrorDIAN as e:
+                _log(f"[{tipo}] Error en página {p}: {e}")
                 continue
             stats = procesar_pagina(r["data"])
             if stats["matches"] > 0:
@@ -172,18 +194,33 @@ class SesionDIAN:
             if on_progress:
                 on_progress(etiqueta, p + 1, total_paginas)
 
-            # Corte temprano: ya pasamos el rango pedido
-            todos_antiguos = (
-                desde_ms is not None
-                and len(r["data"]) > 0
-                and stats["antiguos"] == len(r["data"])
-            )
-            if ya_en_rango and todos_antiguos:
-                break
+            # Log cada 10 páginas
+            if (p + 1) % 10 == 0:
+                _log(
+                    f"[{tipo}] Página {p+1}/{total_paginas}: "
+                    f"matches_acum={len(out) - out_inicial}, "
+                    f"ya_en_rango={ya_en_rango}, "
+                    f"última pág stats={stats}"
+                )
 
-            # Respiro suave cada 5 páginas
+            # Corte temprano (opcional)
+            if corte_temprano:
+                todos_antiguos = (
+                    desde_ms is not None
+                    and len(r["data"]) > 0
+                    and stats["antiguos"] == len(r["data"])
+                )
+                if ya_en_rango and todos_antiguos:
+                    _log(f"[{tipo}] Corte temprano en página {p+1} (ya pasamos el rango)")
+                    break
+
             if p % 5 == 0:
                 time.sleep(0.1)
+
+        _log(
+            f"[{tipo}] FIN: {len(out) - out_inicial} docs en rango "
+            f"(de {total} totales en catálogo para este tipo)"
+        )
 
     def _pedir_pagina(self, start: int, length: int, tipo: str) -> dict:
         """Una llamada a GetDocumentsPageToken. Devuelve dict con 'data' y 'recordsFiltered'."""
