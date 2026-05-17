@@ -167,6 +167,9 @@ if submit:
     prog_listado = st.progress(0.0)
     progreso_tipo = {"tipo": "", "act": 0, "tot": 0}
 
+    # Log buffer persistente para diagnóstico
+    log_buffer: list[str] = []
+
     def cb_listar(etiqueta, act, tot):
         progreso_tipo["tipo"] = etiqueta
         progreso_tipo["act"] = act
@@ -177,6 +180,9 @@ if submit:
             f"  📄 {etiqueta}: página {act}/{tot}"
         )
 
+    def cb_log(msg):
+        log_buffer.append(msg)
+
     try:
         with st.spinner("Listando del catálogo DIAN..."):
             t0 = datetime.now()
@@ -185,16 +191,22 @@ if submit:
                 desde_ms=desde_ms,
                 hasta_ms=hasta_ms,
                 on_progress=cb_listar,
+                on_log=cb_log,
+                corte_temprano=False,   # En diagnóstico, paginar todo
             )
             tiempo_listado = (datetime.now() - t0).total_seconds()
     except cli.TokenInvalido as e:
         st.error(f"❌ La sesión DIAN expiró durante el listado: {e}")
+        with st.expander("📋 Log detallado"):
+            st.code("\n".join(log_buffer))
         st.stop()
     except Exception as e:
         st.error(f"❌ Error listando documentos: {e}")
         with st.expander("Detalle del error"):
             import traceback
             st.code(traceback.format_exc())
+        with st.expander("📋 Log detallado"):
+            st.code("\n".join(log_buffer))
         st.stop()
 
     log_listado.success(
@@ -202,6 +214,13 @@ if submit:
         f"(en {tiempo_listado:.1f}s)"
     )
     prog_listado.progress(1.0)
+
+    # Mostrar logs detallados SIEMPRE (útil para diagnóstico inicial)
+    with st.expander(
+        f"📋 Log detallado del listado ({len(log_buffer)} líneas)",
+        expanded=(len(documentos_raw) == 0),  # auto-expandir si 0 docs
+    ):
+        st.code("\n".join(log_buffer))
 
     if len(documentos_raw) == 0:
         st.warning(
