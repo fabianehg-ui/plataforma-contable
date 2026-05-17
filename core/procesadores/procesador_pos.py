@@ -197,7 +197,9 @@ class Sucursal:
     cta_base_v: str
     cta_ico: str
     clase: str = ""           # CLASE DE SEDE: SANTA LEÑA, RESTAURANTE MILAGROS, etc.
-    prefijo_token: str = ""   # Prefijo DIAN de facturación electrónica (ej: IND, OVI, VIV)
+    prefijo_token: str = ""       # Prefijo DIAN de facturación electrónica (ej: IND, OVI, VIV)
+    prefijo_token_nc: str = ""    # Prefijo DIAN de notas crédito de esta sucursal (ej: NCI, NCVI)
+    cta_devoluciones: str = ""    # Cuenta del PUC para devoluciones POS (ej: 41754001)
 
     @property
     def clave_busqueda(self) -> str:
@@ -955,6 +957,8 @@ def cargar_datos_punto_embebido() -> List[Sucursal]:
             cta_ico=_formato_cuenta(item.get("cta_ico", "")),
             clase=str(item.get("clase", "")).strip(),
             prefijo_token=str(item.get("prefijo_token", "")).strip().upper(),
+            prefijo_token_nc=str(item.get("prefijo_token_nc", "")).strip().upper(),
+            cta_devoluciones=_formato_cuenta(item.get("cta_devoluciones", "")),
         ))
 
     if not sucursales:
