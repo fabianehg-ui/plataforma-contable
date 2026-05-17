@@ -1,0 +1,450 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "descripcion": "Mapeo de cuenta PUC histórica → concepto de retención en la fuente",
+    "fuente": "Generado automáticamente desde las cuentas únicas del mapeo_compras_historico.json + reglas heurísticas por nombre de cuenta",
+    "conceptos_validos": [
+      "compras",
+      "servicios",
+      "honorarios",
+      "arrendamiento_inmueble",
+      "arrendamiento_mueble",
+      "transporte_carga",
+      "servicios_publicos",
+      "comisiones_bancarias",
+      "no_retencion"
+    ]
+  },
+  "mapeo": {
+    "51050501": {
+      "cuenta_nombre": "SUELDO APRENDIZ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "51050601": {
+      "cuenta_nombre": "SUELDOS",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "51101001": {
+      "cuenta_nombre": "REVISORIA FISCAL",
+      "concepto_retencion": "honorarios",
+      "obs": "Revisoría fiscal = honorarios"
+    },
+    "51102501": {
+      "cuenta_nombre": "ASESORIA JURIDICA",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
+    },
+    "51201001": {
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "concepto_retencion": "arrendamiento_inmueble",
+      "obs": "Arrendamiento bienes inmuebles"
+    },
+    "51202501": {
+      "cuenta_nombre": "ARRENDAM. EQUIPO COMPUTACION Y",
+      "concepto_retencion": "arrendamiento_mueble",
+      "obs": "Arrendamiento bienes muebles/plataformas"
+    },
+    "51251002": {
+      "cuenta_nombre": "AFILIACIONES Y SOSTENIMIENTO",
+      "concepto_retencion": "servicios",
+      "obs": "Afiliaciones y sostenimiento = servicios"
+    },
+    "51351501": {
+      "cuenta_nombre": "ASISTENCIA TECNICA",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
+    },
+    "51352001": {
+      "cuenta_nombre": "PROCESAMIENTO ELECTRON.DATOS",
+      "concepto_retencion": "servicios",
+      "obs": "Procesamiento electrónico de datos = servicios"
+    },
+    "51353501": {
+      "cuenta_nombre": "TELEFONO",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "51355001": {
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS",
+      "concepto_retencion": "transporte_carga",
+      "obs": "Transporte de carga"
+    },
+    "51452501": {
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos / equipos"
+    },
+    "51453501": {
+      "cuenta_nombre": "EQUIPO DE HOTELES Y RESTAURANT",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos / equipos"
+    },
+    "51551501": {
+      "cuenta_nombre": "PASAJES AEREOS",
+      "concepto_retencion": "no_retencion",
+      "obs": "Pasajes aéreos a aerolíneas (autorretenedoras)"
+    },
+    "51952001": {
+      "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "51952501": {
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "51953001": {
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "51954501": {
+      "cuenta_nombre": "TAXIS Y BUSES",
+      "concepto_retencion": "servicios",
+      "obs": "Gastos de viaje"
+    },
+    "51956001": {
+      "cuenta_nombre": "CASINO Y RESTAURANTE",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "52150501": {
+      "cuenta_nombre": "INDUSTRIA Y COMERCIO",
+      "concepto_retencion": "no_retencion",
+      "obs": "Impuesto ICA (no es pago a tercero)"
+    },
+    "52150502": {
+      "cuenta_nombre": "AUTO-RETENCION INDUSTRIA Y COM",
+      "concepto_retencion": "no_retencion",
+      "obs": "Autorretención ICA (no es pago a tercero)"
+    },
+    "52201501": {
+      "cuenta_nombre": "ARRENDAM. MAQUINARIA Y EQUIPO",
+      "concepto_retencion": "arrendamiento_mueble",
+      "obs": "Arrendamiento bienes muebles/plataformas"
+    },
+    "52202501": {
+      "cuenta_nombre": "ARRENDAM.PLATAFORMAS",
+      "concepto_retencion": "arrendamiento_mueble",
+      "obs": "Arrendamiento bienes muebles/plataformas"
+    },
+    "52356001": {
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "52950501": {
+      "cuenta_nombre": "COMISIONES PLATAFORMA",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Comisiones plataformas pago (autorretenedoras)"
+    },
+    "53051501": {
+      "cuenta_nombre": "COMISIONES TARJETAS",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Bancos - sin retención (autorretenedor)"
+    },
+    "53052001": {
+      "cuenta_nombre": "INTERES PRESTAMO BANCARIO",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Bancos - sin retención (autorretenedor)"
+    },
+    "53052002": {
+      "cuenta_nombre": "INTERES PRESTAMO PARTICULARES",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Bancos - sin retención (autorretenedor)"
+    },
+    "53052006": {
+      "cuenta_nombre": "INTERESES MORA",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Bancos - sin retención (autorretenedor)"
+    },
+    "53053501": {
+      "cuenta_nombre": "DSCTOS CCIALES GNRALES",
+      "concepto_retencion": "no_retencion",
+      "obs": "Descuentos comerciales (no retención)"
+    },
+    "53059501": {
+      "cuenta_nombre": "GRAVAMEN 4 X 1.000",
+      "concepto_retencion": "no_retencion",
+      "obs": "GMF 4x1000 (no es pago a tercero)"
+    },
+    "55052001": {
+      "cuenta_nombre": "INTERESES MORA",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Bancos - sin retención (autorretenedor)"
+    },
+    "55959502": {
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "concepto_retencion": "compras",
+      "obs": "Cuenta técnica - asumir compras 2.5%"
+    },
+    "61400501": {
+      "cuenta_nombre": "COSTO ALIMENTOS",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "71050101": {
+      "cuenta_nombre": "ALIMENTOS",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "71050201": {
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "71050301": {
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "71050401": {
+      "cuenta_nombre": "COMPRAS ASEO",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "72050501": {
+      "cuenta_nombre": "SUELDO APRENDIZ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "72050601": {
+      "cuenta_nombre": "SUELDOS",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "72051501": {
+      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS",
+      "concepto_retencion": "no_retencion",
+      "obs": "Horas extras = nómina"
+    },
+    "72054801": {
+      "cuenta_nombre": "BONIFICACION SALARIAL",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "72055101": {
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "72056001": {
+      "cuenta_nombre": "INDEMNIZACIONES LABORALES",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "72056301": {
+      "cuenta_nombre": "CAPACITACION AL PERSONAL",
+      "concepto_retencion": "servicios",
+      "obs": "Capacitación al personal = servicios"
+    },
+    "72058401": {
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina - no aplica retención por compras/servicios"
+    },
+    "73103501": {
+      "cuenta_nombre": "ASESORIA TECNICA",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
+    },
+    "73159501": {
+      "cuenta_nombre": "IMPUESTO A LA SEGURIDAD",
+      "concepto_retencion": "no_retencion",
+      "obs": "Impuestos/registros (sin retención)"
+    },
+    "73201001": {
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "concepto_retencion": "arrendamiento_inmueble",
+      "obs": "Arrendamiento bienes inmuebles"
+    },
+    "73253001": {
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73253002": {
+      "cuenta_nombre": "OTRAS AFILIACIONES Y SOSTENIMI",
+      "concepto_retencion": "servicios",
+      "obs": "Otras afiliaciones = servicios"
+    },
+    "73301001": {
+      "cuenta_nombre": "SEGURO CUMPLIMIENTO",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguros (aseguradora es autorretenedora)"
+    },
+    "73350501": {
+      "cuenta_nombre": "ASEO Y VIGILANCIA",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "73351001": {
+      "cuenta_nombre": "TEMPORALES",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73352501": {
+      "cuenta_nombre": "ACUEDUCTO Y ALCANTARILLADO",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "73353001": {
+      "cuenta_nombre": "ENERGIA ELECTRICA",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "73353601": {
+      "cuenta_nombre": "INTERNET",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "73355001": {
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS",
+      "concepto_retencion": "transporte_carga",
+      "obs": "Transporte de carga"
+    },
+    "73355501": {
+      "cuenta_nombre": "GAS",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "73359501": {
+      "cuenta_nombre": "SERVICIOS LOGISTICOS",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios logísticos"
+    },
+    "73359502": {
+      "cuenta_nombre": "CAMBIO DE MENUDA",
+      "concepto_retencion": "no_retencion",
+      "obs": "Cambio de menuda (cuenta técnica)"
+    },
+    "73359505": {
+      "cuenta_nombre": "LOS OLIVOS PARK- COCINA CDP ML",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios cocina CDP"
+    },
+    "73359590": {
+      "cuenta_nombre": "OTROS SERVICIOS",
+      "concepto_retencion": "servicios",
+      "obs": "Otros servicios"
+    },
+    "73401001": {
+      "cuenta_nombre": "REGISTRO MERCANTIL",
+      "concepto_retencion": "no_retencion",
+      "obs": "Impuestos/registros (sin retención)"
+    },
+    "73452001": {
+      "cuenta_nombre": "EQUIPO DE OFICINA",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos / equipos"
+    },
+    "73452501": {
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos / equipos"
+    },
+    "73453001": {
+      "cuenta_nombre": "CONSTRUCCIONES Y EDIFICACIONES",
+      "concepto_retencion": "compras",
+      "obs": "Construcciones y edificaciones (activo)"
+    },
+    "73453501": {
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos / equipos"
+    },
+    "73454001": {
+      "cuenta_nombre": "FLOTA Y EQUIPO DE TRANSPORTE",
+      "concepto_retencion": "transporte_carga",
+      "obs": "Transporte de carga"
+    },
+    "73500501": {
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73501001": {
+      "cuenta_nombre": "ARREGLOS ORNAMENTALES",
+      "concepto_retencion": "no_retencion",
+      "obs": "No es pago a tercero"
+    },
+    "73501501": {
+      "cuenta_nombre": "REPARACIONES LOCATIVAS",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73509501": {
+      "cuenta_nombre": "OTRAS REPARACIONES",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73550501": {
+      "cuenta_nombre": "ALOJAMIENTO Y MANUTENCION",
+      "concepto_retencion": "servicios",
+      "obs": "Alojamiento y manutención = servicios"
+    },
+    "73559501": {
+      "cuenta_nombre": "TIQUETES Y OTROS GTOS VIAJES",
+      "concepto_retencion": "servicios",
+      "obs": "Gastos de viaje"
+    },
+    "73952001": {
+      "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "73952501": {
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "73953001": {
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "73953501": {
+      "cuenta_nombre": "COMBUSTIBLES Y LUBRICANTES",
+      "concepto_retencion": "compras",
+      "obs": "Combustibles y lubricantes"
+    },
+    "73954001": {
+      "cuenta_nombre": "ENVASES Y EMPAQUES",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "73954501": {
+      "cuenta_nombre": "TAXIS Y BUSES",
+      "concepto_retencion": "servicios",
+      "obs": "Gastos de viaje"
+    },
+    "73956001": {
+      "cuenta_nombre": "CASINO Y RESTAURANTE",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73956501": {
+      "cuenta_nombre": "PARQUEADERO",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73959501": {
+      "cuenta_nombre": "ELEMENTOS PARA PRUEBAS",
+      "concepto_retencion": "compras",
+      "obs": "Fallback automático (revisar)"
+    },
+    "73959502": {
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "73959503": {
+      "cuenta_nombre": "GASTOS CAMION",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    }
+  }
+}

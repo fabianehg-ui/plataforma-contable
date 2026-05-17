@@ -1,0 +1,196 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "moneda": "COP",
+    "descripcion": "Tabla de retenciones en la fuente vigente por periodo. Marzo-abril 2026 bajo Decreto 572/2025; desde 8-mayo-2026 aplica norma anterior (Decreto 1625/2016) por suspensión del Consejo de Estado.",
+    "fuentes": [
+      "Decreto 572 de 2025 (vigente 1-jun-2025 a 7-may-2026)",
+      "Decreto 1625 de 2016 (vigente antes y desde 8-may-2026)",
+      "Resolución DIAN 000238 de 2025: UVT 2026 = 52.374"
+    ]
+  },
+  "uvt": {
+    "2024": 47065,
+    "2025": 49799,
+    "2026": 52374
+  },
+  "periodos": [
+    {
+      "id": "decreto_572_2025",
+      "vigencia_desde": "2025-06-01",
+      "vigencia_hasta": "2026-05-07",
+      "descripcion": "Vigencia del Decreto 572 de 2025 (bases reducidas)",
+      "retefuente": {
+        "compras": {
+          "base_uvt": 10,
+          "tarifa_declarante": 0.025,
+          "tarifa_no_declarante": 0.035,
+          "obs": "Compras generales bienes muebles"
+        },
+        "servicios": {
+          "base_uvt": 2,
+          "tarifa_declarante": 0.04,
+          "tarifa_no_declarante": 0.06,
+          "obs": "Prestación de servicios generales"
+        },
+        "honorarios": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.1,
+          "tarifa_no_declarante": 0.11,
+          "obs": "Honorarios y comisiones"
+        },
+        "arrendamiento_inmueble": {
+          "base_uvt": 27,
+          "tarifa_declarante": 0.035,
+          "tarifa_no_declarante": 0.035,
+          "obs": "Arrendamiento de bienes inmuebles"
+        },
+        "arrendamiento_mueble": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.04,
+          "tarifa_no_declarante": 0.04,
+          "obs": "Arrendamiento de bienes muebles"
+        },
+        "transporte_carga": {
+          "base_uvt": 4,
+          "tarifa_declarante": 0.01,
+          "tarifa_no_declarante": 0.01,
+          "obs": "Transporte de carga terrestre"
+        },
+        "servicios_publicos": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.025,
+          "tarifa_no_declarante": 0.025,
+          "obs": "Servicios públicos (energía, acueducto, gas)"
+        },
+        "comisiones_bancarias": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.0,
+          "tarifa_no_declarante": 0.0,
+          "obs": "Las comisiones bancarias NO generan retefuente al banco (autorretenedor)"
+        },
+        "no_retencion": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.0,
+          "tarifa_no_declarante": 0.0,
+          "obs": "Concepto excluido de retención"
+        }
+      },
+      "reteiva": {
+        "tarifa_general": 0.15,
+        "base_uvt_compras": 27,
+        "base_uvt_servicios": 4,
+        "obs_general": "Solo se practica reteIVA cuando se compra a régimen SIMPLE (O-47). Régimen ordinario responsable IVA no aplica reteIVA salvo autorretenedor."
+      }
+    },
+    {
+      "id": "post_suspension_572",
+      "vigencia_desde": "2026-05-08",
+      "vigencia_hasta": "2099-12-31",
+      "descripcion": "Después de la suspensión del Decreto 572 por el Consejo de Estado",
+      "retefuente": {
+        "compras": {
+          "base_uvt": 27,
+          "tarifa_declarante": 0.025,
+          "tarifa_no_declarante": 0.035,
+          "obs": "Base subió de 10 a 27 UVT por suspensión Dec. 572"
+        },
+        "servicios": {
+          "base_uvt": 4,
+          "tarifa_declarante": 0.04,
+          "tarifa_no_declarante": 0.06,
+          "obs": "Base subió de 2 a 4 UVT por suspensión Dec. 572"
+        },
+        "honorarios": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.1,
+          "tarifa_no_declarante": 0.11,
+          "obs": "Honorarios y comisiones"
+        },
+        "arrendamiento_inmueble": {
+          "base_uvt": 27,
+          "tarifa_declarante": 0.035,
+          "tarifa_no_declarante": 0.035,
+          "obs": "Arrendamiento de inmuebles"
+        },
+        "arrendamiento_mueble": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.04,
+          "tarifa_no_declarante": 0.04,
+          "obs": "Arrendamiento de muebles"
+        },
+        "transporte_carga": {
+          "base_uvt": 4,
+          "tarifa_declarante": 0.01,
+          "tarifa_no_declarante": 0.01,
+          "obs": "Transporte de carga"
+        },
+        "servicios_publicos": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.025,
+          "tarifa_no_declarante": 0.025,
+          "obs": "Servicios públicos"
+        },
+        "comisiones_bancarias": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.0,
+          "tarifa_no_declarante": 0.0,
+          "obs": "Sin retención (bancos autorretenedores)"
+        },
+        "no_retencion": {
+          "base_uvt": 0,
+          "tarifa_declarante": 0.0,
+          "tarifa_no_declarante": 0.0,
+          "obs": "Excluido"
+        }
+      },
+      "reteiva": {
+        "tarifa_general": 0.15,
+        "base_uvt_compras": 27,
+        "base_uvt_servicios": 4,
+        "obs_general": "Solo se aplica reteIVA al régimen SIMPLE."
+      }
+    }
+  ],
+  "reglas_por_regimen": {
+    "O-13": {
+      "nombre": "Gran Contribuyente",
+      "aplicar_retefuente": true,
+      "aplicar_reteiva": false,
+      "obs": "Se le retiene renta normalmente. No se le retiene IVA."
+    },
+    "O-15": {
+      "nombre": "Autorretenedor",
+      "aplicar_retefuente": false,
+      "aplicar_reteiva": false,
+      "obs": "Él se autorretiene renta. No se le practica retención por terceros."
+    },
+    "O-23": {
+      "nombre": "Agente de Retención IVA",
+      "aplicar_retefuente": true,
+      "aplicar_reteiva": false,
+      "obs": "Renta sí, IVA no."
+    },
+    "O-47": {
+      "nombre": "Régimen Simple de Tributación (RST)",
+      "aplicar_retefuente": false,
+      "aplicar_reteiva": true,
+      "obs": "NO se le retiene renta (no es sujeto). SÍ se le practica reteIVA al 15% sobre el IVA."
+    },
+    "R-99-PN": {
+      "nombre": "No responsable / Régimen ordinario por defecto",
+      "aplicar_retefuente": true,
+      "aplicar_reteiva": false,
+      "obs": "Retención normal. Asume declarante (revisar caso a caso si no declarante)."
+    }
+  },
+  "cuentas_puc": {
+    "retefuente_compras": "23653505",
+    "retefuente_servicios": "23652525",
+    "retefuente_honorarios": "23652505",
+    "retefuente_arrendamiento": "23653001",
+    "retefuente_transporte": "23652545",
+    "retefuente_otros": "23659501",
+    "reteiva": "23677005"
+  }
+}
