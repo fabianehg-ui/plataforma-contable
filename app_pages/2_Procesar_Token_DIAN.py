@@ -1,15 +1,16 @@
 """
 app_pages/2_Procesar_Token_DIAN.py
 
-MÓDULO ÚNICO: Procesar DIAN
+MÓDULO: Procesar DIAN
 
 Flujo lineal:
-  1️⃣ Cargar Excel del Token DIAN (obligatorio)
+  1️⃣ Cargar Excel del Token DIAN
   2️⃣ Filtrar rango de fechas
   3️⃣ Procesar Token (genera plano contable consolidado)
   4️⃣ Descargar plano contable Token (TSV o Excel)
-  5️⃣ [Opcional] Cargar Excel POS para AUDITORÍA comparativa
-  6️⃣ Generar listas MIXTAS para extensión Chrome
+  5️⃣ Generar listas MIXTAS para extensión Chrome
+
+NOTA: la auditoría POS vs Token está en el módulo "Ventas POS" (4b).
 """
 from __future__ import annotations
 
@@ -31,17 +32,7 @@ from auth.empresas import seleccionar_empresa_sidebar, require_empresa
 
 from core.procesadores import lector_excel_token as lex
 from core.procesadores import procesador_ventas_excel_token_v2 as pve2
-from core.procesadores import comparativo_pos_token_v2 as cmp_aud
 from core.procesadores import generador_listas_cufes as glc
-
-# Importar procesador POS antiguo (puede fallar si faltan dependencias)
-try:
-    from core.procesadores.procesador_pos import procesar_pos as procesar_pos_antiguo
-    POS_OK = True
-    POS_ERR = ""
-except Exception as e:
-    POS_OK = False
-    POS_ERR = str(e)
 
 
 # ─── Auth y setup ────────────────────────────────────────────
@@ -234,103 +225,10 @@ if "token_res" in st.session_state:
 
 
 # ════════════════════════════════════════════════════════════
-# PASO 5 — Auditoría comparativa POS vs Token (OPCIONAL)
+# PASO 5 — Lista CUFEs MIXTAS (descarga XML por extensión Chrome)
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 5️⃣ Auditoría comparativa POS vs Token")
-st.caption(
-    "Sube el Excel POS (Henko/Quinto Sentido) para generar el reporte de auditoría. "
-    "**Solo se usa para el comparativo** — no genera plano contable POS aquí."
-)
-
-if not POS_OK:
-    st.error(f"⚠️ Procesador POS no disponible: {POS_ERR}")
-else:
-    archivo_pos = st.file_uploader(
-        "Excel POS multi-hoja (Henko / Quinto Sentido / Milagros)",
-        type=["xlsx", "xlsm"],
-        key="up_pos_v6",
-    )
-
-    if archivo_pos is not None and "pos_res" not in st.session_state:
-        with st.spinner("Procesando POS para extraer bases por sucursal..."):
-            try:
-                df_plano_pos, log_pos, sucs_no = procesar_pos_antiguo(archivo_pos)
-                st.session_state["pos_res"] = {
-                    "plano": df_plano_pos,
-                    "log": log_pos,
-                    "sucs_no": sucs_no,
-                }
-            except Exception as e:
-                st.error(f"❌ Error procesando POS: {e}")
-                with st.expander("Detalle del error", expanded=True):
-                    import traceback
-                    st.code(traceback.format_exc())
-
-    if "pos_res" in st.session_state:
-        pos_data = st.session_state["pos_res"]
-        df_plano_pos = pos_data["plano"]
-
-        if df_plano_pos is None or len(df_plano_pos) == 0:
-            st.warning("⚠️ El procesador POS no generó líneas. Revisa el log.")
-            with st.expander("Log del procesador POS", expanded=True):
-                st.code("\n".join(pos_data.get("log", [])))
-        else:
-            st.success(f"✅ POS procesado: {len(df_plano_pos):,} líneas")
-
-            if pos_data.get("sucs_no"):
-                with st.expander(f"⚠️ {len(pos_data['sucs_no'])} sucursales POS no encontradas en DATOS PUNTO"):
-                    st.json(pos_data["sucs_no"][:30])
-
-            with st.expander("📋 Log del procesador POS"):
-                st.code("\n".join(pos_data.get("log", [])))
-
-            # Generar comparativo si tenemos ambos
-            if "token_res" in st.session_state:
-                if st.button("🔍 Generar reporte de auditoría", use_container_width=True):
-                    with st.spinner("Construyendo comparativo..."):
-                        base_pos_cc = cmp_aud.extraer_base_pos_por_sucursal(df_plano_pos)
-                        df_comp = cmp_aud.construir_comparativo(df_emit, base_pos_cc, MAPEO_COMPLETO)
-                        st.session_state["comp_df"] = df_comp
-
-                if "comp_df" in st.session_state:
-                    df_comp = st.session_state["comp_df"]
-                    st.markdown("### 📊 Reporte de auditoría")
-
-                    # Mostrar tabla formateada
-                    df_disp = df_comp.copy()
-                    for c in ["Base POS", "Base Token FE", "Base NC Token", "Token Neto", "Diferencia"]:
-                        if c in df_disp.columns:
-                            df_disp[c] = df_disp[c].apply(
-                                lambda v: f"${v:,.0f}" if pd.notna(v) and v != "" else ""
-                            )
-                    if "Efectividad %" in df_disp.columns:
-                        df_disp["Efectividad %"] = df_disp["Efectividad %"].apply(
-                            lambda v: f"{v:.2f}%" if pd.notna(v) else "—"
-                        )
-
-                    st.dataframe(df_disp, use_container_width=True, hide_index=True, height=600)
-
-                    # Descargar Excel
-                    buf = io.BytesIO()
-                    df_comp.to_excel(buf, index=False, engine="openpyxl")
-                    buf.seek(0)
-                    st.download_button(
-                        "⬇️ Descargar reporte auditoría (Excel)",
-                        data=buf.getvalue(),
-                        file_name=f"auditoria_pos_vs_token_{f_desde}_a_{f_hasta}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                    )
-            else:
-                st.info("☝️ Procesa primero el Token (paso 3) para habilitar el comparativo.")
-
-
-# ════════════════════════════════════════════════════════════
-# PASO 6 — Lista CUFEs MIXTAS (descarga XML por extensión Chrome)
-# ════════════════════════════════════════════════════════════
-st.markdown("---")
-st.markdown("## 6️⃣ Lista de CUFEs MIXTAS (para extensión Chrome)")
+st.markdown("## 5️⃣ Lista de CUFEs MIXTAS (para extensión Chrome)")
 st.caption("Compras y ventas con mezcla de tarifas IVA. Necesitan XML para clasificación detallada.")
 
 if st.button("📋 Calcular MIXTAS"):
