@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "fecha_generacion": "2026-05-17",
+    "descripcion": "Mapeo NIT receptor DSE → concepto contable y cuenta del PUC. Inicializado con los NITs frecuentes vistos en marzo-abril 2026 de JIPER. Editable.",
+    "conceptos_disponibles": [
+      "ARRENDAMIENTOS",
+      "SERVICIOS_PUBLICOS",
+      "SERVICIOS_PROFESIONALES",
+      "MANTENIMIENTO",
+      "TRANSPORTE",
+      "PUBLICIDAD",
+      "PAPELERIA",
+      "GASTOS_DIVERSOS",
+      "COMISIONES",
+      "HONORARIOS"
+    ]
+  },
+  "cuentas_por_concepto": {
+    "ARRENDAMIENTOS":         {"cuenta": "513540", "nombre": "ARRENDAMIENTOS"},
+    "SERVICIOS_PUBLICOS":     {"cuenta": "513525", "nombre": "SERVICIOS PUBLICOS"},
+    "SERVICIOS_PROFESIONALES":{"cuenta": "511025", "nombre": "HONORARIOS - ASESORIAS"},
+    "MANTENIMIENTO":          {"cuenta": "513045", "nombre": "MANTENIMIENTO Y REPARACIONES"},
+    "TRANSPORTE":             {"cuenta": "513550", "nombre": "TRANSPORTES Y FLETES"},
+    "PUBLICIDAD":             {"cuenta": "513555", "nombre": "PUBLICIDAD Y MERCADEO"},
+    "PAPELERIA":              {"cuenta": "513505", "nombre": "PAPELERIA Y UTILES DE OFICINA"},
+    "GASTOS_DIVERSOS":        {"cuenta": "519595", "nombre": "GASTOS DIVERSOS"},
+    "COMISIONES":             {"cuenta": "513020", "nombre": "COMISIONES"},
+    "HONORARIOS":             {"cuenta": "511015", "nombre": "HONORARIOS"}
+  },
+  "mapeo_nit": [
+    {"nit": "890905730",  "nombre": "COOPERATIVA TRANSPORTADORES TAX COOPEBO", "concepto": "TRANSPORTE"},
+    {"nit": "800093761",  "nombre": "EMPRESA TRANSPORTADORA DE TAXIS",         "concepto": "TRANSPORTE"},
+    {"nit": "770493581",  "nombre": "GOOGLE LLC",                              "concepto": "PUBLICIDAD"},
+    {"nit": "901266653",  "nombre": "META PLATFORMS IRELAND",                  "concepto": "PUBLICIDAD"},
+    {"nit": "912048089",  "nombre": "AMAZON",                                  "concepto": "PUBLICIDAD"},
+    {"nit": "911144442",  "nombre": "MICROSOFT CORPORATION",                   "concepto": "PUBLICIDAD"},
+    {"nit": "901623198",  "nombre": "PARQUE FABRICATO CENTRO COMERCIAL",       "concepto": "ARRENDAMIENTOS"},
+    {"nit": "900266206",  "nombre": "CONJUNTO SAN LUCAS PLAZA",                "concepto": "ARRENDAMIENTOS"},
+    {"nit": "900369371",  "nombre": "DEL ESTE CENTRO COMERCIAL",               "concepto": "ARRENDAMIENTOS"},
+    {"nit": "900181427",  "nombre": "G4 INGENIEROS CIVILES",                   "concepto": "MANTENIMIENTO"},
+    {"nit": "71379195",   "nombre": "WILSON HERNANDO RUIZ GRAJALES",           "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "80857959",   "nombre": "JEISSON ANTONIO SASTOQUE VEGA",           "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "71681166",   "nombre": "GABRIEL JAIME ARANGO BERMUDEZ",           "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "42967519",   "nombre": "OLGA CECILIA MANRIQUE GUTIERREZ",         "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "1128225666", "nombre": "ANDREA NATHALY LONDOÑO JEREZ",            "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "43490386",   "nombre": "MARIA OFIR TOBON PULGARIN",               "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "43732473",   "nombre": "TATIANA ALVEAR MEJIA",                    "concepto": "SERVICIOS_PROFESIONALES"},
+    {"nit": "1035003670", "nombre": "MIGUEL MORENO RODRIGUEZ",                 "concepto": "SERVICIOS_PROFESIONALES"}
+  ]
+}
