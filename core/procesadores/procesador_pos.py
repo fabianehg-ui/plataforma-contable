@@ -723,11 +723,15 @@ def _procesar_hoja(
 
 def procesar_pos(
     archivo,
+    sucursales_override: Optional[List["Sucursal"]] = None,
 ) -> Tuple[pd.DataFrame, List[str], List[dict]]:
     """Procesa el Excel completo y produce el plano contable.
 
     Args:
         archivo: file-like (BytesIO, UploadedFile) o bytes del Excel.
+        sucursales_override: si se pasa, NO se lee la hoja DATOS PUNTO del
+            Excel; en su lugar se usa esta lista. Útil cuando el maestro
+            viene de datos_punto.json en el repo.
 
     Returns:
         (df_plano, log_mensajes, sucursales_no_encontradas)
@@ -752,9 +756,13 @@ def procesar_pos(
 
     wb = load_workbook(bio, data_only=True, read_only=True)
 
-    # Leer maestro
-    sucursales = _leer_datos_punto(wb)
-    log.append(f"📋 DATOS PUNTO: {len(sucursales)} sucursales registradas.")
+    # Leer maestro: del override si se pasó, sino de la hoja DATOS PUNTO
+    if sucursales_override is not None:
+        sucursales = sucursales_override
+        log.append(f"📋 Maestro de sucursales (externo): {len(sucursales)} sucursales.")
+    else:
+        sucursales = _leer_datos_punto(wb)
+        log.append(f"📋 DATOS PUNTO: {len(sucursales)} sucursales registradas.")
 
     # Procesar cada hoja de reporte
     todas_filas: List[dict] = []
@@ -783,6 +791,14 @@ def procesar_pos(
             log.append(f"   ✅ Cuadre perfecto Db = Cr")
         else:
             log.append(f"   ❌ DESCUADRE: diferencia $ {total_db - total_cr:,}".replace(",", "."))
+
+        # Aplicar numeración consecutiva por comprobante (DOCUMENTO=1,2,3...)
+        from .numerador_comprobantes import aplicar_numeracion_con_resumen
+        df_plano, resumen_num = aplicar_numeracion_con_resumen(df_plano)
+        log.append("")
+        log.append(f"📋 Numeración asignada:")
+        for comp, n in sorted(resumen_num.items()):
+            log.append(f"   Comprobante {comp}: {n} asientos (consecutivo 1..{n})")
 
     return df_plano, log, todas_sucs_no_enc
 

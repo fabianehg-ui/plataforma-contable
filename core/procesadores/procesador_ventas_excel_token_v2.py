@@ -476,6 +476,11 @@ def procesar_ventas_v2(
         resultado.plano_df = pd.DataFrame(columns=COLUMNAS_PLANO)
         resultado.plano_lineas = 0
 
+    # Aplicar numeración consecutiva por comprobante (DOCUMENTO=1,2,3... DOC REFERENCIA=folio sin prefijo)
+    if resultado.plano_df is not None and len(resultado.plano_df) > 0:
+        from .numerador_comprobantes import aplicar_numeracion
+        resultado.plano_df = aplicar_numeracion(resultado.plano_df)
+
     return resultado
 
 

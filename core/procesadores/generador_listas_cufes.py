@@ -150,3 +150,53 @@ def generar_lista_ventas_mixtas(df: pd.DataFrame) -> List[dict]:
             "razon":            "MIXTA",
         })
     return out
+
+
+def generar_lista_proveedores_unicos(df_token, maestro_existente: Optional[dict] = None) -> List[dict]:
+    """
+    Para cada NIT proveedor único en los recibidos, devuelve UN CUFE representativo
+    (el de mayor valor). Útil para descargar 1 XML por NIT y extraer régimen + dirección.
+
+    Si se pasa `maestro_existente`, se excluyen los NITs que ya están en el maestro.
+
+    Returns:
+        Lista de dicts con campos cufe, folio, prefijo, nit_emisor, nombre_emisor, total.
+    """
+    df = df_token[df_token["grupo"].str.lower() == "recibido"].copy()
+    if len(df) == 0:
+        return []
+
+    import re
+    def _normalizar(s):
+        if not s: return ""
+        return re.sub(r"\D", "", str(s).split("-")[0])
+
+    df["NIT_norm"] = df["nit_emisor"].apply(_normalizar)
+
+    # Filtrar los que ya están en el maestro
+    if maestro_existente:
+        ya_conocidos = set(maestro_existente.get("terceros", {}).keys())
+        df = df[~df["NIT_norm"].isin(ya_conocidos)]
+        if len(df) == 0:
+            return []
+
+    # Para cada NIT, el CUFE de mayor valor
+    df["total_num"] = pd.to_numeric(df["total"], errors="coerce").fillna(0)
+    df = df.sort_values("total_num", ascending=False).drop_duplicates("NIT_norm")
+
+    out = []
+    for _, row in df.iterrows():
+        if not row.get("cufe"):
+            continue
+        out.append({
+            "cufe":             row["cufe"],
+            "folio":            row["folio"],
+            "prefijo":          row["prefijo"],
+            "tipo_documento":   row["tipo_documento"],
+            "fecha_emision":    row["fecha_emision"].strftime("%Y-%m-%d") if pd.notna(row["fecha_emision"]) else "",
+            "nit_emisor":       row["NIT_norm"],
+            "nombre_emisor":    row["nombre_emisor"],
+            "total":            float(row["total_num"]),
+            "razon":            "PROVEEDOR_UNICO",
+        })
+    return out
