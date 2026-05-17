@@ -1,0 +1,152 @@
+"""
+core/procesadores/generador_listas_cufes.py
+
+Genera las listas JSON de CUFEs para que la extensión Chrome descargue los
+XMLs solo de los documentos que realmente necesitan procesamiento detallado.
+
+Lógica:
+  - Lista A — COMPRAS MIXTAS: facturas recibidas donde no se puede deducir
+    una tarifa única (necesitan XML para discriminar líneas).
+  - Lista B — VENTAS MIXTAS: lo mismo para emitidas (raro pero pasa).
+  - Lista C — TODAS RECIBIDAS: opción para descargar todas las compras si
+    quieres maestro completo de proveedores con direcciones.
+
+Filosofía: la extensión Chrome NO debería bajar 37k XMLs cuando 99% se
+clasifican desde el Excel. Solo bajamos los que de verdad lo necesitan.
+"""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Dict, List, Optional
+
+import pandas as pd
+
+
+def _clasificar_tarifa_basica(row, otros, ret):
+    """
+    Versión simplificada del clasificador (sin dependencias externas).
+    Devuelve True si cuadra con tarifa pura, False si es MIXTA.
+    """
+    TOLERANCIA = 5
+    iva = float(row.get("IVA", 0) or 0)
+    inc = float(row.get("INC", 0) or 0)
+    total = float(row.get("total", 0) or 0)
+
+    # Exenta
+    if abs(iva) < 0.01 and abs(inc) < 0.01:
+        return True, "EXENTA"
+
+    # IVA puro (sin INC)
+    if abs(iva) > 0.01 and abs(inc) < 0.01:
+        for tarifa in [0.05, 0.19, 0.16]:
+            base = iva / tarifa
+            calc = base + iva + inc + otros + ret
+            diff = total - calc
+            if -TOLERANCIA <= diff <= base * 0.15:
+                return True, f"{int(tarifa*100)}%"
+        return False, "MIXTA"
+
+    # INC puro
+    if abs(inc) > 0.01 and abs(iva) < 0.01:
+        for tarifa_inc in [0.08, 0.16]:
+            base = inc / tarifa_inc
+            calc = base + iva + inc + otros + ret
+            diff = total - calc
+            if -TOLERANCIA <= diff <= base * 0.15:
+                return True, f"INC{int(tarifa_inc*100)}%"
+        return False, "MIXTA"
+
+    # Mezcla IVA + INC
+    return False, "MIXTA"
+
+
+def clasificar_df_por_tarifa(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Agrega al DataFrame las columnas 'cuadra_excel' (bool) y 'tarifa_detectada' (str).
+    """
+    cols_otros = ["ICA", "IC", "Timbre", "INC Bolsas", "IN Carbono", "IN Combustibles",
+                  "IC Datos", "ICL", "INPP", "IBUA", "ICUI"]
+    cols_ret = ["Rete IVA", "Rete Renta", "Rete ICA"]
+
+    df = df.copy()
+    for c in cols_otros + cols_ret + ["IVA", "INC"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        else:
+            df[c] = 0
+
+    df["_otros_imp"] = df[cols_otros].sum(axis=1)
+    df["_ret_total"] = df[cols_ret].sum(axis=1)
+
+    cuadra_list, tarifa_list = [], []
+    for _, row in df.iterrows():
+        cuadra, tarifa = _clasificar_tarifa_basica(row, row["_otros_imp"], row["_ret_total"])
+        cuadra_list.append(cuadra)
+        tarifa_list.append(tarifa)
+    df["cuadra_excel"] = cuadra_list
+    df["tarifa_detectada"] = tarifa_list
+
+    return df
+
+
+# Tipos excluidos siempre (no van a contabilidad ni a XML)
+TIPOS_NO_CONTABLES = {"Application response", "Nomina Individual"}
+
+
+def generar_lista_compras_mixtas(df: pd.DataFrame) -> List[dict]:
+    """
+    Genera lista de CUFEs de COMPRAS RECIBIDAS MIXTAS.
+    Estas son las únicas compras que necesitan descargar XML real.
+    """
+    df_recb = df[df["grupo"].str.lower() == "recibido"].copy()
+    df_recb = df_recb[~df_recb["tipo_documento"].isin(TIPOS_NO_CONTABLES)]
+    df_clasif = clasificar_df_por_tarifa(df_recb)
+    mixtas = df_clasif[df_clasif["tarifa_detectada"] == "MIXTA"]
+
+    out = []
+    for _, row in mixtas.iterrows():
+        if not row["cufe"]:
+            continue
+        out.append({
+            "cufe":             row["cufe"],
+            "folio":            row["folio"],
+            "prefijo":          row["prefijo"],
+            "tipo_documento":   row["tipo_documento"],
+            "fecha_emision":    row["fecha_emision"].strftime("%Y-%m-%d") if pd.notna(row["fecha_emision"]) else "",
+            "nit_emisor":       row["nit_emisor"],
+            "nombre_emisor":    row["nombre_emisor"],
+            "nit_receptor":     row["nit_receptor"],
+            "nombre_receptor":  row["nombre_receptor"],
+            "total":            float(row["total"]),
+            "grupo":            row["grupo"],
+            "razon":            "MIXTA",
+        })
+    return out
+
+
+def generar_lista_ventas_mixtas(df: pd.DataFrame) -> List[dict]:
+    """Igual pero para ventas emitidas (caso raro, < 50/mes en JIPER)."""
+    df_em = df[df["grupo"].str.lower() == "emitido"].copy()
+    df_em = df_em[~df_em["tipo_documento"].isin(TIPOS_NO_CONTABLES)]
+    df_clasif = clasificar_df_por_tarifa(df_em)
+    mixtas = df_clasif[df_clasif["tarifa_detectada"] == "MIXTA"]
+
+    out = []
+    for _, row in mixtas.iterrows():
+        if not row["cufe"]:
+            continue
+        out.append({
+            "cufe":             row["cufe"],
+            "folio":            row["folio"],
+            "prefijo":          row["prefijo"],
+            "tipo_documento":   row["tipo_documento"],
+            "fecha_emision":    row["fecha_emision"].strftime("%Y-%m-%d") if pd.notna(row["fecha_emision"]) else "",
+            "nit_emisor":       row["nit_emisor"],
+            "nombre_emisor":    row["nombre_emisor"],
+            "nit_receptor":     row["nit_receptor"],
+            "nombre_receptor":  row["nombre_receptor"],
+            "total":            float(row["total"]),
+            "grupo":            row["grupo"],
+            "razon":            "MIXTA",
+        })
+    return out
