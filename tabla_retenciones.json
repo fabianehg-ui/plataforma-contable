@@ -185,12 +185,35 @@
     }
   },
   "cuentas_puc": {
-    "retefuente_compras": "23653505",
-    "retefuente_servicios": "23652525",
-    "retefuente_honorarios": "23652505",
-    "retefuente_arrendamiento": "23653001",
-    "retefuente_transporte": "23652545",
-    "retefuente_otros": "23659501",
-    "reteiva": "23677005"
+    "retefuente_compras": "23654002",
+    "retefuente_servicios": "23652504",
+    "retefuente_honorarios": "23651511",
+    "retefuente_arrendamiento": "23653003",
+    "retefuente_transporte": "23652501",
+    "retefuente_otros": "23652507",
+    "reteiva": "23670515",
+    "rete_ica": "23681510",
+    "retefuente_compras_15": "23654001",
+    "retefuente_servicios_6": "23652506",
+    "retefuente_honorarios_10": "23651510",
+    "retefuente_servicios_salud": "23652502",
+    "retefuente_software": "23652508",
+    "retefuente_hoteles": "23652503",
+    "retefuente_temporales": "23652507"
+  },
+  "cuentas_puc_iva": {
+    "iva_descontable_19": "24081003",
+    "iva_descontable_5": "24081003",
+    "iva_alimentos_19": "71050102",
+    "iva_alimentos_5": "71050103",
+    "iva_bebidas_19": "71050202",
+    "iva_bebidas_5": "71050203",
+    "iva_cafeteria_19": "71050302",
+    "iva_aseo_19": "71050402"
+  },
+  "cuentas_puc_impuestos": {
+    "saludable_alimentos": "71050104",
+    "consumo_bebidas": "71050205",
+    "licores": "71050205"
   }
 }

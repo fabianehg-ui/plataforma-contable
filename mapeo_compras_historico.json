@@ -1,0 +1,5610 @@
+{
+  "_meta": {
+    "version": "2.0",
+    "descripcion": "Mapeo NIT → cuenta gasto principal extraído del histórico real marzo+abril 2026",
+    "fuente": "historico_para_diagnostico_completo_marzo_abril.xlsx",
+    "total_nits": 700
+  },
+  "mapeo": [
+    {
+      "nit": "1000088501",
+      "nombre": "ANDRES FELIPE SOTO TORRES     ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 3240000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1000088791",
+      "nombre": "SARA STEFANIA BUSTAMANTE LOPEZ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000189566",
+      "nombre": "ESTEFANNY URIBE JARAMILLO     ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 2363724.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000204213",
+      "nombre": "MATEO RAIGOZA                 ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 875453.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1000290562",
+      "nombre": "JHON WILSON HERNANDEZ MARMOLEJ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000414299",
+      "nombre": "SEBASTIAN RESTREPO LOPERA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1000565416",
+      "nombre": "LUISA FERNANDA RESTREPO LOPERA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501809.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1000635823",
+      "nombre": "LICETH TATIANA ZAPATA CANAVERA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2918177.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000638420",
+      "nombre": "SIMON VELASQUEZ MONTOYA       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000746534",
+      "nombre": "MARIANA GONZALEZ VALENCIA     ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 120000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1000806901",
+      "nombre": "AIXA LORENA SUAREZ CANON      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1000900259",
+      "nombre": "ANDREA ZAPATA MUNOZ           ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000914286",
+      "nombre": "PAULINA RUIZ                  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1000914573",
+      "nombre": "JHONY ALEXANDER CANOLA MONTOYA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001035384",
+      "nombre": "FANNY JANETH GOMEZ ARRIETA    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001228474",
+      "nombre": "DANIEL ALBERTO OSPINA ZARZA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1750905.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1001233943",
+      "nombre": "DEISY PAOLA MOSQUERA PALACIOS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3151627.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001235983",
+      "nombre": "SARA MANUELA SERNA BOLIVAR    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443445.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001268814",
+      "nombre": "LINA MARCELA TORRES SANCHEZ   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3296667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001360053",
+      "nombre": "JUAN PABLO TABORDA VILLEGAS   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001456813",
+      "nombre": "ESTIBEN MORALES REINOSA       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001652728",
+      "nombre": "ANDREA CIRO VILLA             ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001748254",
+      "nombre": "YENNY JOHANA GALLEGO HENAO    ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4200000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001773947",
+      "nombre": "MARIA ALEJANDRA RIVERA        ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 50000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1001835581",
+      "nombre": "ROXANA MURILLO HERNANDEZ      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3151628.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1001918773",
+      "nombre": "ALEX DANIEL LOAIZA HOYOS      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1003243878",
+      "nombre": "KAROL MICHELL YAGUANA DIAZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1003368295",
+      "nombre": "MARIA ALEJANDRA MEJIA DIAZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3268357.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1003785918",
+      "nombre": "LUZ ADRIANA ARROYO RODRIGUEZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1005086637",
+      "nombre": "SARA CAMILA RANGEL LIEVANO    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1750904.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1006697385",
+      "nombre": "JULIAN ALEXANDER ALFONSO SALAZ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3875452.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1006993321",
+      "nombre": "LEIDY MILENA USECHE CARRENO   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385081.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1007055076",
+      "nombre": "VALENTINA MESA RIOS           ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3268358.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "1007243863",
+      "nombre": "JERSON OSPINA MONSALVE        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4523333.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1007247708",
+      "nombre": "YESSICA YULIER PULGARIN ARCILA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1007286664",
+      "nombre": "EMANUEL MARTINEZ MARIN        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1007570602",
+      "nombre": "CHAIRA VANESA TORRES PEREZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501809.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1007870519",
+      "nombre": "JOELY GISSEL GAMBOA ZAMORA    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3066668.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1007934926",
+      "nombre": "KELLY JOHANA LEZCANO RENTERIA ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1007959147",
+      "nombre": "CATERINE BOLIVAR ORTIZ        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3875453.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1010053523",
+      "nombre": "DANETH LUCIA DIAZ MORENO      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3151631.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1010077463",
+      "nombre": "YERALDIN JARAMILLO ZAPATA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1011392001",
+      "nombre": "GEOVANNY ANDRES DORADO PEREZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1011395329",
+      "nombre": "TOMAS GONZALEZ CARTAGENA      ",
+      "cuenta_gasto": "51954501",
+      "cuenta_nombre": "TAXIS Y BUSES                 ",
+      "total_historico": 222000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1013367300",
+      "nombre": "GISELA ASTRID BARBOZA RUIZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3800000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1013584827",
+      "nombre": "MARIA CAROLINA PEREZ VELASCO  ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 143000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1013605872",
+      "nombre": "JOHN EVER GIRALDO VALENCIA    ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 64000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1015189961",
+      "nombre": "KAROL MANUELA OSORIO MORENO   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2683333.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1017137138",
+      "nombre": "LEIDY CAROLINA ROJO ORTIZ     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1459089.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1017164118",
+      "nombre": "YURI PATRICIA GARCIA LONDONO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1017164366",
+      "nombre": "YUDY MARCELA ALVAREZ GIRALDO  ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5400000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1017216698",
+      "nombre": "YAMILE VANESA ROJO ORTIZ      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1017226195",
+      "nombre": "RICARDO RUEDA                 ",
+      "cuenta_gasto": "73952001",
+      "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
+      "total_historico": 700000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1017231011",
+      "nombre": "JULIANA CANAS ESCOBAR         ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2220000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1017231594",
+      "nombre": "YINESSA SEPULVEDA PEREZ       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1017237686",
+      "nombre": "SARAY YESELY MURILLO AREIZA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3209991.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1017249586",
+      "nombre": "LUISA FERNANDA HENAO ARENAS   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4216667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1017281667",
+      "nombre": "DIANA PAOLA VERA RIBON        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 525272.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1017927767",
+      "nombre": "ISABELLA VILLEGAS DE ROUX     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 413850.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1019013274",
+      "nombre": "ALEXANDRA ROJAS LAGUNA        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1020109449",
+      "nombre": "MARIANA ROMERO ALMANZA        ",
+      "cuenta_gasto": "72050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 3501809.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1020408171",
+      "nombre": "MARIA ISABEL CELIS MUNETON    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501810.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "1020418928",
+      "nombre": "DIANA CATALINA CASTRILLON CAST",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1400724.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1020422454",
+      "nombre": "ANA CATALINA LONDONO TABARES  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 230000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1020430210",
+      "nombre": "OMAR DAVID CORDOBA LEMUS      ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 1094316.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1020444303",
+      "nombre": "LADY YULIANA NARVAEZ SAENZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1020456513",
+      "nombre": "FABIAN CORREA RIOS            ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 355400.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1020466768",
+      "nombre": "LEIDY MANUELA JIMENEZ RUA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3143333.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1020488690",
+      "nombre": "ANNY DANIELA ARCILA HOYOS     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1020733507",
+      "nombre": "DANIEL YEPES VELEZ            ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2240000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1021804785",
+      "nombre": "LUNA RIVERA GOMEZ             ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3268355.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1022035438",
+      "nombre": "ELIZABETH OCAMPO AGUIRRE      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1022062197",
+      "nombre": "MARIANO ALCIDES ZAPATA ALVAREZ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3151628.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1022094323",
+      "nombre": "YEISON ANDRES RUIZ RAMIREZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443447.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1023522636",
+      "nombre": "ANA SOFIA ARBOLEDA CIRO       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1024582356",
+      "nombre": "JHON ESTEAVEN PEREZ BECERRA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1342360.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1025647937",
+      "nombre": "WILMAR ALEXANDER PORRAS GOMEZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2042724.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1025892355",
+      "nombre": "SEBASTIAN MUNOZ LOPEZ         ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 2451269.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1026061798",
+      "nombre": "KERLY TATIANA VELEZ CRUZ      ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 525271.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1026061925",
+      "nombre": "ANA MARIA TORO TORRES         ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1026130155",
+      "nombre": "JHON EDISON GAVIRIA CARDONA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4960900.0,
+      "n_facturas": 12
+    },
+    {
+      "nit": "1026135117",
+      "nombre": "ELIZABETH PEREZ MORENO        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1027881662",
+      "nombre": "DIANA MARCELA RUIZ QUICENO    ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 8000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1030556576",
+      "nombre": "WILMER HERNANDEZ ROMERO       ",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 52850000.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1032257679",
+      "nombre": "DAVID DE JESUS MARTINEZ LUCAS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1033179032",
+      "nombre": "JANSI PAULINA RIOS CEBALLOS   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3268355.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1033487631",
+      "nombre": "SEBASTIAN MONTOYA ACEVEDO     ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2000000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1033646060",
+      "nombre": "ESTEFANIA TORRES SANCHEZ      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3209994.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1033646662",
+      "nombre": "ANDRES LEANDRO ERASO TABORDA  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1033649298",
+      "nombre": "ANDRES FELIPE RESTREPO VELEZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3268357.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1033649305",
+      "nombre": "YURI ANDREA TOBON VASCO       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2392905.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1034312431",
+      "nombre": "BRAYAN ALEXANDER MARTINEZ RIVE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 153333.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1035003670",
+      "nombre": "MIGUEL MORENO RODRIGUEZ       ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 13950000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1035390135",
+      "nombre": "CARLOS ANDRES DUQUE GUTIERREZ ",
+      "cuenta_gasto": "72047001",
+      "cuenta_nombre": "APORTES FONDOS PENSION Y CESAN",
+      "total_historico": 188048.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1035414478",
+      "nombre": "JUAN ESTEBAN ISAZA HINCAPIE   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 291818.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1035419224",
+      "nombre": "GLORIA ELENA PALACIOS         ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 6900000.01,
+      "n_facturas": 12
+    },
+    {
+      "nit": "1035520796",
+      "nombre": "ELIANA ANDREA HOYOS QUINTTERO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1035862159",
+      "nombre": "LUISA FERNANDA CADAVID CATANO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1035875225",
+      "nombre": "DIANA LORENA MADRIGAL MIRA    ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 1094316.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1035911024",
+      "nombre": "JUAN RICARDO HENAO HENAO      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1035911201",
+      "nombre": "ALBA GLORIA GALLEGO GUTIERREZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2392903.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036402283",
+      "nombre": "LINEY YORLADY GALLEGO ARENAS  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 653333.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1036608981",
+      "nombre": "ALEJANDRA DUQUE VASQUEZ       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385082.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1036637817",
+      "nombre": "CHANCI CARRASCAL XIOMARA      ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 2586802.0,
+      "n_facturas": 13
+    },
+    {
+      "nit": "1036640973",
+      "nombre": "SIMON MEJIA MORALES           ",
+      "cuenta_gasto": "51201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 2448036.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1036652359",
+      "nombre": "SEBASTIAN CORREA ZAPATA       ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 516700.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1036674042",
+      "nombre": "ANDRES FELIPE VALLEJO GIRALDO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1036690605",
+      "nombre": "BLANCA ZULAY ZAMBRANO RODRIGUE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 400000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1036782352",
+      "nombre": "ELSA LILIANA OSPINA GARCIA    ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4400000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036936849",
+      "nombre": "SARA XIMENA ACEVEDO ZULUAGA   ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 1094316.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1036942918",
+      "nombre": "CINDY LORENA GRISALEZ LOPEZ   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3326718.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036946436",
+      "nombre": "PAULA ANDREA MONSALVE HENAO   ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 6000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036953083",
+      "nombre": "VALERIA GARCIA SUAREZ         ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036954499",
+      "nombre": "BRAYAN JARAMILLO HENAO        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036962564",
+      "nombre": "LAURA ORTIZ FLOREZ            ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1036969124",
+      "nombre": "BELSY NOHEMI ORTIZ            ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443445.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1037072957",
+      "nombre": "ERIKA ALEJANDRA GOMEZ MARTINEZ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1037575434",
+      "nombre": "JUAN TABARES                  ",
+      "cuenta_gasto": "52356001",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
+      "total_historico": 15800002.0,
+      "n_facturas": 26
+    },
+    {
+      "nit": "1037604144",
+      "nombre": "CRISTIAN ALBERTO CASTRO ROJAS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 7000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1037609380",
+      "nombre": "JENNI ANDREA GIRALDO RUEDA    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2500000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1037948460",
+      "nombre": "GILBERTO ANTONIO ARIAS MUÑOZ  ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 551092.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1038338451",
+      "nombre": "LEDIS YULIETH PENA ARENAS     ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 2626360.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1038405196",
+      "nombre": "JOHN FABIO MONROY RAMIREZ     ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1833333.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1038410893",
+      "nombre": "ANYELI YURANI GOMEZ OSORIO    ",
+      "cuenta_gasto": "73956001",
+      "cuenta_nombre": "CASINO Y RESTAURANTE          ",
+      "total_historico": 22000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1038438881",
+      "nombre": "YOMAIRA MARIA SANCHEZ RIOS    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385081.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1039449931",
+      "nombre": "ANDRES CAMILO GOMEZ JARAMILLO ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 39000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1040034883",
+      "nombre": "JONATHAN DAVILA GRANADA       ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 11457000.0,
+      "n_facturas": 33
+    },
+    {
+      "nit": "1040036344",
+      "nombre": "MARIA CAMILA HENAO GOMEZ      ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 2626360.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1040037716",
+      "nombre": "ANDREA CORTES CASTANEDA       ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 2626360.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1040037965",
+      "nombre": "DIANA MARCELA VALENCIA VARGAS ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 922380.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1040043219",
+      "nombre": "ANA MARIA CASTRO ROJAS        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1040200877",
+      "nombre": "VANESA GONZALEZ CARTAGENA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501813.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "1040730350",
+      "nombre": "LINA YURANY FRANCO SANCHEZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1040744636",
+      "nombre": "YENNIFER ARENAS VALENCIA      ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4400000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1040747830",
+      "nombre": "MARIA CAMILA HENAO GRAJALES   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2451268.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "1040749443",
+      "nombre": "JUAN CAMILO ORREGO PEREZ      ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 178500.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1041257117",
+      "nombre": "VICTOR ALONSO HOYOS DIAZ      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2567995.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1041328722",
+      "nombre": "NATALIA ANDREA VERGARA MARTINE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2859811.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1041891910",
+      "nombre": "SANDRA PAOLA OSPINO CORTES    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1042467811",
+      "nombre": "JENNIFER CAROLINA PAZ VALDEZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2859812.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1043604226",
+      "nombre": "EDINSON JOSE SARABIA PADILLA  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1043613488",
+      "nombre": "JANEICYS PATRICIA SARABIA PADI",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1044662033",
+      "nombre": "YUADY LORENA MARTINEZ RUA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1045081330",
+      "nombre": "MARIA CAMILA LOPERA PEREZ     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501809.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1045420498",
+      "nombre": "YULISA YULIANA CARDONA MAZO   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1800000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1045423018",
+      "nombre": "LIZETH MILENA SAENZ NAVARRO   ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1100000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1047488341",
+      "nombre": "ROSA ELENA MURILLO TAPIAS     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1047498324",
+      "nombre": "MELISSA ANDREA GOMEZ AGUILAR  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 700362.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1054569852",
+      "nombre": "ANDREA PASOS                  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1733333.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1058970783",
+      "nombre": "MILVIA ESPERANZA SOLANO RUIZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3800000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1064191235",
+      "nombre": "KAREN VANESSA SEVERICHE HERNAN",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3209994.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1065635339",
+      "nombre": "ANTONY JUNIOR POLO FADUL      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443445.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1065671877",
+      "nombre": "LESSLIE VICTORIA RUIDO PEREZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 600000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1065828093",
+      "nombre": "JORGE ENRIQUE PEDROZO ANGEL   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 758726.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1067591265",
+      "nombre": "OSMEL MATEO FERNANDEZ SAUMETH ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3326721.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1067863708",
+      "nombre": "HALIME PENICHE FAJARDO        ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1069476374",
+      "nombre": "YULIANA HOYOS BASILIO         ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501809.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1069502771",
+      "nombre": "OSCAR EDUARDO SENA CALDERON   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "107285653",
+      "nombre": "OSCAR ALBERTO CHAVEZ GALINDO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2567995.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1073322610",
+      "nombre": "KELLY ALEXANDRA MORALES PEREZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2509632.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1074011962",
+      "nombre": "ERIKA PATRICIA VASQUEZ MONTERR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3326721.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1076328899",
+      "nombre": "JESSICA KARINA HINESTROZA TORR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1076384712",
+      "nombre": "NALIA YARLEY HURTADO PALACIOS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "1077423455",
+      "nombre": "JUAN PABLO GALLEGO ALZATE     ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3080000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1077430588",
+      "nombre": "CARLOS ANDRES MOSQUERA PEREA  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3268354.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1077449546",
+      "nombre": "YESSENIA PALOMEQUE VALENZUELA ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2567996.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1083555006",
+      "nombre": "NASDI MILETH BARAJAS SERRANO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2334540.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1085044974",
+      "nombre": "NICOLLE MARTINEZ VILLA        ",
+      "cuenta_gasto": "51050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 992179.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1090383172",
+      "nombre": "ALIX GRACIELA HERNANDEZ CRISTA",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1093768609",
+      "nombre": "ANDERSON RAUL JAIMES MANJARRES",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1096623",
+      "nombre": "RODOLFO DEL ROSARIO PENA CALDE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1099964",
+      "nombre": "WILMARY YULEXI OROPERZA URQUIO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1102808046",
+      "nombre": "MARCELINA MADITH HUERTAS ACOST",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 641999.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1105790687",
+      "nombre": "YENNIFER MEJIA MUNOZ          ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1114786986",
+      "nombre": "NATALIA RAMIREZ ECHEVERRY     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501810.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1115185443",
+      "nombre": "ANDRES MAURICIO GONZALEZ      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1117018857",
+      "nombre": "DANNA LIZETH GONZALEZ ARBOLEDA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2276178.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1120217325",
+      "nombre": "ANA LUCIA SALCEDO JOJOA       ",
+      "cuenta_gasto": "72047001",
+      "cuenta_nombre": "APORTES FONDOS PENSION Y CESAN",
+      "total_historico": 169821.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1120749359",
+      "nombre": "LUISA ELENA TORRES MUEGUES    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2801450.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1121202825",
+      "nombre": "LINO PERCY MACEDO DIAZ        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3093264.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1123202611",
+      "nombre": "VALENTINA CANO HENAO          ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2743083.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1127579199",
+      "nombre": "SIRLY MAYGLIN VILLAMIZAR QUINT",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1127923139",
+      "nombre": "MAIKER ALBERTO AMAYA BUITRIAGO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1128225666",
+      "nombre": "ANDREA NATHALY LONDOÑO JEREZ  ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1335000.0,
+      "n_facturas": 14
+    },
+    {
+      "nit": "1128273832",
+      "nombre": "CATALINA JARAMILLO ACOSTA     ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 22521.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1128394459",
+      "nombre": "KELLY JOHANNA RIOS PINEDA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1128404220",
+      "nombre": "ISABEL CRISTINA FRANCO LOPEZ  ",
+      "cuenta_gasto": "73352501",
+      "cuenta_nombre": "ACUEDUCTO Y ALCANTARILLADO    ",
+      "total_historico": 282552.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1128418395",
+      "nombre": "DANIELA MEJIA MORALES         ",
+      "cuenta_gasto": "51201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 2448036.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1128427305",
+      "nombre": "LEIDY JOHANA PATINO CORREA    ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 636958.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1128430900",
+      "nombre": "JOHAN ALEXIS MUNOZ SANCHEZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385085.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1128441713",
+      "nombre": "LEIDY JOHANNA BEDOYA PEREZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501809.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "1128445991",
+      "nombre": "ANDRES FELIPE POSADA TORRES   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501809.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1128452978",
+      "nombre": "CARLOS ANDRES PERDOMO AGUDELO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3850000.02,
+      "n_facturas": 8
+    },
+    {
+      "nit": "1128482442",
+      "nombre": "SINDY CAROLINA ARIAS TAFUR    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443448.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1129536485",
+      "nombre": "ANA ISABEL TOVAR VIDAL        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2334542.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1129542260",
+      "nombre": "LIZ VALENTINA ALMARALES PADILL",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "1133679239",
+      "nombre": "MARIBEL QUINTO QUINTO         ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1137219597",
+      "nombre": "SUGEIDYS SERRANO RODRIGUEZ    ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1173333.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1140425914",
+      "nombre": "CESAR CARLOS ANDRES TOVAR SUAR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 466908.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1140886208",
+      "nombre": "JURANIS JULIETH CONTRERAS TAPI",
+      "cuenta_gasto": "73956001",
+      "cuenta_nombre": "CASINO Y RESTAURANTE          ",
+      "total_historico": 108500.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1140899624",
+      "nombre": "DAVID JUNIOR PACHECO MARTINEZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385085.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1140907746",
+      "nombre": "WILEIDYS MARIA STEVENSON MARTI",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1146434326",
+      "nombre": "DEYCI YOHANA GARCIA HERNANDEZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3093264.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1146440045",
+      "nombre": "YURY MANUELA GUTIERREZ MUNOZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1152191650",
+      "nombre": "ERIKA SIRLEY ZAPATA MUNOZ     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 466908.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1152210289",
+      "nombre": "JOSE DAVID ATEHORTUA LOPEZ    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 872900.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1152437102",
+      "nombre": "JESSICA ANDREA MONTOYA ZULUAGA",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 8000000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1152464739",
+      "nombre": "ALEXANDRA AVENDANO POSADA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2334541.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1152467164",
+      "nombre": "JUAN DAVID CHALARCA GONZALES  ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 71400.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1152684937",
+      "nombre": "STEVER MONTOYA TABORDA        ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 3335000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "1152695105",
+      "nombre": "VERONICA MARIN CARVAJAL       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1152703859",
+      "nombre": "SANDRA NAHOMY GIL USUGA       ",
+      "cuenta_gasto": "72051501",
+      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS       ",
+      "total_historico": 623796.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1152705023",
+      "nombre": "LIZETH POENIS MOLINA MOLINA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1193120856",
+      "nombre": "CAMILA ALEJANDRA QUINTERO ZAPA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3034902.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1193124567",
+      "nombre": "MARTHA YULIANA LOZANO HURTADO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2101085.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1193485151",
+      "nombre": "DELCY CAMILA GAFARO GARCES    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1193549320",
+      "nombre": "ELSA MARIA AVILA ALQUETA      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443445.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1216717435",
+      "nombre": "YEISON ANDRES JIMENEZ PERDIGA ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 260000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1216726577",
+      "nombre": "LORENA GUTIERREZ MUNOZ        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5252713.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "1235046045",
+      "nombre": "MONICA ESTHER GOMEZ PACHECO   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1235241104",
+      "nombre": "DIANA CAROLINA HERRERA FERNAND",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1235247449",
+      "nombre": "ROSA AURORA PASION MONZANT    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4523333.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1235250785",
+      "nombre": "RICARDO RUBEN MARDACH MERCHAN ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4446667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1235983",
+      "nombre": "ANGELICA MARIA ARAUJO ALBARRAN",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3296667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1237440924",
+      "nombre": "GELBERT LUIS GALLARDO SIMANACA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "1239861",
+      "nombre": "JOSE MIGUEL GUTIERREZ HURTADO ",
+      "cuenta_gasto": "72051501",
+      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS       ",
+      "total_historico": 171799.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "12447804",
+      "nombre": "JOSE ANTONIO AREVALO RUIZ     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4325452.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1282086",
+      "nombre": "YORBELIS RIVERO CALDERA       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1411929",
+      "nombre": "JORGELIS PALMAR PALMAR        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1429900",
+      "nombre": "KARLA ALEJANDRA SIERRA ARAUJO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600001.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "1441598",
+      "nombre": "GENESIS SAHARA FINOL HERNANDEZ",
+      "cuenta_gasto": "72047001",
+      "cuenta_nombre": "APORTES FONDOS PENSION Y CESAN",
+      "total_historico": 319673.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "14567332",
+      "nombre": "JULIAN DAVID SALDARRIAGA ORTIZ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 13000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1479911",
+      "nombre": "DAYANA BEATRIZ LUGO BORGES    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2334539.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "1489904",
+      "nombre": "JESUS RAFAEL MARCANO          ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4013333.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "15375176",
+      "nombre": "RUBEN DARIO ANGEL BERNAL      ",
+      "cuenta_gasto": "51953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 179244.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "1539671",
+      "nombre": "LUIS DAVID ORTEGA UZCATEGUI   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1809268.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "15436399",
+      "nombre": "LEON EMILIO GOMEZ GARCIA      ",
+      "cuenta_gasto": "73954501",
+      "cuenta_nombre": "TAXIS Y BUSES                 ",
+      "total_historico": 80000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "15444977",
+      "nombre": "DAVID ALEXANDER VELEZ GIRALDO ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 391000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "15448475",
+      "nombre": "JUAN PABLO QUINTERO LÓPEZ     ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 196179.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1785719",
+      "nombre": "YUMANI JOSE SUAREZ            ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "1840743",
+      "nombre": "YSIADUY GATTINELLA PEREZ      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 533333.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "2085524",
+      "nombre": "YINNEL ALEJANDRA PEREZ AGUILAR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443448.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "21428750",
+      "nombre": "CLARA CECILIA PEREZ MUNOZ     ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2392903.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "21667787",
+      "nombre": "BLANCA INES GOMEZ SANCHEZ     ",
+      "cuenta_gasto": "73452001",
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
+      "total_historico": 155463.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "21788609",
+      "nombre": "GLORIA CECILIA CASTAÑO RINCON ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 68740.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "21895633",
+      "nombre": "CLAUDIA ELENA CARDONA OROZCO  ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 21849.03,
+      "n_facturas": 2
+    },
+    {
+      "nit": "222222222",
+      "nombre": "VARIOS                        ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 440622.0,
+      "n_facturas": 20
+    },
+    {
+      "nit": "22222222222",
+      "nombre": "CONSUMIDOR FINAL              ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 265100.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "2312806",
+      "nombre": "ORLANDO JOSE HERNANDEZ VARGAS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2392904.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "25180779",
+      "nombre": "SANDRA MILENA MONTOYA BUSTAMAN",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 520000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "26202226",
+      "nombre": "SENERIS DEL CARMEN HERNANDEZ N",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2451267.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "2736088",
+      "nombre": "KATHERIN JENNICSET QUINONES MO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "27839689",
+      "nombre": "ILDA MARIA ALBA BOTELLO       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3800000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "28565687",
+      "nombre": "SORLEY ELENA ACOSTA COLMENARES",
+      "cuenta_gasto": "51956001",
+      "cuenta_nombre": "CASINO Y RESTAURANTE          ",
+      "total_historico": 10084.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "30306516",
+      "nombre": "ROSA CAROLINA ORTEGA CRUZ     ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 3600.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "30580243",
+      "nombre": "CARMEN ELENA MARTINEZ URANGO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3443448.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "31426607",
+      "nombre": "MARIA VICTORIA CANO ORTIZ     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5599999.99,
+      "n_facturas": 8
+    },
+    {
+      "nit": "31428447",
+      "nombre": "MARIA NOEMI CASTANEDA RUIZ    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1108908.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "31940257",
+      "nombre": "SANDRA MILLAN ORTEGA          ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 6175440.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "3207198",
+      "nombre": "CARLOS JESUS GIMENEZ GUTIERREZ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4293333.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "32111361",
+      "nombre": "ANA SOLEDAD CASTRILLON CONTRER",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2859810.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "32135618",
+      "nombre": "BIBIANA YAMILE ARBOLEDA ZAPATA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3733333.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "32141068",
+      "nombre": "LINA MARIA PEREA VASQUEZ      ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 480000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "32183053",
+      "nombre": "MARCELA ALEJANDRA AMAYA CANAS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2859813.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "32205663",
+      "nombre": "BETHA TULIA ARANGO VERGARA    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 390000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "32352648",
+      "nombre": "NYNY JOHANA CARO MONTOYA      ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 14790000.0,
+      "n_facturas": 146
+    },
+    {
+      "nit": "32459433",
+      "nombre": "CARMEN ELENA RAMIREZ SANTAMARI",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 102689.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "32790203",
+      "nombre": "MIRELLA PATRICIA HOYOS HOYOS  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3866667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "3383587",
+      "nombre": "JULIAN FELIPE RESTREPO ORTIZ  ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 139200.0,
+      "n_facturas": 14
+    },
+    {
+      "nit": "3438595",
+      "nombre": "DARIO ALONSO ORREGO ZAPATA    ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 163866.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "3709027",
+      "nombre": "EURIMAR DEL VALLE BRACHO MONZO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "3818854",
+      "nombre": "MERLEYIN POLEO ROOS           ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3626357.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "39280897",
+      "nombre": "YORLADY DEL CARMEN MENDOZA VER",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "39288829",
+      "nombre": "MAYURIS OLAYA NAVARRO         ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 116727.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "39413070",
+      "nombre": "FANNY MARIA GOMEZ GUISALES    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "39446248",
+      "nombre": "BEATRIZ ELENA GOMEZ HINCAPIE  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "39451723",
+      "nombre": "ISABEL CRISTINA GALLEGO GALLEG",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 7200000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "39457582",
+      "nombre": "YESENIA TATIANA ALVAREZ ARBOLE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "39705277",
+      "nombre": "OLGA MARIA CANO CIFUENTES     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3800000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "4149950",
+      "nombre": "YALIMAR CAROLINA RODRIGUEZ ROQ",
+      "cuenta_gasto": "72047001",
+      "cuenta_nombre": "APORTES FONDOS PENSION Y CESAN",
+      "total_historico": 426987.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "42127578",
+      "nombre": "LUZ ANDREA CORREA VALENCIA    ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 13694094.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "42366892",
+      "nombre": "LEBIS MARIA PEREZ PINEDO      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 291818.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "4261570",
+      "nombre": "ANA GABRIELA BETANCOURT RIVERO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "42793574",
+      "nombre": "LUZ MARINA ORTIZ  BEDOYA      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "42967519",
+      "nombre": "OLGA CECILIA MANRIQUE GUTIERRE",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 870000.0,
+      "n_facturas": 25
+    },
+    {
+      "nit": "43001662",
+      "nombre": "ANA LUCIA MACHADO             ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 38100.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43008748",
+      "nombre": "GLORIA MARIA HERRERA ESCOBAR  ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 112000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43051374",
+      "nombre": "MARIA EUGENIA ESPINAL LONDOÑO ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 235000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43105368",
+      "nombre": "YOLANDA GARCIA DUQUE ARIAS    ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 705887.0,
+      "n_facturas": 23
+    },
+    {
+      "nit": "43168030",
+      "nombre": "ROSALINA CALDERON BUITRAGO    ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 400000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43169330",
+      "nombre": "ADRIANA ALVAREZ SALAZAR       ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 23000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43187782",
+      "nombre": "YAMILETH GRANADA ANGEL        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3526667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43189981",
+      "nombre": "DEYSI CAROLINA AGUIRRE GALEANO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385081.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "43277778",
+      "nombre": "CLAUDIA YURAMY VARGAS VARGAS  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3326719.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "43404851",
+      "nombre": "MARIA NOELIA GIRALDO          ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 53500.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43431461",
+      "nombre": "ANGELA MONTOYA BURGOS         ",
+      "cuenta_gasto": "73103501",
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "total_historico": 1700000.0,
+      "n_facturas": 26
+    },
+    {
+      "nit": "43454693",
+      "nombre": "LLENIFER PATRICIA LIBREROS GUZ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3326718.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43470085",
+      "nombre": "LUCIA DEL CARMEN GOMEZ GOMEZ  ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 327874.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "43470499",
+      "nombre": "LUZ ELENA RAMIREZ GOMEZ       ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 8557192.0,
+      "n_facturas": 12
+    },
+    {
+      "nit": "43487557",
+      "nombre": "LUZ NELLY SALDARRIAGA MORENO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43490386",
+      "nombre": "MARIA OFIR TOBON PULGARIN     ",
+      "cuenta_gasto": "73359505",
+      "cuenta_nombre": "LOS OLIVOS PARK- COCINA CDP ML",
+      "total_historico": 1404470.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "43491506",
+      "nombre": "SANDRA MILENA FORONDA MEJIA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 116727.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43526315",
+      "nombre": "GLORIA CECILIA SALAZAR MARTINE",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 66386.17,
+      "n_facturas": 2
+    },
+    {
+      "nit": "43558936",
+      "nombre": "LINA PATRICIA HOLGUIN CARTAGEN",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2801450.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43565152",
+      "nombre": "ELIANA MARIA RENDON ORTIZ     ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 6975000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43578832",
+      "nombre": "ROSALIA GONZALEZ JARAMILLO    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2743084.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "43586553",
+      "nombre": "SILVIA LUCIA ARIAS ZAPATA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43601645",
+      "nombre": "CONSUELO MORENO FLOREZ        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43604187",
+      "nombre": "MARLY CRISTINA CASTILLO PARRA ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3151630.0,
+      "n_facturas": 10
+    },
+    {
+      "nit": "43604436",
+      "nombre": "CLARA DEL CARMEN DORIA TAPIAS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1867633.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "43656440",
+      "nombre": "YOHANA ANDREA DUQUE OLAYA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "43686484",
+      "nombre": "DORA ELENA ARANGO ZAPATA      ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5252716.0,
+      "n_facturas": 17
+    },
+    {
+      "nit": "43732473",
+      "nombre": "TATIANA ALVEAR MEJIA          ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 17198834.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "43831198",
+      "nombre": "MARIA ELENA PAZ OSPINA        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3800000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "43865772",
+      "nombre": "PAULA ANDREA MEDINA URREGO    ",
+      "cuenta_gasto": "72050501",
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "total_historico": 3501810.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "43866373",
+      "nombre": "LUZ DEISY GOMEZ GONZALEZ      ",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 4350000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "43878995",
+      "nombre": "MARIA ISABEL MONSALVE MONTOYA ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 16731300.0,
+      "n_facturas": 47
+    },
+    {
+      "nit": "43910171",
+      "nombre": "YEIMI JOHANA RODRIGUEZ        ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2392905.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "43970932",
+      "nombre": "JULIANA MARIA PASTRANA ORTIZ  ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 3355000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "43975199",
+      "nombre": "DIANA CRISTINA AGUDELO GALEANO",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 6000000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "43983215",
+      "nombre": "ANDREA CAROLINA MONTOYA CADAVI",
+      "cuenta_gasto": "73103501",
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "total_historico": 3400000.0,
+      "n_facturas": 26
+    },
+    {
+      "nit": "43991918",
+      "nombre": "MARYORI EUGENIA LONDONO ESPINA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1993333.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "4550660",
+      "nombre": "MARIA ALEJANDRA GUERRA ROSALES",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4100000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "4582016",
+      "nombre": "ANDERSSON WLADIMIR MOSQUERA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1750906.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "458206",
+      "nombre": "ANDERSON WLADIMIR MOSQUERA    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 641999.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "4782729",
+      "nombre": "GENESIS KARINA RODRIGUEZ YAJUR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1225634.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "4894058",
+      "nombre": "YULIMAR ALEXANDRA AVENDANO PIR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4446667.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "4945104",
+      "nombre": "ROSA NAGUANAGUA CHIRINO       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "4989254",
+      "nombre": "GLUZMELI LANDAETA SOLORZANO   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3385082.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "5024560",
+      "nombre": "ROSA HERNANDEZ                ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 641999.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "5061195",
+      "nombre": "GREYMAR KORALYS TORRES PALACIO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "50897148",
+      "nombre": "MYRIAM DEL CARMEN PEREZ PEREZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501814.0,
+      "n_facturas": 10
+    },
+    {
+      "nit": "5101864",
+      "nombre": "JEIKER GINARO MARTINEZ PINO   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 133333.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "5143102",
+      "nombre": "IBRAHIN JOSE FERMIN BELLORIN  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501810.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "5231994",
+      "nombre": "YOEL ENRIQUE MORALES FUENMAYOR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 58364.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "5248160",
+      "nombre": "ELAINIS DEL CARMEN CHAVEZ BECE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3733333.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "5263344",
+      "nombre": "NOHEMI PENA ROJAS             ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4493987.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "5292762",
+      "nombre": "YURITSE YHOMETH MUJICA OLIVIS ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 1984360.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "52968073",
+      "nombre": "CIRYS ELENA AMARIS CRUZ       ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "5333120",
+      "nombre": "BETTY DEIVI URDANETA GUANIPA  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3326718.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "5344336",
+      "nombre": "NOHELY SINAIS BRETT VILORIA   ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2392903.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "556703-7485",
+      "nombre": "SPOTY AB                      ",
+      "cuenta_gasto": "52356001",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
+      "total_historico": 113297.0,
+      "n_facturas": 23
+    },
+    {
+      "nit": "5631993",
+      "nombre": "YOSLEINIS ANDREINA CAMPOS MONT",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501813.0,
+      "n_facturas": 13
+    },
+    {
+      "nit": "5677597",
+      "nombre": "GABRIELA BEATRIZ CAMPOS MORLES",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600001.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "5694005",
+      "nombre": "YAKELINE SARAI GUTIERREZ ROJAS",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "57172160",
+      "nombre": "ROSIRIS MARIA URUETA PACHECO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "5827688",
+      "nombre": "MARIANGEL PAOLA FONG GONZALEZ ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "5898491",
+      "nombre": "YANITZA MARIFE MORALES IBARRA ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3093267.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "5943832",
+      "nombre": "CARLOS JACOME PEINADO         ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 60000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "5970135",
+      "nombre": "IRIS DANIELA SANCHEZ CASTILLO ",
+      "cuenta_gasto": "72051501",
+      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS       ",
+      "total_historico": 28552.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "5982473",
+      "nombre": "BEITA VENESSA NAVA RODRIGUEZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2859811.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "60446150",
+      "nombre": "ROSA ISBELIA BOTELLO PINA     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "6108832",
+      "nombre": "ALEJANDRO JOSUE ESPINOZA RAMIR",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2626356.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "6325647",
+      "nombre": "GERARDO MIGUEL SALAZAR CORAZZE",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4600000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "6493612",
+      "nombre": "MIROSLAVA HERNANDEZ GONZALEZ  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2042724.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "66982898",
+      "nombre": "SANDRA EMILCEN QUICENO ZULUAGA",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 99496.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "66992440",
+      "nombre": "ELDA NUBIA GOMEZ ARISTIZABAL  ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 45588.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "6771092",
+      "nombre": "ANA GABRIELA GARCIA CARIPE    ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "6879747",
+      "nombre": "MARIA ALEJANDRA VARGAS LIZCANO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "6993945",
+      "nombre": "EMILY YOSEFIN ROMERO PAOLOMBO ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 758726.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "700318538",
+      "nombre": "ARCHILA PARAGUAY ANTHONY JAMES",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 108000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70057689",
+      "nombre": "ORLANDO DE JESUS RIOS GRANDA  ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 380000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70073929",
+      "nombre": "JUAN ALBERTO MEJIA RESTERPO   ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 42186854.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "70129152",
+      "nombre": "NICOLAS ARTURO GOMEZ ROLDAN   ",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 110000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70290970",
+      "nombre": "CARLOS MARIO MUNOS ESTRADA    ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 103000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70300292",
+      "nombre": "IVAN DE JESUS ARANGO OCAMPO   ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 40000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70301754",
+      "nombre": "GUSTAVO MARIN ROJAS           ",
+      "cuenta_gasto": "73501001",
+      "cuenta_nombre": "ARREGLOS ORNAMENTALES         ",
+      "total_historico": 65000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70692652",
+      "nombre": "GUILLERMO MARIA ARCILA ZULUAGA",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 34121400.0,
+      "n_facturas": 149
+    },
+    {
+      "nit": "70829431",
+      "nombre": "ADOLFO LEON SALAZAR NARANJO   ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 58824.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "709765596",
+      "nombre": "CLEMENTE CATAÑO GARCIA        ",
+      "cuenta_gasto": "73952501",
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA    ",
+      "total_historico": 18000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "70978458",
+      "nombre": "JAIDER ESNEIDER PEREZ PEREZ   ",
+      "cuenta_gasto": "73452001",
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
+      "total_historico": 75630.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "71005249",
+      "nombre": "JABER ANDRES TABORDA GARCIA   ",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 329000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "7108364",
+      "nombre": "VALERIA ALEJANDRA MARTINEZ ROD",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2042724.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "71111818",
+      "nombre": "FRANCISCO JAVIER ALZATE LOPEZ ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1719286.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "71379195",
+      "nombre": "WILSON HERNANDO RUIZ GRAJALES ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 6880000.0,
+      "n_facturas": 27
+    },
+    {
+      "nit": "71389923",
+      "nombre": "ANDRES FELIPE PEREZ           ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 2918175.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "71395560",
+      "nombre": "WALTER ORLANDO CARDONA GALLO  ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5400000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "71607639",
+      "nombre": "FABIO ALBERTO ARANGO MEJIA    ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 35386710.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "71645587",
+      "nombre": "JUAN CARLOS MONTOYA LOPEZ     ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5000000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "71677909",
+      "nombre": "CARLOS MARIO ZAPATA SALAZAR   ",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 180000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "71679866",
+      "nombre": "HUMBERTO DE JESUS HINCAPIE BE ",
+      "cuenta_gasto": "73952001",
+      "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
+      "total_historico": 700000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "71681166",
+      "nombre": "GABRIEL JAIME ARANGO BERMUDEZ ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 3876000.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "71698337",
+      "nombre": "JAIME ALBERTO RESTREPO HOYOS  ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 3501400.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "71718208",
+      "nombre": "JUAN JAIRO VELEZ ESPINAL      ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 79913.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "71726027",
+      "nombre": "ALEXANDER FABIAN AGUDELO GAVIR",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 439075.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "71726067",
+      "nombre": "GIOVANNY ANTONIO QUINTERO SAND",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 23360.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "71732332",
+      "nombre": "DUBER ARLEX MARQUEZ SANCHEZ   ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 454000.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "71740352",
+      "nombre": "JUAN DIEGO ZULUAGA BERMUDEZ   ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 16386.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "71741933",
+      "nombre": "EDWINSON TABARES PANESSO      ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 141600.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "71769971",
+      "nombre": "NESTOR ALONSO RESTREPO PIEDRAH",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3330000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "72274773",
+      "nombre": "ANDRES FELIPE GIRALDO YEPES   ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 2591.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "747394",
+      "nombre": "DOUGLAS JAVIER MOLINA ZAMBRANO",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501812.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "75102338",
+      "nombre": "DIDIER ALEXANDER MENDOZA OCAMP",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 98200.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "75103271",
+      "nombre": "JOAQUIN ELIAS HERNANDEZ TORRES",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5252718.0,
+      "n_facturas": 12
+    },
+    {
+      "nit": "77-0493581",
+      "nombre": "GOOGLE LLC                    ",
+      "cuenta_gasto": "52356001",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
+      "total_historico": 15051300.82,
+      "n_facturas": 24
+    },
+    {
+      "nit": "7798754",
+      "nombre": "IVAN JAVIER AGELVIS BAZAN     ",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 3501808.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "79319481",
+      "nombre": "GELBERT RAMOS ALARCON         ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 40000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800011002",
+      "nombre": "TECNAS S.A                    ",
+      "cuenta_gasto": "73954001",
+      "cuenta_nombre": "ENVASES Y EMPAQUES            ",
+      "total_historico": 88575.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800011924",
+      "nombre": "COPROPIEDAD CENTRAL MAYORISTA ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 85000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "800015551",
+      "nombre": "CAMARA DE COMERCIO DEL ORIENTE",
+      "cuenta_gasto": "73401001",
+      "cuenta_nombre": "REGISTRO MERCANTIL            ",
+      "total_historico": 4344987.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "800021811",
+      "nombre": "ORGANIZACION SAYCO ACINPRO    ",
+      "cuenta_gasto": "73253002",
+      "cuenta_nombre": "OTRAS AFILIACIONES Y SOSTENIMI",
+      "total_historico": 1343600.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800027374",
+      "nombre": "C.I. TALSA                    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 354522.07,
+      "n_facturas": 3
+    },
+    {
+      "nit": "800028002",
+      "nombre": "PANADERIA CHIPRE SAS          ",
+      "cuenta_gasto": "51952501",
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA    ",
+      "total_historico": 19500.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800049104",
+      "nombre": "LABORATORIO CLINICO COLMÉDICOS",
+      "cuenta_gasto": "72058401",
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
+      "total_historico": 6790300.0,
+      "n_facturas": 48
+    },
+    {
+      "nit": "800093761",
+      "nombre": "EMPRESA TRANSPORTADORA DE TAXI",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 790000.0,
+      "n_facturas": 11
+    },
+    {
+      "nit": "800109279",
+      "nombre": "SUTRAK S.A.S.                 ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 1670000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800136998",
+      "nombre": "LACTEOS BUENOS AIRES S.A.S    ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 33055695.0,
+      "n_facturas": 107
+    },
+    {
+      "nit": "800147520",
+      "nombre": "COMPEL S.A                    ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 8890.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800149246",
+      "nombre": "BAZAR AMERICANO S.A.S.        ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 7290.76,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800153993",
+      "nombre": "COMCEL SA                     ",
+      "cuenta_gasto": "73353601",
+      "cuenta_nombre": "INTERNET                      ",
+      "total_historico": 111751.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800157427",
+      "nombre": "CAMARA DE COMERCIO ABURRA SUR ",
+      "cuenta_gasto": "73401001",
+      "cuenta_nombre": "REGISTRO MERCANTIL            ",
+      "total_historico": 1624500.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "800194997",
+      "nombre": "DOCUPRINT S.A.S               ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 126480.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "800196439",
+      "nombre": "EMPRESA DE TAXIS SUPER SA     ",
+      "cuenta_gasto": "73954501",
+      "cuenta_nombre": "TAXIS Y BUSES                 ",
+      "total_historico": 64000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "800197268",
+      "nombre": "DIRECCION IMPTOS Y ADUANAS NAL",
+      "cuenta_gasto": "55052001",
+      "cuenta_nombre": "INTERESES MORA                ",
+      "total_historico": 957000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800198020",
+      "nombre": "CARNES CASABLANCA SAS         ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 6870124.0,
+      "n_facturas": 13
+    },
+    {
+      "nit": "800200243",
+      "nombre": "DISPRONAT S.A.S.              ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 765000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "800207760",
+      "nombre": "HELACO S.A                    ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1399440.0,
+      "n_facturas": 20
+    },
+    {
+      "nit": "800212423",
+      "nombre": "JASPIN SAS                    ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 27899.16,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800239610",
+      "nombre": "FERRETERIA LA REBAJA S.A.S.   ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 37952.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "800242106",
+      "nombre": "SODIMAC COLOMBIA SA           ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 1129579.48,
+      "n_facturas": 6
+    },
+    {
+      "nit": "800244310",
+      "nombre": "SUMINISTROS INDUSTRIALES S.A.S",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 113917.64,
+      "n_facturas": 2
+    },
+    {
+      "nit": "8030812",
+      "nombre": "CESAR ANDRES BOTERO LOPEZ     ",
+      "cuenta_gasto": "51050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4400000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "805006014",
+      "nombre": "DIRECTV COLOMBIA LTDA         ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 130000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "805021170",
+      "nombre": "AG TEX GROUP SAS              ",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 774453.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "80857959",
+      "nombre": "JEISSON  ANTONIO SASTOQUE VEGA",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 2940001.0,
+      "n_facturas": 25
+    },
+    {
+      "nit": "811003948",
+      "nombre": "COMERCIALIZADORA DE FRUTAS Y L",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 193408345.0,
+      "n_facturas": 856
+    },
+    {
+      "nit": "811005050",
+      "nombre": "DEVIMED S.A                   ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 67500.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "811006789",
+      "nombre": "JUAN D. HOYOS DISTRIBUCIONES  ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 252657617.0,
+      "n_facturas": 273
+    },
+    {
+      "nit": "811008644",
+      "nombre": "AGUALINDA S.A.                ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 27308150.0,
+      "n_facturas": 27
+    },
+    {
+      "nit": "811009788",
+      "nombre": "DISTRACOM SAS                 ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 177506.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811011781",
+      "nombre": "UMP DE COLOMBIA S.A.S.        ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 380520.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811012172",
+      "nombre": "CONCESION TUNEL ABURRA-ORIENTE",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 1282800.0,
+      "n_facturas": 9
+    },
+    {
+      "nit": "811020038",
+      "nombre": "ESTIBAS RETORNABLES DE COLOMBI",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 1835771.0,
+      "n_facturas": 16
+    },
+    {
+      "nit": "811021621",
+      "nombre": "PARQUE COMERCIAL EL TESORO P. ",
+      "cuenta_gasto": "73253001",
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "total_historico": 9638616.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "811023476",
+      "nombre": "RODAMAY E.U.                  ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 110256.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811027326",
+      "nombre": "BELL CHEM INTERNACIONAL S.A.S.",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 446500.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811029132",
+      "nombre": "ADH PAPELES ADHESIVOS S.A.S   ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 439648.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811029639",
+      "nombre": "COLOMBIANA DE PARAFINADOS S.A.",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 1943568.0,
+      "n_facturas": 22
+    },
+    {
+      "nit": "811033374",
+      "nombre": "LEGUMBRES HERIBERTO MONTES BED",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 2278200.0,
+      "n_facturas": 9
+    },
+    {
+      "nit": "811033997",
+      "nombre": "CDEM & CDEB S.A.S             ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 70001.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811035751",
+      "nombre": "FRESTOLU S.A.S.               ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 4383000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "811037075",
+      "nombre": "LACTEOS BETANIA S.A.          ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 377040432.0,
+      "n_facturas": 13
+    },
+    {
+      "nit": "811037857",
+      "nombre": "PRISMACOL S.A.S.              ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 4136425.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811045372",
+      "nombre": "COMERCIALIZADORA ANDIGRANOS S.",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 9117000.0,
+      "n_facturas": 9
+    },
+    {
+      "nit": "811045607",
+      "nombre": "INVERSIONES EURO S.A          ",
+      "cuenta_gasto": "52950501",
+      "cuenta_nombre": "COMISIONES PLATAFORMA         ",
+      "total_historico": 917981.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "811047008",
+      "nombre": "IFCO SYSTEMS COLOMBIA S.A.S.  ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 25851226.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "811047049",
+      "nombre": "COOPERATIVA DE TAXIS INDIVIDUA",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 61000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "8224588",
+      "nombre": "LUIS FERNANDO MONTOYA MONTOYA ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 251768.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "8226249",
+      "nombre": "MICELANIA EL CANARIO ROJO     ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 6723.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "830037946",
+      "nombre": "PANAMERICANA LIBRERIA Y PAPELE",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 33529.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "830039295",
+      "nombre": "INSSA SAS                     ",
+      "cuenta_gasto": "52201501",
+      "cuenta_nombre": "ARRENDAM. MAQUINARIA Y EQUIPO ",
+      "total_historico": 2452730.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "830053812",
+      "nombre": "ALIANZA FIDUCIARIA S.A.       ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 62009562.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "830114921",
+      "nombre": "COLOMBIA MOVILM S.A EPS       ",
+      "cuenta_gasto": "51353501",
+      "cuenta_nombre": "TELEFONO                      ",
+      "total_historico": 33428.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "830129327",
+      "nombre": "FARMATODO COLOMBIA S.A.       ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 21765.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "830512776",
+      "nombre": "COMERCIALIZADORA DE REPUESTOS ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 66500.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "830513729",
+      "nombre": "COMBUSTIBLES DE COLOMBIA S.A. ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 1559447.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "8401658",
+      "nombre": "FREDY ALBERTO CARDONA HERNANDE",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 73319.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "8434168",
+      "nombre": "JUAN CARLOS OSPINA ARBOLEDA   ",
+      "cuenta_gasto": "73359502",
+      "cuenta_nombre": "CAMBIO DE MENUDA              ",
+      "total_historico": 2021200.0,
+      "n_facturas": 32
+    },
+    {
+      "nit": "860000615",
+      "nombre": "DISTRIBUIDORA CORDOBA SAS     ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 611480.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "860002964",
+      "nombre": "BANCO DE BOGOTA               ",
+      "cuenta_gasto": "53059501",
+      "cuenta_nombre": "GRAVAMEN 4 X 1.000            ",
+      "total_historico": 392451.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "860003020",
+      "nombre": "BANCO BILBAO VIZCAYA ARGENTARI",
+      "cuenta_gasto": "53052001",
+      "cuenta_nombre": "INTERES PRESTAMO BANCARIO     ",
+      "total_historico": 9802577.93,
+      "n_facturas": 3
+    },
+    {
+      "nit": "860033653",
+      "nombre": "IMPORTADORA DE FERRETERIA SAS ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 4100.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "8767141",
+      "nombre": "ESTIVI ENRIQUE SARMIENTO BOLAN",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 4000000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890100577",
+      "nombre": "AEROVIAS DEL CONTINENTE AMERIC",
+      "cuenta_gasto": "51551501",
+      "cuenta_nombre": "PASAJES AEREOS                ",
+      "total_historico": 1590200.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "890300225",
+      "nombre": "COEXITO S.A.S.                ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 1106990.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "890317339",
+      "nombre": "PALLOMARO SAS                 ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 273000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "890321151",
+      "nombre": "CARVAJAL TECNOLOGIA Y SERVICIO",
+      "cuenta_gasto": "52202501",
+      "cuenta_nombre": "ARRENDAM.PLATAFORMAS          ",
+      "total_historico": 320705.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "890401802",
+      "nombre": "PROSEGUR VIGILANCIA Y SEGURIDA",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 1279292.0,
+      "n_facturas": 12
+    },
+    {
+      "nit": "890704196",
+      "nombre": "AEROVIAS DE INTEGRACION REGION",
+      "cuenta_gasto": "73559501",
+      "cuenta_nombre": "TIQUETES Y OTROS GTOS VIAJES  ",
+      "total_historico": 1265800.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890900085",
+      "nombre": "LOCERIA COLOMBIANA S.A.S      ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 268134.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890900099",
+      "nombre": "INDUSTRIAS ESTRA S.A          ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 14118.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "890900608",
+      "nombre": "ALMACENES EXITO               ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 22252148.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890900943",
+      "nombre": "COLOMBIANA DE COMERCIO S.A.   ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 117563.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "890903858",
+      "nombre": "INDUSTRIA NACIONAL DE GASEOSAS",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 849994.0,
+      "n_facturas": 14
+    },
+    {
+      "nit": "890903938",
+      "nombre": "BANCOLOMBIA S.A.              ",
+      "cuenta_gasto": "53051501",
+      "cuenta_nombre": "COMISIONES TARJETAS           ",
+      "total_historico": 31860509.59,
+      "n_facturas": 24
+    },
+    {
+      "nit": "890903939",
+      "nombre": "POSTOBON S.A.                 ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 45719751.07,
+      "n_facturas": 321
+    },
+    {
+      "nit": "890904169",
+      "nombre": "ALBERTO ALVAREZ S.S.A         ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 9223263.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "890904478",
+      "nombre": "COOPERATIVA COLANTA           ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 963653.0,
+      "n_facturas": 14
+    },
+    {
+      "nit": "890904996",
+      "nombre": "EMPRESAS PUBLICAS DE MEDELLIN ",
+      "cuenta_gasto": "73353001",
+      "cuenta_nombre": "ENERGIA ELECTRICA             ",
+      "total_historico": 65254798.58,
+      "n_facturas": 25
+    },
+    {
+      "nit": "890905080",
+      "nombre": "CAMARA DE COMERCIO DE MEDELLIN",
+      "cuenta_gasto": "73401001",
+      "cuenta_nombre": "REGISTRO MERCANTIL            ",
+      "total_historico": 10141600.0,
+      "n_facturas": 21
+    },
+    {
+      "nit": "890905211",
+      "nombre": "MUNICIPIO DE MEDELLIN         ",
+      "cuenta_gasto": "52150502",
+      "cuenta_nombre": "AUTO-RETENCION INDUSTRIA Y COM",
+      "total_historico": 29474264.4,
+      "n_facturas": 37
+    },
+    {
+      "nit": "890905730",
+      "nombre": "COOPERATIVA DE TRANSPORTADORES",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 1610000.0,
+      "n_facturas": 30
+    },
+    {
+      "nit": "890907106",
+      "nombre": "MUNICIPIO DE ENVIGADO         ",
+      "cuenta_gasto": "52150501",
+      "cuenta_nombre": "INDUSTRIA Y COMERCIO          ",
+      "total_historico": 10149218.469999999,
+      "n_facturas": 6
+    },
+    {
+      "nit": "890907317",
+      "nombre": "MUNICIPIO DE RIONEGRO ANTIOQUA",
+      "cuenta_gasto": "52150501",
+      "cuenta_nombre": "INDUSTRIA Y COMERCIO          ",
+      "total_historico": 10218879.67,
+      "n_facturas": 8
+    },
+    {
+      "nit": "890908822",
+      "nombre": "IGLU                          ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 6033020.0,
+      "n_facturas": 382
+    },
+    {
+      "nit": "890916575",
+      "nombre": "DISTRIBUIDORA DE VINOS Y LICO ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 15538815.0,
+      "n_facturas": 79
+    },
+    {
+      "nit": "890917780",
+      "nombre": "ELECTROQUIMICA WEST SA        ",
+      "cuenta_gasto": "71050401",
+      "cuenta_nombre": "COMPRAS ASEO                  ",
+      "total_historico": 5051346.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890922294",
+      "nombre": "PROTOKIMICA S.A.S.            ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 48000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "890923402",
+      "nombre": "JOSE FELIX ESCOBAR H & CIA LTD",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 3580129.05,
+      "n_facturas": 29
+    },
+    {
+      "nit": "890923716",
+      "nombre": "CENTRO COMERCIAL OVIEDO PH    ",
+      "cuenta_gasto": "73253001",
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "total_historico": 9655564.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890927034",
+      "nombre": "COLTEFINANCIERA S.A           ",
+      "cuenta_gasto": "53052001",
+      "cuenta_nombre": "INTERES PRESTAMO BANCARIO     ",
+      "total_historico": 13634517.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "890928257",
+      "nombre": "ALICO S.A.S. BIC              ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 532500.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "890932025",
+      "nombre": "ADMINISTRACION DE COPROPIEDADE",
+      "cuenta_gasto": "73253001",
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "total_historico": 4035428.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "890938492",
+      "nombre": "C I BODEGAS ALICANTE S.A.S    ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 1305158.0,
+      "n_facturas": 19
+    },
+    {
+      "nit": "890941663",
+      "nombre": "DISTRIBUIDORA PASTEUR S.A     ",
+      "cuenta_gasto": "72058401",
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
+      "total_historico": 127917.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "890941953",
+      "nombre": "VIVIENDAS Y PROYECTOS S.A     ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 29457294.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "890980112",
+      "nombre": "MUNICIPIO DE BELLO            ",
+      "cuenta_gasto": "52150502",
+      "cuenta_nombre": "AUTO-RETENCION INDUSTRIA Y COM",
+      "total_historico": 4877099.859999999,
+      "n_facturas": 4
+    },
+    {
+      "nit": "890981981",
+      "nombre": "ARSA E.S.P.                   ",
+      "cuenta_gasto": "73352501",
+      "cuenta_nombre": "ACUEDUCTO Y ALCANTARILLADO    ",
+      "total_historico": 1035081.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "891101577",
+      "nombre": "ALCANOS DE COLOMBIA S.A. E.S. ",
+      "cuenta_gasto": "73355501",
+      "cuenta_nombre": "GAS                           ",
+      "total_historico": 542440.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "891300382",
+      "nombre": "HARINERA DEL VALLE S. A.      ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 161510760.0,
+      "n_facturas": 21
+    },
+    {
+      "nit": "891408584",
+      "nombre": "FRISBY S.A. BIC               ",
+      "cuenta_gasto": "51453501",
+      "cuenta_nombre": "EQUIPO DE HOTELES Y RESTAURANT",
+      "total_historico": 101700.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900008783",
+      "nombre": "DISTRIBUIDORA Y COMERCIALIZADO",
+      "cuenta_gasto": "73954001",
+      "cuenta_nombre": "ENVASES Y EMPAQUES            ",
+      "total_historico": 361941.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900009803",
+      "nombre": "INMOBILIARIA GOMEZ Y ASOCIADOS",
+      "cuenta_gasto": "55052001",
+      "cuenta_nombre": "INTERESES MORA                ",
+      "total_historico": 120738.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900013851",
+      "nombre": "CACHARRERIA Y VARIEDADES MILEN",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 1063780.83,
+      "n_facturas": 5
+    },
+    {
+      "nit": "900017949",
+      "nombre": "OVOPRODUCTOS DE COLOMBIA S.A.S",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 10070000.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "900034424",
+      "nombre": "ELECTRONICA I+D S.A.S         ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 15800.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900040299",
+      "nombre": "ATLANTIC FS SAS               ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 294876015.0,
+      "n_facturas": 202
+    },
+    {
+      "nit": "900053344",
+      "nombre": "ENCOLOR S.A.S.                ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 128200.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900059238",
+      "nombre": "MAKRO SUPERMAYORISTA S.A.S    ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 24801143.0,
+      "n_facturas": 25
+    },
+    {
+      "nit": "900062992",
+      "nombre": "EVACOL S.A.S.                 ",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 742190.0,
+      "n_facturas": 14
+    },
+    {
+      "nit": "900070500",
+      "nombre": "GESAVAL SAS                   ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 19711412.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900076385",
+      "nombre": "RENT 10                       ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 1321849.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900088977",
+      "nombre": "CENTRO COMERCIAL LOS MOLINOS  ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 130313.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900092385",
+      "nombre": "UNE EPM TELECOMUNICACIONES SA ",
+      "cuenta_gasto": "73353601",
+      "cuenta_nombre": "INTERNET                      ",
+      "total_historico": 2685871.02,
+      "n_facturas": 17
+    },
+    {
+      "nit": "900150916",
+      "nombre": "PRODUCTOS SICURO S.A.S.       ",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 1277270.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900154900",
+      "nombre": "FAMILIAR DE REPUESTOS LTDA    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 117647.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900163200",
+      "nombre": "PRODUCTOS NATURELA S.A.S.     ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 59160.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900175777",
+      "nombre": "LESAFFRE COLOMBIA LTDA.       ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 2352888.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900178348",
+      "nombre": "FRANCORP SOCIEDAD POR ACCIONES",
+      "cuenta_gasto": "51956001",
+      "cuenta_nombre": "CASINO Y RESTAURANTE          ",
+      "total_historico": 185294.13,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900181068",
+      "nombre": "TYU IMPORTACIONES S.A.S.      ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 160030.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900181427",
+      "nombre": "G4 INGENIERIOS CIVILES SAS    ",
+      "cuenta_gasto": "73253001",
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "total_historico": 16420756.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900188051",
+      "nombre": "GESTION Y DESARROLLO AMBIENTAL",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 1823786.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "900203191",
+      "nombre": "FONDO DE CAPITAL PRIVADO FONDO",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 11035690.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900212550",
+      "nombre": "ALMACENES LA 13 S.A.S.        ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 1547535.0,
+      "n_facturas": 12
+    },
+    {
+      "nit": "900236520",
+      "nombre": "CADENA COMERCIAL OXXO DE COLOM",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 51600.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900242816",
+      "nombre": "CHILI SYSTEM CONSULTANTS SAS  ",
+      "cuenta_gasto": "73452501",
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "total_historico": 14494630.16,
+      "n_facturas": 38
+    },
+    {
+      "nit": "900252156",
+      "nombre": "TODO EN ARTES S.A.S           ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 94117.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "900265730",
+      "nombre": "DROMEDICAS DEL ORIENTE S.A.S  ",
+      "cuenta_gasto": "72058401",
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
+      "total_historico": 53830.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900266206",
+      "nombre": "CONJUNTO SAN LUCAS PLAZA PH   ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 1793757.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900271114",
+      "nombre": "EQUIPOS Y SISTEMAS DE PARKING ",
+      "cuenta_gasto": "73956501",
+      "cuenta_nombre": "PARQUEADERO                   ",
+      "total_historico": 21008.04,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900274177",
+      "nombre": "KOSTAMAR SAS                  ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 816132.33,
+      "n_facturas": 7
+    },
+    {
+      "nit": "900276962",
+      "nombre": "D1 S A S                      ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 187368.75,
+      "n_facturas": 12
+    },
+    {
+      "nit": "900291352",
+      "nombre": "TIERRASUR SAS                 ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 7574556.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900291873",
+      "nombre": "PROMOTORA AZORES S.A.S        ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 7574556.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900319753",
+      "nombre": "PRICESMART COLOMBIA S.A.S     ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 26313785.0,
+      "n_facturas": 17
+    },
+    {
+      "nit": "900322544",
+      "nombre": "INVERSIONES PRATO S.A.S.      ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 7527169.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "900334852",
+      "nombre": "SUMINISTROS MEJIA GAVIRIA SAS ",
+      "cuenta_gasto": "72058401",
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
+      "total_historico": 101880.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900348735",
+      "nombre": "LAS TAPIAS SAS                ",
+      "cuenta_gasto": "53052002",
+      "cuenta_nombre": "INTERES PRESTAMO PARTICULARES ",
+      "total_historico": 5721678.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900369371",
+      "nombre": "DEL ESTE CENTRO COMERCIAL P.H.",
+      "cuenta_gasto": "73253001",
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "total_historico": 2603885.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "900374053",
+      "nombre": "LOGIFOODS S.A.S.              ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 5110143.0,
+      "n_facturas": 18
+    },
+    {
+      "nit": "900375355",
+      "nombre": "COMERCIALIZADORA Y REMATES EL ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 100000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900437333",
+      "nombre": "MATERIALES Y RACORES S.A.S    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 47899.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900441712",
+      "nombre": "CANTARELL SAS                 ",
+      "cuenta_gasto": "73959503",
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "total_historico": 180000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900442424",
+      "nombre": "ENVASES Y EMPAQUES INNOVADORES",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 30000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900461819",
+      "nombre": "FRUCOLDEX SAS                 ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 6626350.0,
+      "n_facturas": 135
+    },
+    {
+      "nit": "900462228",
+      "nombre": "CIMENTO INMUEBLES COMERCIALES ",
+      "cuenta_gasto": "51251002",
+      "cuenta_nombre": "AFILIACIONES Y SOSTENIMIENTO  ",
+      "total_historico": 5736223.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900480569",
+      "nombre": "JERONIMO MARTINS COLOMBIA S.A.",
+      "cuenta_gasto": "53053501",
+      "cuenta_nombre": "DSCTOS CCIALES GNRALES        ",
+      "total_historico": 50000000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900484077",
+      "nombre": "CRISTALERIA LA 53 S.A.S       ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 323863.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "900495853",
+      "nombre": "MILAGROS GROUP S.A.S.         ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 18348000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900502018",
+      "nombre": "KNIGHT SOLUCIONES ECOLOGICAS S",
+      "cuenta_gasto": "71050401",
+      "cuenta_nombre": "COMPRAS ASEO                  ",
+      "total_historico": 2297420.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "900518731",
+      "nombre": "LLAVES MEDELLIN S.A.S.        ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 44117.65,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900524512",
+      "nombre": "SISCONTROL MONTAJES Y AUTOMATI",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 34872.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "900524788",
+      "nombre": "ROTTEC SAS                    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 4790.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900531292",
+      "nombre": "PATRIMONIOS AUTONOMOS CREDICOR",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 29335748.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "900562804",
+      "nombre": "BUSINESS CENTRAL GROUP S.A.S  ",
+      "cuenta_gasto": "53052002",
+      "cuenta_nombre": "INTERES PRESTAMO PARTICULARES ",
+      "total_historico": 7795053.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900567821",
+      "nombre": "AOXLAB S.A.S                  ",
+      "cuenta_gasto": "73103501",
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "total_historico": 26125.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900583626",
+      "nombre": "DECOR ALUM S.A.S              ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 56890.76,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900585869",
+      "nombre": "MEGA ALMACENAMIENTO COLOMBIA S",
+      "cuenta_gasto": "51201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 1171880.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900611551",
+      "nombre": "COMERCIAL MEIJI S.A.S.        ",
+      "cuenta_gasto": "53052002",
+      "cuenta_nombre": "INTERES PRESTAMO PARTICULARES ",
+      "total_historico": 3492667.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900635070",
+      "nombre": "COMESTIBLES YA SAS            ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 885864.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900639499",
+      "nombre": "DESHIDRATADOS D´LARA S.A.S.   ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 4558000.0,
+      "n_facturas": 32
+    },
+    {
+      "nit": "900642895",
+      "nombre": "PREGEL COLOMBIA S.A.S         ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 374053.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900651314",
+      "nombre": "TECNOHIGIENE DE COLOMBIA S.A.S",
+      "cuenta_gasto": "71050401",
+      "cuenta_nombre": "COMPRAS ASEO                  ",
+      "total_historico": 125533.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900656118",
+      "nombre": "CONTINENTAL DE REPUESTOS      ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 88236.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900681133",
+      "nombre": "DAL VESUVIO CON AMORE S.A.S.  ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 1977796.0,
+      "n_facturas": 12
+    },
+    {
+      "nit": "900689451",
+      "nombre": "DISAPLAST SAS                 ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 12613200.0,
+      "n_facturas": 13
+    },
+    {
+      "nit": "900690715",
+      "nombre": "EL SECRETO DEL COLOR S.A.S.   ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 16218.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900699623",
+      "nombre": "ADHESIVOS RIOFLEX S.A.S       ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 2884500.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900742925",
+      "nombre": "INVERSIONES ZONAZUL S.A.S.    ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 26891.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900745356",
+      "nombre": "PROTRANSPORTES SAS            ",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 20719582.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900746054",
+      "nombre": "@PC MAYORISTA SAS             ",
+      "cuenta_gasto": "73452001",
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
+      "total_historico": 29412.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900748143",
+      "nombre": "ASESORES DE RECLUTAMIENTO COLO",
+      "cuenta_gasto": "51251002",
+      "cuenta_nombre": "AFILIACIONES Y SOSTENIMIENTO  ",
+      "total_historico": 684810.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900752625",
+      "nombre": "HOLLYWOOD EQUIPOS E.U.        ",
+      "cuenta_gasto": "73359501",
+      "cuenta_nombre": "SERVICIOS LOGISTICOS          ",
+      "total_historico": 613111.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900781088",
+      "nombre": "EL MOMPOSINO.S.A.S            ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 10016160.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "900793253",
+      "nombre": "DISTRIBUIDORA EL AMAZONAS SAS ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 3413430.0,
+      "n_facturas": 19
+    },
+    {
+      "nit": "900813618",
+      "nombre": "TESLAB LABORATORIO ANALISIS AL",
+      "cuenta_gasto": "73103501",
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "total_historico": 421578.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900814567",
+      "nombre": "CINCO E S.A.S.                ",
+      "cuenta_gasto": "73452501",
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "total_historico": 3915660.0,
+      "n_facturas": 15
+    },
+    {
+      "nit": "900843898",
+      "nombre": "RAPPI                         ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 1000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900851144",
+      "nombre": "TECNOSOLUCIONES JP SAS        ",
+      "cuenta_gasto": "73452501",
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "total_historico": 621848.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900851189",
+      "nombre": "COMERCIALIZADORA TECNOLOGICA D",
+      "cuenta_gasto": "51452501",
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "total_historico": 1400000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900853088",
+      "nombre": "EL GRAN MIL CACHARROS S.A.S.  ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 22800.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900857725",
+      "nombre": "\tBLENDS INTELLIGENCE SAS      ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 15398.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900879821",
+      "nombre": "COMERCIALIZADORA TECNOLOGICA C",
+      "cuenta_gasto": "51953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 100841.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900902680",
+      "nombre": "SIA COLOMBIA FORMACIÓN Y DESAR",
+      "cuenta_gasto": "72056301",
+      "cuenta_nombre": "CAPACITACION AL PERSONAL      ",
+      "total_historico": 410000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900916830",
+      "nombre": "COMERCIALIZADORA Y PRODUCTORA ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 26820212.0,
+      "n_facturas": 180
+    },
+    {
+      "nit": "900925872",
+      "nombre": "DISTRICUARTAS S.A.S           ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 7133067.0,
+      "n_facturas": 46
+    },
+    {
+      "nit": "900938961",
+      "nombre": "RIOMAR PESCADOS Y MARISCOS DOS",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 4958500.0,
+      "n_facturas": 16
+    },
+    {
+      "nit": "900941205",
+      "nombre": "BLEND TECH S.A.S.             ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 26187.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900943243",
+      "nombre": "SURAMERICANA COMERCIAL S.A.S. ",
+      "cuenta_gasto": "71050401",
+      "cuenta_nombre": "COMPRAS ASEO                  ",
+      "total_historico": 201681.2,
+      "n_facturas": 11
+    },
+    {
+      "nit": "900954634",
+      "nombre": "SOLUCIONES TESLA S.A.S.       ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 272250.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "900962110",
+      "nombre": "DISTRI 40 S.A.S               ",
+      "cuenta_gasto": "71050201",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
+      "total_historico": 1988461.0,
+      "n_facturas": 10
+    },
+    {
+      "nit": "900976364",
+      "nombre": "GRUPO DE ALIMENTOS DE COLOMBIA",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 140421913.0,
+      "n_facturas": 9
+    },
+    {
+      "nit": "900980892",
+      "nombre": "COMERCIALIZADORA CUMBRES S.A.S",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 36016188.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "900984402",
+      "nombre": "ECOPIT S.A.S                  ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 1869800.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "900996769",
+      "nombre": "GUANTES TERRY S.A.S           ",
+      "cuenta_gasto": "72055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 284032.8,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901025611",
+      "nombre": "TRUE LUZ S.A.S                ",
+      "cuenta_gasto": "73952501",
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA    ",
+      "total_historico": 63445.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901036248",
+      "nombre": "DISEÑO EJECUTIVO S.A.S.       ",
+      "cuenta_gasto": "51055101",
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "total_historico": 157000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901038325",
+      "nombre": "JIPER SAS                     ",
+      "cuenta_gasto": "73603601",
+      "cuenta_nombre": "DEPRECIA. EQUI HOTELES Y RESTA",
+      "total_historico": 40387940.7,
+      "n_facturas": 32
+    },
+    {
+      "nit": "901047519",
+      "nombre": "PRIXGROUP CONSULTING S.A.S.   ",
+      "cuenta_gasto": "72058401",
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
+      "total_historico": 178826.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901052485",
+      "nombre": "INVERSIONES ZULUAGA BEDOYA S.A",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 15126.05,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901053485",
+      "nombre": "LISTO EL POLLO COLOMBIA S.A.S ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 46152720.0,
+      "n_facturas": 160
+    },
+    {
+      "nit": "901073809",
+      "nombre": "KRIMA S.A.S                   ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 7837270.0,
+      "n_facturas": 30
+    },
+    {
+      "nit": "901092457",
+      "nombre": "INDUSTRIAS Y CHURROS DE COLOMB",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 538900.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "901119682",
+      "nombre": "INVERSIONES VEDECCO S.A.S     ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 1839009.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "901125766",
+      "nombre": "SAN MARTIN LACTEOS S.A.S.     ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1281000.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "901139491",
+      "nombre": "MECATROING S.A.S              ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 826000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901160060",
+      "nombre": "ELECTRO STAR NO 1 SAS         ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 146723.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901162620",
+      "nombre": "MULTIHOGAR EL HUECO S.A.S.    ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 430251.78,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901189109",
+      "nombre": "SNACKS GOOD BITE S.A.S.       ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 3321000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901190887",
+      "nombre": "MANILA HOTEL BOUTIQUE SAS     ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 13098277.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901203653",
+      "nombre": "FABRI ROLLOS SAS              ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 204300.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901214381",
+      "nombre": "MAS ALCANCE ASESORES S.A.S    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 2255250.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901219107",
+      "nombre": "MP INVERSIONES S.A.S.         ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1753317.0,
+      "n_facturas": 35
+    },
+    {
+      "nit": "901262219",
+      "nombre": "INVERSIONES LOS GIRALDO SAS   ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 12268.91,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901266653",
+      "nombre": "META PLATFORMS IRELAND LIMITE ",
+      "cuenta_gasto": "52356001",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
+      "total_historico": 8998387.55,
+      "n_facturas": 25
+    },
+    {
+      "nit": "901304654",
+      "nombre": "AVACCOUNTRIB S.A.S.           ",
+      "cuenta_gasto": "51101001",
+      "cuenta_nombre": "REVISORIA FISCAL              ",
+      "total_historico": 7879073.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901305395",
+      "nombre": "ANTIOQUEÑA DE BASCULAS SAS    ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 134454.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901306233",
+      "nombre": "INVERSIONES MONTEARRIBA SAS   ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 140000000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901308064",
+      "nombre": "PREVENIR SOLUCIONES INTEGRALES",
+      "cuenta_gasto": "73103501",
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "total_historico": 3049999.98,
+      "n_facturas": 28
+    },
+    {
+      "nit": "901339150",
+      "nombre": "TORNI RETENES S.A.S           ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 20168.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901347684",
+      "nombre": "ALEX CARNICOS RM SAS          ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 106606355.0,
+      "n_facturas": 58
+    },
+    {
+      "nit": "901355294",
+      "nombre": "FERRETERIA EL AMIGO ORIENTE S ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 18487.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901358202",
+      "nombre": "PADAM BIENESTAR S.A.S.        ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1950750.0,
+      "n_facturas": 27
+    },
+    {
+      "nit": "901358441",
+      "nombre": "SOLUCIONES AMBIENTALES MASTERS",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 9810000.0,
+      "n_facturas": 88
+    },
+    {
+      "nit": "901360982",
+      "nombre": "CONSTRUMETALICAS JA SAS       ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 750000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901361256",
+      "nombre": "TUERCAS Y TORNILLOS RIONEGRO S",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 21764.760000000002,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901365723",
+      "nombre": "I.C. ELECTRONICS S.A.S.       ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 35294.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901366173",
+      "nombre": "COMERCIALI S.A.S              ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 843200.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901366742",
+      "nombre": "KAME COMPOSTALE S.A.S.        ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 3160000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901370431",
+      "nombre": "GSF GREAT SAVOR FOOD'S SAS    ",
+      "cuenta_gasto": "73253002",
+      "cuenta_nombre": "OTRAS AFILIACIONES Y SOSTENIMI",
+      "total_historico": 32718597.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901381775",
+      "nombre": "EATSY MARKET S.A.S.           ",
+      "cuenta_gasto": "52950501",
+      "cuenta_nombre": "COMISIONES PLATAFORMA         ",
+      "total_historico": 199411.0,
+      "n_facturas": 7
+    },
+    {
+      "nit": "901391830",
+      "nombre": "MULTIUM SAS                   ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 16374476.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901392930",
+      "nombre": "ELECTROPLOMERIA Y FERRETERÍA S",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 10084.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901393527",
+      "nombre": "SELLOS Y EMPAQUETADURAS DISTRI",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 250000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901409929",
+      "nombre": "T.H SOLUCIONES GROUP S.A.S.   ",
+      "cuenta_gasto": "73351001",
+      "cuenta_nombre": "TEMPORALES                    ",
+      "total_historico": 140446403.28,
+      "n_facturas": 14
+    },
+    {
+      "nit": "901418382",
+      "nombre": "ORIENTE PETROLERO SAS         ",
+      "cuenta_gasto": "73953501",
+      "cuenta_nombre": "COMBUSTIBLES Y LUBRICANTES    ",
+      "total_historico": 78350.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "901419529",
+      "nombre": "INVERSIONES VALLEJO GIRALDO SA",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 149919.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901420037",
+      "nombre": "PRECAM S.A.S.                 ",
+      "cuenta_gasto": "73359502",
+      "cuenta_nombre": "CAMBIO DE MENUDA              ",
+      "total_historico": 139430.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901426629",
+      "nombre": "GRUPO INVERSIONES ORION SAS   ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 961400.0,
+      "n_facturas": 9
+    },
+    {
+      "nit": "901431398",
+      "nombre": "MUNDO CONTROL EXPERTOS S.A.S. ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 5232124.0,
+      "n_facturas": 24
+    },
+    {
+      "nit": "901453791",
+      "nombre": "ORNILLERIA Y HERRAMIENTAS LAS ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 19832.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901461076",
+      "nombre": "ASESORIAS DF SAS              ",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 21900.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901462104",
+      "nombre": "PENTO INMOBILIARIA S.A.S.     ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 4244000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901472678",
+      "nombre": "TERRAPRETA AM SAS             ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 1800000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901477459",
+      "nombre": "TORNIRACORES JARDIN BOTANICO  ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 30252.1,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901510702",
+      "nombre": "OPERACIONES JARDINES S.A.S    ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 17038900.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901518476",
+      "nombre": "SERVICIOS INTEGRALES Y&M SAS  ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 131484.0,
+      "n_facturas": 5
+    },
+    {
+      "nit": "901525034",
+      "nombre": "TRANSPORTE XIME EXPRESS S.A.S ",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 15050000.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "901533781",
+      "nombre": "FULLQUIMICOS B.C. 2 S.A.S     ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 41176.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901539604",
+      "nombre": "MUNDIAL DE GAS Y AGUA         ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 5882.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901549201",
+      "nombre": "MAGIC HOMES S.A.S             ",
+      "cuenta_gasto": "73954001",
+      "cuenta_nombre": "ENVASES Y EMPAQUES            ",
+      "total_historico": 33529.2,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901552449",
+      "nombre": "DISTRITO HOREKA S.A.S.        ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 51190.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901553656",
+      "nombre": "ALMACEN PLAZA HOGAR SAS       ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 2348440.61,
+      "n_facturas": 31
+    },
+    {
+      "nit": "901563602",
+      "nombre": "MACHINES HG SAS               ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 84034.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901564588",
+      "nombre": "EJSOLUCIONES S.A.S.           ",
+      "cuenta_gasto": "73452501",
+      "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
+      "total_historico": 14084500.0,
+      "n_facturas": 36
+    },
+    {
+      "nit": "901578684",
+      "nombre": "SUPER REMATES CARABOBO        ",
+      "cuenta_gasto": "73959501",
+      "cuenta_nombre": "ELEMENTOS PARA PRUEBAS        ",
+      "total_historico": 50420.4,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901580717",
+      "nombre": "GRUPO FERREWILLYS SAS         ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 226890.0,
+      "n_facturas": 6
+    },
+    {
+      "nit": "901583765",
+      "nombre": "GRUPO PAPEL TODO S.A.S.       ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 17647.06,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901588775",
+      "nombre": "MINIMARJET DE LEO S.A.S       ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 48740.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901590426",
+      "nombre": "TORTILLAS Y BOTANAS S.A.S     ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 8584950.0,
+      "n_facturas": 39
+    },
+    {
+      "nit": "901617211",
+      "nombre": "PINTURAS DEL RIO S.A.S        ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 39833.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901623198",
+      "nombre": "PARQUE FABRICATO CENTRO COMERC",
+      "cuenta_gasto": "73253001",
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "total_historico": 22242977.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901629813",
+      "nombre": "REDES Y WIFI MEDELLIN SAS     ",
+      "cuenta_gasto": "73452001",
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
+      "total_historico": 12605.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901634012",
+      "nombre": "FERRETERIA CASA NARANJA SAS   ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 15126.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901640860",
+      "nombre": "MEDICAL TOWER POBLADO SAS     ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 29036617.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901642034",
+      "nombre": "MANGUERAS Y TORNILLOS LAS ARCI",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 194958.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901647739",
+      "nombre": "COMERCIALIZADORA E IMPORTADO  ",
+      "cuenta_gasto": "73959502",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
+      "total_historico": 945714.6699999999,
+      "n_facturas": 4
+    },
+    {
+      "nit": "901670780",
+      "nombre": "MAS FRIO LOGISTICA Y TRASPORTE",
+      "cuenta_gasto": "73355001",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
+      "total_historico": 19342000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "901672764",
+      "nombre": "LLAVES LA COLMENA             ",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 230000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901699515",
+      "nombre": "VERDELIMPIO COLOMBIA SAS ESP  ",
+      "cuenta_gasto": "73350501",
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "total_historico": 2443111.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901719394",
+      "nombre": "CONSTRUELECTRO JD SAS         ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 947000.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "901739060",
+      "nombre": "MANTENIMIENTO INTEGRAL 360 SAS",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 16140000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "901768737",
+      "nombre": "GENERASER S.A.S               ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 2191283.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "901782676",
+      "nombre": "DISELMA ILUMINACIONES Y PARTES",
+      "cuenta_gasto": "73501501",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "total_historico": 18487.39,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901786455",
+      "nombre": "MADURADOS SYG S.A.S.          ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 5600000.0,
+      "n_facturas": 28
+    },
+    {
+      "nit": "901841645",
+      "nombre": "EME INMOBILIARIA S.A.S.       ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 17016870.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "901846141",
+      "nombre": "ELECTRICOLOR J.M              ",
+      "cuenta_gasto": "73500501",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
+      "total_historico": 559159.0,
+      "n_facturas": 8
+    },
+    {
+      "nit": "901850389",
+      "nombre": "ABASTECIMIENTO GASTRONÓMICO S.",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 120083.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901851571",
+      "nombre": "GRUPO ENTRETANTO SAS          ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 387500.0,
+      "n_facturas": 4
+    },
+    {
+      "nit": "901876789",
+      "nombre": "LITOCOLOR PUBLICIDAD SAS      ",
+      "cuenta_gasto": "52356001",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
+      "total_historico": 10252908.0,
+      "n_facturas": 37
+    },
+    {
+      "nit": "901886312",
+      "nombre": "WG PAPELERIA SAS              ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 27731.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901895219",
+      "nombre": "DISTRI. AAA S.A.S.            ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 278688381.0,
+      "n_facturas": 28
+    },
+    {
+      "nit": "901927703",
+      "nombre": "COLORES TIENDA DE BELLEZA SAS ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 22200.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901931301",
+      "nombre": "DANFORTH SOLUCIONES SAS       ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 8403.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901933830",
+      "nombre": "GRUPO CLARALMA SAS            ",
+      "cuenta_gasto": "73953001",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "total_historico": 21597.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901937098",
+      "nombre": "GRUPO JOTTA SAS               ",
+      "cuenta_gasto": "71050101",
+      "cuenta_nombre": "ALIMENTOS                     ",
+      "total_historico": 15623900.0,
+      "n_facturas": 165
+    },
+    {
+      "nit": "901950832",
+      "nombre": "EQUIGAS MAQUINARIA INDUSTRIAL ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 1700000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "901999097",
+      "nombre": "INPRINTERS TECHNOLOGY S A S   ",
+      "cuenta_gasto": "73452001",
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
+      "total_historico": 357143.32,
+      "n_facturas": 4
+    },
+    {
+      "nit": "902022296",
+      "nombre": "IDPACK SOLUTIONS S.A.S        ",
+      "cuenta_gasto": "71050301",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
+      "total_historico": 1187000.0,
+      "n_facturas": 3
+    },
+    {
+      "nit": "911144442",
+      "nombre": "MICROSOFT CORPORATION         ",
+      "cuenta_gasto": "52356001",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
+      "total_historico": 435572.0,
+      "n_facturas": 24
+    },
+    {
+      "nit": "912048089",
+      "nombre": "AMAZON                        ",
+      "cuenta_gasto": "51202501",
+      "cuenta_nombre": "ARRENDAM. EQUIPO COMPUTACION Y",
+      "total_historico": 1905925.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "98451888",
+      "nombre": "EFRAIN DE JESUS RIOS LOPEZ    ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 180000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "98489442",
+      "nombre": "WALTER JAIRO GRANADA TABARES  ",
+      "cuenta_gasto": "73509501",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
+      "total_historico": 170000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "98525276",
+      "nombre": "RUBEN                         ",
+      "cuenta_gasto": "73453501",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "total_historico": 400000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "98537951",
+      "nombre": "DIELVER                       ",
+      "cuenta_gasto": "73952001",
+      "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
+      "total_historico": 700000.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "98551257",
+      "nombre": "MAURO ESTEBAN GALLEGO HERNANDE",
+      "cuenta_gasto": "55959502",
+      "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
+      "total_historico": 28000.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "98602979",
+      "nombre": "CESAR AUGUSTO ALVAREZ BENJUMEA",
+      "cuenta_gasto": "72050601",
+      "cuenta_nombre": "SUELDOS                       ",
+      "total_historico": 5599999.99,
+      "n_facturas": 8
+    },
+    {
+      "nit": "98638497",
+      "nombre": "JUAN PABLO BUITRAGO CADAVID   ",
+      "cuenta_gasto": "72054801",
+      "cuenta_nombre": "BONIFICACION SALARIAL         ",
+      "total_historico": 10642773.0,
+      "n_facturas": 2
+    },
+    {
+      "nit": "98669422",
+      "nombre": "JAIRO LEON ARANGO NOREÑA      ",
+      "cuenta_gasto": "73201001",
+      "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
+      "total_historico": 9017702.0,
+      "n_facturas": 1
+    },
+    {
+      "nit": "98772832",
+      "nombre": "SEBASTIAN CARDONA HOYOS       ",
+      "cuenta_gasto": "51102501",
+      "cuenta_nombre": "ASESORIA JURIDICA             ",
+      "total_historico": 3500000.0,
+      "n_facturas": 1
+    }
+  ]
+}

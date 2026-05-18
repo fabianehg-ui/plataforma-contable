@@ -1,8 +1,7 @@
 {
   "_meta": {
-    "version": "1.0",
-    "descripcion": "Mapeo de cuenta PUC histórica → concepto de retención en la fuente",
-    "fuente": "Generado automáticamente desde las cuentas únicas del mapeo_compras_historico.json + reglas heurísticas por nombre de cuenta",
+    "version": "2.0",
+    "descripcion": "Mapeo cuenta PUC → concepto retención. Generado desde histórico real marzo+abril 2026",
     "conceptos_validos": [
       "compras",
       "servicios",
@@ -12,254 +11,1430 @@
       "transporte_carga",
       "servicios_publicos",
       "comisiones_bancarias",
-      "no_retencion"
+      "no_retencion",
+      "no_aplica"
     ]
   },
   "mapeo": {
-    "51050501": {
-      "cuenta_nombre": "SUELDO APRENDIZ",
+    "11050505": {
+      "cuenta_nombre": "CAJA FUERTE                   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050510": {
+      "cuenta_nombre": "CAJA SL INDIANA               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050511": {
+      "cuenta_nombre": "CAJA SL OVIEDO                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050512": {
+      "cuenta_nombre": "CAJA SL TESORO                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050513": {
+      "cuenta_nombre": "CAJA SL SAN LUCAS             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050514": {
+      "cuenta_nombre": "CAJA SL DEL ESTE              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050515": {
+      "cuenta_nombre": "CAJA SL VIVA ENVIGADO         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050516": {
+      "cuenta_nombre": "CAJA SL LAURELES              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050517": {
+      "cuenta_nombre": "CAJA SL LLANOGRANDE           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050518": {
+      "cuenta_nombre": "CAJA SL BURBUJA POBLADO       ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050519": {
+      "cuenta_nombre": "CAJA SL MIXY LOS COLORES      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050520": {
+      "cuenta_nombre": "CAJA SL CIUDAD DEL RIO        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050521": {
+      "cuenta_nombre": "CAJA SL FABRICATO             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050522": {
+      "cuenta_nombre": "CAJA SL LOS MOLINOS           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050523": {
+      "cuenta_nombre": "CAJA SL UNICENTRO             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050524": {
+      "cuenta_nombre": "CAJA SL LAS VEGAS             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050525": {
+      "cuenta_nombre": "CAJA SL MEDICAL TOWER         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050526": {
+      "cuenta_nombre": "CAJA SL MILLA DE ORO          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050527": {
+      "cuenta_nombre": "CAJA SL H.NOCK                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050528": {
+      "cuenta_nombre": "CAJA SL VENDIGN               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050550": {
+      "cuenta_nombre": "CAJA ML TESORO                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050551": {
+      "cuenta_nombre": "CAJA ML REMEDIOS              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050552": {
+      "cuenta_nombre": "CAJA ML VIVA ENVIGADO         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050553": {
+      "cuenta_nombre": "CAJA ML LAURELES              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050554": {
+      "cuenta_nombre": "CAJA ML FABRICATO             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050555": {
+      "cuenta_nombre": "CAJA ML MANILA                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050556": {
+      "cuenta_nombre": "CAJA ML MILLA DE ORO          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11050590": {
+      "cuenta_nombre": "CAJA GNRAL TEMPORAL           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11051001": {
+      "cuenta_nombre": "CAJA CDP RIONEGRO             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11100501": {
+      "cuenta_nombre": "BANCOLOMBIA CTE 5087          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11100502": {
+      "cuenta_nombre": "BANCO BOGOTA CTE 3915         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11100503": {
+      "cuenta_nombre": "BANCO BBVA CTE 4239           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11150501": {
+      "cuenta_nombre": "ADQUIRIENCIAS CREDIBANCO      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "11304005": {
+      "cuenta_nombre": "FIDUCUENTA BANCOLOMBIA 3242   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13050505": {
+      "cuenta_nombre": "CLIENTES NACIONALES           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13300505": {
+      "cuenta_nombre": "ANTICPO PROVEEDORES           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13301505": {
+      "cuenta_nombre": "ANTICIPO TRABAJADORES         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13659501": {
+      "cuenta_nombre": "OTRAS CXC A TRABAJADORES      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13802001": {
+      "cuenta_nombre": "CXC INCAPACIDADES             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13809501": {
+      "cuenta_nombre": "OTRAS CXC                     ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "13809502": {
+      "cuenta_nombre": "CXC MILAGROS GROUP SAS        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "14050501": {
+      "cuenta_nombre": "INV. ALIMENTOS Y BEBIDAS      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "14050502": {
+      "cuenta_nombre": "INV. ASEO Y CAFETERIA         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15080501": {
+      "cuenta_nombre": "MONTAJES Y REMODELACIONES     ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15200101": {
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15200102": {
+      "cuenta_nombre": "IVA MAQUINARIA Y EQUIPO       ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15240501": {
+      "cuenta_nombre": "MUEBLES Y ENSERES             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15241001": {
+      "cuenta_nombre": "EQUIPOS DE OFICINA            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15280501": {
+      "cuenta_nombre": "EQUIPO PROCESAMIENTO DATOS    ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15350501": {
+      "cuenta_nombre": "BIENES RECIBIDOS EN LEASING   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15361001": {
+      "cuenta_nombre": "EQUIPOS DE COMESTIBLES Y BEBID",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15920801": {
+      "cuenta_nombre": "DEPRECIA. CONSTRUC Y ADECUACIO",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15922001": {
+      "cuenta_nombre": "DEPRECIA. MAQUINARIA Y EQUIPO ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15922401": {
+      "cuenta_nombre": "DEPRECIA. MUEBLES Y ENSERES   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15922801": {
+      "cuenta_nombre": "DEPRECIA. EQUIPO COMPUTACION Y",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "15923601": {
+      "cuenta_nombre": "DEPRECIA. EQUIPO HOTELES Y RES",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "16051005": {
+      "cuenta_nombre": "DEL ESTE COMPRA CREDITO MERCAN",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "16980501": {
+      "cuenta_nombre": "AMORTIZACION CREDITO MERCANTIL",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "17052001": {
+      "cuenta_nombre": "SEGUROS Y FIANZAS             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "17980520": {
+      "cuenta_nombre": "AMORTIZACION SEGUROS Y FIANZAS",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551501": {
+      "cuenta_nombre": "RTE TARJETAS 1.5%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551502": {
+      "cuenta_nombre": "RTE VENTAS 2.5%               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551503": {
+      "cuenta_nombre": "RTE COMPRAS 3.5%              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551504": {
+      "cuenta_nombre": "RTE SERVICIOS 4%              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551505": {
+      "cuenta_nombre": "RTE TRANSPORTES 1%            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551506": {
+      "cuenta_nombre": "RTE RENDIMIENTOS 2%           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551601": {
+      "cuenta_nombre": "AUTO RENTA 0.55%              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551701": {
+      "cuenta_nombre": "RTE IVA VENTAS                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19551801": {
+      "cuenta_nombre": "RTE ICA                       ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "19552002": {
+      "cuenta_nombre": "SALDO A FAVOR EN IVA          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "21051001": {
+      "cuenta_nombre": "TC BANCO DE BOGOTA 902674     ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "21051002": {
+      "cuenta_nombre": "CRED COLTEF 2432 $910         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "21051003": {
+      "cuenta_nombre": "CRED COLTE 0654 $502          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "21051004": {
+      "cuenta_nombre": "CREDITO BBVA 500-9600116793   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "21202001": {
+      "cuenta_nombre": "LEASING FINANCIERO            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "21950501": {
+      "cuenta_nombre": "PARTICULARES                  ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "22050505": {
+      "cuenta_nombre": "PROVEEDORES NACIONALES        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23350505": {
+      "cuenta_nombre": "CXP FINANCIEROS               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23450101": {
+      "cuenta_nombre": "PAGO IMPUESTO AL CONSUMO      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23450103": {
+      "cuenta_nombre": "RTE FTE X PAGAR               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23450104": {
+      "cuenta_nombre": "RENTA POR PAGAR               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23450105": {
+      "cuenta_nombre": "SALUDABLE X PAGAR             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23650505": {
+      "cuenta_nombre": "RETENCION SALARIOS            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23651510": {
+      "cuenta_nombre": "RET. HONORARIOS 10%           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23651511": {
+      "cuenta_nombre": "RET. HONORARIOS 11%           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652501": {
+      "cuenta_nombre": "RET. TRANSPORTE 1%            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652502": {
+      "cuenta_nombre": "RET. SER. DE SALUD 2%         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652503": {
+      "cuenta_nombre": "RET. HOTELES 3.5%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652504": {
+      "cuenta_nombre": "RET. SERVICIOS 4%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652506": {
+      "cuenta_nombre": "RET. SERVICIOS 6%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652507": {
+      "cuenta_nombre": "RET. TEMPORALES 1%            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23652508": {
+      "cuenta_nombre": "RET. SOFTWARE 3.5%            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23653003": {
+      "cuenta_nombre": "RET. ARRIENDOS 3.5%           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23653004": {
+      "cuenta_nombre": "RET. ARRIENDOS 4%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23653507": {
+      "cuenta_nombre": "RET. RENDIMIENTOS 7%          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23654000": {
+      "cuenta_nombre": "RET. COMBUSTIBLES 0.1%        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23654001": {
+      "cuenta_nombre": "RET. COMPRAS 1.5% AGRICOLAS   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23654002": {
+      "cuenta_nombre": "RET. COMPRAS 2.5%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23657099": {
+      "cuenta_nombre": "PAGO RETENCION EN LA FUENTE   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23657505": {
+      "cuenta_nombre": "AUTORRETENCION 0.55%          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23657590": {
+      "cuenta_nombre": "PAGO AUTO-RETENCION           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23670515": {
+      "cuenta_nombre": "RET. DE IVA 15%               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23679090": {
+      "cuenta_nombre": "PAGO RTE IVA                  ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23680501": {
+      "cuenta_nombre": "RETENCION ASOHOFRUCOL 1%      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23681505": {
+      "cuenta_nombre": "RET.ICA BELLO                 ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23681510": {
+      "cuenta_nombre": "RET. ICA MEDELLIN             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23702501": {
+      "cuenta_nombre": "EMBARGOS JUDICIALES           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23704001": {
+      "cuenta_nombre": "LIBRANZAS FINANCREA           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "23704002": {
+      "cuenta_nombre": "ANTICIPOS FINANCREA           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24062001": {
+      "cuenta_nombre": "CXP ULTRAPROCESADOS 20%       ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24062599": {
+      "cuenta_nombre": "PAGO ASOHOFRUCOL              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24080501": {
+      "cuenta_nombre": "IVA GENERADO 5%               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24080502": {
+      "cuenta_nombre": "IVA DEVOLUCION GENERADO 5%    ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24080503": {
+      "cuenta_nombre": "IVA GENERADO 19%              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24081003": {
+      "cuenta_nombre": "IVA DESCONTABLE 19%           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24081090": {
+      "cuenta_nombre": "IVA PRORRATEO 5%              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24081091": {
+      "cuenta_nombre": "IVA PRORRATEO 19%             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24120505": {
+      "cuenta_nombre": "ICA VIGENCIA FISCAL CORRIENTE ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24121005": {
+      "cuenta_nombre": "ICA VIGENCIA FISCAL ANTERIOR  ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24121505": {
+      "cuenta_nombre": "AUTO-RETENCION DE ICA         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "24800505": {
+      "cuenta_nombre": "IMPUESTO AL CONSUMO 8%        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25050505": {
+      "cuenta_nombre": "NOMINA POR PAGAR              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25101005": {
+      "cuenta_nombre": "CESANTIAS LEY 50/1990 Y NORMAS",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25150505": {
+      "cuenta_nombre": "CONSOLIDADO INTERESES A LAS CE",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25250505": {
+      "cuenta_nombre": "VACACIONES CONSOLIDADAS       ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25300510": {
+      "cuenta_nombre": "PAGO CESANTIAS                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25301010": {
+      "cuenta_nombre": "PAGOS INTERESES A LAS CESANTIA",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25301510": {
+      "cuenta_nombre": "PAGO VACACIONES               ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25302010": {
+      "cuenta_nombre": "PAGOS PRIMA DE SERVICIOS      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25500510": {
+      "cuenta_nombre": "PAGO APORTES A EPS            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25500601": {
+      "cuenta_nombre": "PAGO APORTES ARL              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25501001": {
+      "cuenta_nombre": "PAGO APORTES CCF PARAFISCALES ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "25504501": {
+      "cuenta_nombre": "PAGO APORTES FONDOS PENSION   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "28050505": {
+      "cuenta_nombre": "ANTICIPO CLIENTES             ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "28050510": {
+      "cuenta_nombre": "CXP JIPER x PAGOS DE MILAGROS ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "28150505": {
+      "cuenta_nombre": "PROPINAS                      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "28950505": {
+      "cuenta_nombre": "ANTICIPOS DIVERSOS            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "31050505": {
+      "cuenta_nombre": "CAPITAL AUTORIZADO            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "33050505": {
+      "cuenta_nombre": "RESERVA LEGAL                 ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "36050501": {
+      "cuenta_nombre": "UTILIDAD DE EJERCICIO AÑO     ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "37050501": {
+      "cuenta_nombre": "UTILIDADES ACUMULAS           ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41200901": {
+      "cuenta_nombre": "PANADERIA CONGELADA GRAVADA 19",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41200902": {
+      "cuenta_nombre": "PANADERIA CONGELADA SIN IVA   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41200904": {
+      "cuenta_nombre": "PANADERIA HORNEADA SIN IVA    ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41200905": {
+      "cuenta_nombre": "OTROS PANADERIA IVA 5%        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41200906": {
+      "cuenta_nombre": "OTRAS VENTAS GVADAS AL 19%    ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41401501": {
+      "cuenta_nombre": "VENTAS PUNTOS CON ICO 8%      ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41401503": {
+      "cuenta_nombre": "VENTAS NO GRAVADAS            ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "41752002": {
+      "cuenta_nombre": "DEV VENTA CONGELADA SIN IVA   ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42050502": {
+      "cuenta_nombre": "VENTA ACTIVOS SEGUNDA NO GRAV ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42053001": {
+      "cuenta_nombre": "EMPAQUES Y ENVASES 19%        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42053002": {
+      "cuenta_nombre": "EMPAQUES Y ENVASES EXENTOS    ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42351001": {
+      "cuenta_nombre": "DOMICILIO                     ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42359502": {
+      "cuenta_nombre": "SERVICIOS LOGISTICOS          ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42503001": {
+      "cuenta_nombre": "DESCUENTOS CONCEDIDOS         ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42950501": {
+      "cuenta_nombre": "APROVECHAMIENTOS              ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "42958101": {
+      "cuenta_nombre": "AJUSTE AL PESO                ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "43100501": {
+      "cuenta_nombre": "INGRESOS POR INTERESES        ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "43109501": {
+      "cuenta_nombre": "OTROS INGRESOS FINANCIEROS    ",
+      "concepto_retencion": "no_aplica",
+      "obs": "Cuenta no de gasto/costo"
+    },
+    "51046801": {
+      "cuenta_nombre": "APORTES A ARL                 ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Seguridad social/parafiscales"
+    },
+    "51046901": {
+      "cuenta_nombre": "APORTES A EPS                 ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
+    },
+    "51047001": {
+      "cuenta_nombre": "APORTES FONDOS PENSION Y CESAN",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
+    },
+    "51047201": {
+      "cuenta_nombre": "APORTES CAJA COMPENSACION FAM ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
+    },
+    "51050501": {
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
     },
     "51050601": {
-      "cuenta_nombre": "SUELDOS",
+      "cuenta_nombre": "SUELDOS                       ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Nómina"
+    },
+    "51051501": {
+      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS       ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51052401": {
+      "cuenta_nombre": "INCAPACIDADES                 ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51052701": {
+      "cuenta_nombre": "AUXILIO TRANSPORTE            ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51053001": {
+      "cuenta_nombre": "CESANTIAS                     ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51053301": {
+      "cuenta_nombre": "INTERESES CESANTIAS           ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51053601": {
+      "cuenta_nombre": "PRIMA SERVICIOS               ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51053901": {
+      "cuenta_nombre": "VACACIONES                    ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51054501": {
+      "cuenta_nombre": "AUXILIOS                      ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51054801": {
+      "cuenta_nombre": "BONIFICACION SALARIAL         ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51054802": {
+      "cuenta_nombre": "BONIFICACION NO SALARIAL      ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51055101": {
+      "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "51056601": {
+      "cuenta_nombre": "GASTOS DEPORTIVOS Y RECREACION",
+      "concepto_retencion": "servicios",
+      "obs": "Deportivos/recreación = servicios"
+    },
+    "51058401": {
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
     },
     "51101001": {
-      "cuenta_nombre": "REVISORIA FISCAL",
+      "cuenta_nombre": "REVISORIA FISCAL              ",
       "concepto_retencion": "honorarios",
-      "obs": "Revisoría fiscal = honorarios"
+      "obs": "Honorarios profesionales"
     },
     "51102501": {
-      "cuenta_nombre": "ASESORIA JURIDICA",
+      "cuenta_nombre": "ASESORIA JURIDICA             ",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
+    },
+    "51103501": {
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "51157001": {
+      "cuenta_nombre": "IVA 5% COMPRAS DESCONTABLE    ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "51157002": {
+      "cuenta_nombre": "IVA 5% SERVICIOS DESCONTABLE  ",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
+    },
+    "51157003": {
+      "cuenta_nombre": "IVA 19% COMPRAS DESCONTABLE   ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "51157004": {
+      "cuenta_nombre": "IVA 19% SERVICIOS DESCONTABLE ",
       "concepto_retencion": "honorarios",
       "obs": "Honorarios profesionales"
     },
     "51201001": {
       "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
       "concepto_retencion": "arrendamiento_inmueble",
-      "obs": "Arrendamiento bienes inmuebles"
+      "obs": "Arrendamiento de inmuebles"
     },
     "51202501": {
       "cuenta_nombre": "ARRENDAM. EQUIPO COMPUTACION Y",
       "concepto_retencion": "arrendamiento_mueble",
-      "obs": "Arrendamiento bienes muebles/plataformas"
+      "obs": "Arrendamiento de muebles/plataformas"
+    },
+    "51209501": {
+      "cuenta_nombre": "OTROS ARRENDAMIENTOS          ",
+      "concepto_retencion": "arrendamiento_mueble",
+      "obs": "Arrendamiento de muebles/plataformas"
+    },
+    "51251001": {
+      "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
     },
     "51251002": {
-      "cuenta_nombre": "AFILIACIONES Y SOSTENIMIENTO",
+      "cuenta_nombre": "AFILIACIONES Y SOSTENIMIENTO  ",
       "concepto_retencion": "servicios",
-      "obs": "Afiliaciones y sostenimiento = servicios"
+      "obs": "Servicios generales"
     },
     "51351501": {
-      "cuenta_nombre": "ASISTENCIA TECNICA",
-      "concepto_retencion": "honorarios",
-      "obs": "Honorarios profesionales"
+      "cuenta_nombre": "ASISTENCIA TECNICA            ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
     },
     "51352001": {
-      "cuenta_nombre": "PROCESAMIENTO ELECTRON.DATOS",
+      "cuenta_nombre": "PROCESAMIENTO ELECTRON.DATOS  ",
       "concepto_retencion": "servicios",
-      "obs": "Procesamiento electrónico de datos = servicios"
+      "obs": "Servicios generales"
     },
     "51353501": {
-      "cuenta_nombre": "TELEFONO",
+      "cuenta_nombre": "TELEFONO                      ",
       "concepto_retencion": "servicios_publicos",
       "obs": "Servicios públicos"
     },
     "51355001": {
-      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
       "concepto_retencion": "transporte_carga",
-      "obs": "Transporte de carga"
+      "obs": "Transporte/fletes"
+    },
+    "51359501": {
+      "cuenta_nombre": "OTROS SERVICIOS               ",
+      "concepto_retencion": "compras",
+      "obs": "Diversos (fallback compras)"
+    },
+    "51400501": {
+      "cuenta_nombre": "NOTARIALES                    ",
+      "concepto_retencion": "honorarios",
+      "obs": "Notariales = honorarios"
+    },
+    "51401001": {
+      "cuenta_nombre": "REGISTRO MERCANTIL            ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Impuestos/registros"
+    },
+    "51401501": {
+      "cuenta_nombre": "TRAMITES Y LICENCIAS          ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Trámites y licencias (impuestos)"
+    },
+    "51452001": {
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos"
     },
     "51452501": {
       "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
       "concepto_retencion": "compras",
-      "obs": "Compra de activos / equipos"
+      "obs": "Compra de activos"
     },
     "51453501": {
       "cuenta_nombre": "EQUIPO DE HOTELES Y RESTAURANT",
       "concepto_retencion": "compras",
-      "obs": "Compra de activos / equipos"
+      "obs": "Compra de activos"
+    },
+    "51501501": {
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
     },
     "51551501": {
-      "cuenta_nombre": "PASAJES AEREOS",
+      "cuenta_nombre": "PASAJES AEREOS                ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "51602001": {
+      "cuenta_nombre": "DEPRECIA. MAQUINARIA Y EQUIPO ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos"
+    },
+    "51602401": {
+      "cuenta_nombre": "DEPRECIA, EQUIPO DE OFICINA   ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos"
+    },
+    "51602801": {
+      "cuenta_nombre": "DEPRECIA. EQUIPO COMPUTACION Y",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos"
+    },
+    "51651501": {
+      "cuenta_nombre": "POLIZAS DIFERIDAS             ",
       "concepto_retencion": "no_retencion",
-      "obs": "Pasajes aéreos a aerolíneas (autorretenedoras)"
+      "obs": "Pólizas (seguros, autoret aseguradora)"
     },
     "51952001": {
       "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
-      "concepto_retencion": "servicios_publicos",
-      "obs": "Servicios públicos"
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
     },
     "51952501": {
-      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA",
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA    ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
     "51953001": {
-      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "51954001": {
+      "cuenta_nombre": "ENVASES Y EMPAQUES            ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
     "51954501": {
-      "cuenta_nombre": "TAXIS Y BUSES",
-      "concepto_retencion": "servicios",
-      "obs": "Gastos de viaje"
+      "cuenta_nombre": "TAXIS Y BUSES                 ",
+      "concepto_retencion": "transporte_carga",
+      "obs": "Transporte/fletes"
     },
     "51956001": {
-      "cuenta_nombre": "CASINO Y RESTAURANTE",
+      "cuenta_nombre": "CASINO Y RESTAURANTE          ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
+    "51956501": {
+      "cuenta_nombre": "PARQUEADERO                   ",
+      "concepto_retencion": "servicios",
+      "obs": "Parqueadero = servicio"
+    },
     "52150501": {
-      "cuenta_nombre": "INDUSTRIA Y COMERCIO",
+      "cuenta_nombre": "INDUSTRIA Y COMERCIO          ",
       "concepto_retencion": "no_retencion",
-      "obs": "Impuesto ICA (no es pago a tercero)"
+      "obs": "Impuestos/registros"
     },
     "52150502": {
       "cuenta_nombre": "AUTO-RETENCION INDUSTRIA Y COM",
       "concepto_retencion": "no_retencion",
-      "obs": "Autorretención ICA (no es pago a tercero)"
+      "obs": "Impuestos/registros"
+    },
+    "52157003": {
+      "cuenta_nombre": "IVA 19% COMPRAS DESCONTABLE   ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "52157004": {
+      "cuenta_nombre": "IVA19% SERVICIOS DESCONTABLE  ",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
     },
     "52201501": {
-      "cuenta_nombre": "ARRENDAM. MAQUINARIA Y EQUIPO",
+      "cuenta_nombre": "ARRENDAM. MAQUINARIA Y EQUIPO ",
       "concepto_retencion": "arrendamiento_mueble",
-      "obs": "Arrendamiento bienes muebles/plataformas"
+      "obs": "Arrendamiento de muebles/plataformas"
     },
     "52202501": {
-      "cuenta_nombre": "ARRENDAM.PLATAFORMAS",
+      "cuenta_nombre": "ARRENDAM.PLATAFORMAS          ",
       "concepto_retencion": "arrendamiento_mueble",
-      "obs": "Arrendamiento bienes muebles/plataformas"
+      "obs": "Arrendamiento de muebles/plataformas"
     },
     "52356001": {
-      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA",
+      "cuenta_nombre": "PUBLICIDAD,PROPAGANDA         ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
     "52950501": {
-      "cuenta_nombre": "COMISIONES PLATAFORMA",
+      "cuenta_nombre": "COMISIONES PLATAFORMA         ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "53050501": {
+      "cuenta_nombre": "GASTOS BANCARIOS (SERVICIOS)  ",
       "concepto_retencion": "comisiones_bancarias",
-      "obs": "Comisiones plataformas pago (autorretenedoras)"
+      "obs": "Servicios bancarios = no retención"
+    },
+    "53050502": {
+      "cuenta_nombre": "IVA 19% SERVICIOS BANCARIOS   ",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "IVA bancarios = no retención"
+    },
+    "53050505": {
+      "cuenta_nombre": "OTROS COBROS (SEGUROS)        ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguros (aseguradora autoret)"
     },
     "53051501": {
-      "cuenta_nombre": "COMISIONES TARJETAS",
+      "cuenta_nombre": "COMISIONES TARJETAS           ",
       "concepto_retencion": "comisiones_bancarias",
-      "obs": "Bancos - sin retención (autorretenedor)"
+      "obs": "Bancos/Comisiones plataforma"
+    },
+    "53051502": {
+      "cuenta_nombre": "COMISION FACTORING            ",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Factoring (financiera)"
     },
     "53052001": {
-      "cuenta_nombre": "INTERES PRESTAMO BANCARIO",
+      "cuenta_nombre": "INTERES PRESTAMO BANCARIO     ",
       "concepto_retencion": "comisiones_bancarias",
-      "obs": "Bancos - sin retención (autorretenedor)"
+      "obs": "Bancos/Comisiones plataforma"
     },
     "53052002": {
-      "cuenta_nombre": "INTERES PRESTAMO PARTICULARES",
+      "cuenta_nombre": "INTERES PRESTAMO PARTICULARES ",
       "concepto_retencion": "comisiones_bancarias",
-      "obs": "Bancos - sin retención (autorretenedor)"
+      "obs": "Bancos/Comisiones plataforma"
     },
     "53052006": {
-      "cuenta_nombre": "INTERESES MORA",
-      "concepto_retencion": "comisiones_bancarias",
-      "obs": "Bancos - sin retención (autorretenedor)"
+      "cuenta_nombre": "INTERESES MORA                ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Intereses mora"
     },
     "53053501": {
-      "cuenta_nombre": "DSCTOS CCIALES GNRALES",
-      "concepto_retencion": "no_retencion",
-      "obs": "Descuentos comerciales (no retención)"
+      "cuenta_nombre": "DSCTOS CCIALES GNRALES        ",
+      "concepto_retencion": "comisiones_bancarias",
+      "obs": "Bancos/Comisiones plataforma"
     },
     "53059501": {
-      "cuenta_nombre": "GRAVAMEN 4 X 1.000",
+      "cuenta_nombre": "GRAVAMEN 4 X 1.000            ",
       "concepto_retencion": "no_retencion",
-      "obs": "GMF 4x1000 (no es pago a tercero)"
+      "obs": "Impuestos/registros"
     },
     "55052001": {
-      "cuenta_nombre": "INTERESES MORA",
-      "concepto_retencion": "comisiones_bancarias",
-      "obs": "Bancos - sin retención (autorretenedor)"
+      "cuenta_nombre": "INTERESES MORA                ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Intereses mora extraordinarios"
+    },
+    "55151501": {
+      "cuenta_nombre": "COSTOS Y GASTOS EJERCICIOS ANT",
+      "concepto_retencion": "no_retencion",
+      "obs": "Costos ejercicios anteriores"
+    },
+    "55152001": {
+      "cuenta_nombre": "IMPUESTOS ASUMIDOS            ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Impuestos/registros"
+    },
+    "55959501": {
+      "cuenta_nombre": "AJUSTE AL PESO                ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Cuenta técnica/ajuste"
     },
     "55959502": {
       "cuenta_nombre": "OTROS GTOS DIVERSOS NO OPERACI",
       "concepto_retencion": "compras",
-      "obs": "Cuenta técnica - asumir compras 2.5%"
+      "obs": "Diversos (fallback compras)"
     },
     "61400501": {
-      "cuenta_nombre": "COSTO ALIMENTOS",
+      "cuenta_nombre": "COSTO ALIMENTOS               ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
+    },
+    "61401001": {
+      "cuenta_nombre": "COSTO CAFETERIA               ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "63050501": {
+      "cuenta_nombre": "BAJAS CLIENTES RETAIL         ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Bajas clientes (técnica)"
     },
     "71050101": {
-      "cuenta_nombre": "ALIMENTOS",
+      "cuenta_nombre": "ALIMENTOS                     ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
+    },
+    "71050102": {
+      "cuenta_nombre": "IVA 19% COMPRAS ALIMENTOS     ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "71050103": {
+      "cuenta_nombre": "IVA 5% COMPRAS ALIMENTOS      ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "71050104": {
+      "cuenta_nombre": "IPTO SALUDABLE ALIMENTOS      ",
+      "concepto_retencion": "compras",
+      "obs": "Impuesto saludable mayor valor costo"
     },
     "71050201": {
-      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"",
+      "cuenta_nombre": "BEBIDAS, VINOS Y LICORES\"     ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
+    },
+    "71050202": {
+      "cuenta_nombre": "IVA 19% COMPRAS VINOS Y LICORE",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "71050203": {
+      "cuenta_nombre": "IVA 5% COMPRAS VINOS Y LICORES",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "71050205": {
+      "cuenta_nombre": "IMPTO CONSUMO VINOS Y LICORES ",
+      "concepto_retencion": "compras",
+      "obs": "Impuesto consumo mayor valor costo"
     },
     "71050301": {
-      "cuenta_nombre": "CAFETERIA Y EMPAQUE",
+      "cuenta_nombre": "CAFETERIA Y EMPAQUE           ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
+    },
+    "71050302": {
+      "cuenta_nombre": "IVA 19% CAFETERIA Y EMPAQUE   ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
     },
     "71050401": {
-      "cuenta_nombre": "COMPRAS ASEO",
+      "cuenta_nombre": "COMPRAS ASEO                  ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
-    "72050501": {
-      "cuenta_nombre": "SUELDO APRENDIZ",
+    "71050402": {
+      "cuenta_nombre": "IVA 19%COMPRAS ASEO           ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "71059501": {
+      "cuenta_nombre": "TRASLADO DE ALIMENTOS Y BEBIDA",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "71059502": {
+      "cuenta_nombre": "TRASLADO CAFETERIA            ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "71059503": {
+      "cuenta_nombre": "TRASLADO DE ASEO              ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
+    },
+    "72046801": {
+      "cuenta_nombre": "APORTES A ARL                 ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Seguridad social/parafiscales"
+    },
+    "72047001": {
+      "cuenta_nombre": "APORTES FONDOS PENSION Y CESAN",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
+    },
+    "72047201": {
+      "cuenta_nombre": "APORTES CAJA COMPENSACION FAM ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
+    },
+    "72050501": {
+      "cuenta_nombre": "SUELDO APRENDIZ               ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
     },
     "72050601": {
-      "cuenta_nombre": "SUELDOS",
+      "cuenta_nombre": "SUELDOS                       ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Nómina"
     },
     "72051501": {
-      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS",
+      "cuenta_nombre": "HORAS EXTRAS Y RECARGOS       ",
       "concepto_retencion": "no_retencion",
-      "obs": "Horas extras = nómina"
+      "obs": "Nómina"
+    },
+    "72052401": {
+      "cuenta_nombre": "INCAPACIDADES                 ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "72052701": {
+      "cuenta_nombre": "AUXILIO TRANSPORTE            ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "72053001": {
+      "cuenta_nombre": "CESANTIAS                     ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "72053301": {
+      "cuenta_nombre": "INTERESES CESANTIAS           ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "72053601": {
+      "cuenta_nombre": "PRIMA SERVICIOS               ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "72053901": {
+      "cuenta_nombre": "VACACIONES                    ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
+    },
+    "72054501": {
+      "cuenta_nombre": "AUXILIOS                      ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
     },
     "72054801": {
-      "cuenta_nombre": "BONIFICACION SALARIAL",
+      "cuenta_nombre": "BONIFICACION SALARIAL         ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Nómina"
+    },
+    "72054802": {
+      "cuenta_nombre": "BONIFICACION NO SALARIAL      ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Nómina"
     },
     "72055101": {
       "cuenta_nombre": "DOTACION Y SUMIN. A TRABAJADOR",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Nómina"
     },
     "72056001": {
-      "cuenta_nombre": "INDEMNIZACIONES LABORALES",
+      "cuenta_nombre": "INDEMNIZACIONES LABORALES     ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Nómina"
     },
     "72056301": {
-      "cuenta_nombre": "CAPACITACION AL PERSONAL",
-      "concepto_retencion": "servicios",
-      "obs": "Capacitación al personal = servicios"
+      "cuenta_nombre": "CAPACITACION AL PERSONAL      ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Seguridad social/parafiscales"
     },
     "72058401": {
-      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS",
+      "cuenta_nombre": "GASTOS MEDICOS Y DROGAS       ",
       "concepto_retencion": "no_retencion",
-      "obs": "Nómina - no aplica retención por compras/servicios"
+      "obs": "Seguridad social/parafiscales"
     },
     "73103501": {
-      "cuenta_nombre": "ASESORIA TECNICA",
+      "cuenta_nombre": "ASESORIA TECNICA              ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73157001": {
+      "cuenta_nombre": "IVA 5% COMPRAS DESCONTABLE    ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "73157002": {
+      "cuenta_nombre": "IVA 5% SERVICIOS DESCONTABLE  ",
+      "concepto_retencion": "honorarios",
+      "obs": "Honorarios profesionales"
+    },
+    "73157003": {
+      "cuenta_nombre": "IVA 19% COMPRAS DESCONTABLE   ",
+      "concepto_retencion": "compras",
+      "obs": "IVA mayor valor de costo (alimentos/aseo)"
+    },
+    "73157004": {
+      "cuenta_nombre": "IVA 19% SERV.DESCONTABLE      ",
       "concepto_retencion": "honorarios",
       "obs": "Honorarios profesionales"
     },
     "73159501": {
-      "cuenta_nombre": "IMPUESTO A LA SEGURIDAD",
+      "cuenta_nombre": "IMPUESTO A LA SEGURIDAD       ",
       "concepto_retencion": "no_retencion",
-      "obs": "Impuestos/registros (sin retención)"
+      "obs": "Impuestos/registros"
+    },
+    "73159502": {
+      "cuenta_nombre": "APROV.ESPACIO PUBLICO         ",
+      "concepto_retencion": "servicios",
+      "obs": "Aprovechamiento espacio público"
     },
     "73201001": {
       "cuenta_nombre": "ARRENDAM. CONSTRUCCIONES Y EDI",
       "concepto_retencion": "arrendamiento_inmueble",
-      "obs": "Arrendamiento bienes inmuebles"
+      "obs": "Arrendamiento de inmuebles"
+    },
+    "73202001": {
+      "cuenta_nombre": "ARRENDAM. EQUIPO DE OFICINA   ",
+      "concepto_retencion": "arrendamiento_mueble",
+      "obs": "Arrendamiento de muebles/plataformas"
+    },
+    "73209501": {
+      "cuenta_nombre": "OTROS ARRENDAMIENTOS          ",
+      "concepto_retencion": "arrendamiento_mueble",
+      "obs": "Arrendamiento de muebles/plataformas"
     },
     "73253001": {
       "cuenta_nombre": "ADMINISTRACIONES CENTRO COMERC",
@@ -269,182 +1444,217 @@
     "73253002": {
       "cuenta_nombre": "OTRAS AFILIACIONES Y SOSTENIMI",
       "concepto_retencion": "servicios",
-      "obs": "Otras afiliaciones = servicios"
+      "obs": "Servicios generales"
     },
     "73301001": {
-      "cuenta_nombre": "SEGURO CUMPLIMIENTO",
+      "cuenta_nombre": "SEGURO CUMPLIMIENTO           ",
       "concepto_retencion": "no_retencion",
-      "obs": "Seguros (aseguradora es autorretenedora)"
+      "obs": "Seguros (aseguradora autoret)"
     },
     "73350501": {
-      "cuenta_nombre": "ASEO Y VIGILANCIA",
-      "concepto_retencion": "compras",
-      "obs": "Compra de bienes"
+      "cuenta_nombre": "ASEO Y VIGILANCIA             ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
     },
     "73351001": {
-      "cuenta_nombre": "TEMPORALES",
+      "cuenta_nombre": "TEMPORALES                    ",
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
+    },
+    "73351501": {
+      "cuenta_nombre": "ASISTENCIA TECNICA            ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
     "73352501": {
-      "cuenta_nombre": "ACUEDUCTO Y ALCANTARILLADO",
+      "cuenta_nombre": "ACUEDUCTO Y ALCANTARILLADO    ",
       "concepto_retencion": "servicios_publicos",
       "obs": "Servicios públicos"
     },
     "73353001": {
-      "cuenta_nombre": "ENERGIA ELECTRICA",
+      "cuenta_nombre": "ENERGIA ELECTRICA             ",
+      "concepto_retencion": "servicios_publicos",
+      "obs": "Servicios públicos"
+    },
+    "73353501": {
+      "cuenta_nombre": "TELEFONO                      ",
       "concepto_retencion": "servicios_publicos",
       "obs": "Servicios públicos"
     },
     "73353601": {
-      "cuenta_nombre": "INTERNET",
+      "cuenta_nombre": "INTERNET                      ",
       "concepto_retencion": "servicios_publicos",
       "obs": "Servicios públicos"
     },
     "73355001": {
-      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS",
+      "cuenta_nombre": "TRANSPORTE, FLETES Y ACARREOS ",
       "concepto_retencion": "transporte_carga",
-      "obs": "Transporte de carga"
+      "obs": "Transporte/fletes"
     },
     "73355501": {
-      "cuenta_nombre": "GAS",
+      "cuenta_nombre": "GAS                           ",
       "concepto_retencion": "servicios_publicos",
-      "obs": "Servicios públicos"
+      "obs": "Gas = servicio público"
     },
     "73359501": {
-      "cuenta_nombre": "SERVICIOS LOGISTICOS",
+      "cuenta_nombre": "SERVICIOS LOGISTICOS          ",
       "concepto_retencion": "servicios",
-      "obs": "Servicios logísticos"
+      "obs": "Servicios generales"
     },
     "73359502": {
-      "cuenta_nombre": "CAMBIO DE MENUDA",
+      "cuenta_nombre": "CAMBIO DE MENUDA              ",
       "concepto_retencion": "no_retencion",
-      "obs": "Cambio de menuda (cuenta técnica)"
+      "obs": "Cuenta técnica/ajuste"
     },
     "73359505": {
       "cuenta_nombre": "LOS OLIVOS PARK- COCINA CDP ML",
-      "concepto_retencion": "servicios",
-      "obs": "Servicios cocina CDP"
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
     },
     "73359590": {
-      "cuenta_nombre": "OTROS SERVICIOS",
-      "concepto_retencion": "servicios",
-      "obs": "Otros servicios"
+      "cuenta_nombre": "OTROS SERVICIOS               ",
+      "concepto_retencion": "compras",
+      "obs": "Diversos (fallback compras)"
     },
     "73401001": {
-      "cuenta_nombre": "REGISTRO MERCANTIL",
+      "cuenta_nombre": "REGISTRO MERCANTIL            ",
       "concepto_retencion": "no_retencion",
-      "obs": "Impuestos/registros (sin retención)"
+      "obs": "Impuestos/registros"
     },
     "73452001": {
-      "cuenta_nombre": "EQUIPO DE OFICINA",
+      "cuenta_nombre": "EQUIPO DE OFICINA             ",
       "concepto_retencion": "compras",
-      "obs": "Compra de activos / equipos"
+      "obs": "Compra de activos"
     },
     "73452501": {
       "cuenta_nombre": "EQUIPO DE COMPUTACION Y COMUNI",
       "concepto_retencion": "compras",
-      "obs": "Compra de activos / equipos"
+      "obs": "Compra de activos"
     },
     "73453001": {
       "cuenta_nombre": "CONSTRUCCIONES Y EDIFICACIONES",
       "concepto_retencion": "compras",
-      "obs": "Construcciones y edificaciones (activo)"
+      "obs": "Compra de activos"
     },
     "73453501": {
-      "cuenta_nombre": "MAQUINARIA Y EQUIPO",
+      "cuenta_nombre": "MAQUINARIA Y EQUIPO           ",
       "concepto_retencion": "compras",
-      "obs": "Compra de activos / equipos"
+      "obs": "Compra de activos"
     },
     "73454001": {
-      "cuenta_nombre": "FLOTA Y EQUIPO DE TRANSPORTE",
+      "cuenta_nombre": "FLOTA Y EQUIPO DE TRANSPORTE  ",
       "concepto_retencion": "transporte_carga",
-      "obs": "Transporte de carga"
+      "obs": "Transporte/fletes"
     },
     "73500501": {
-      "cuenta_nombre": "INSTALACIONES ELECTRICAS",
+      "cuenta_nombre": "INSTALACIONES ELECTRICAS      ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
     "73501001": {
-      "cuenta_nombre": "ARREGLOS ORNAMENTALES",
-      "concepto_retencion": "no_retencion",
-      "obs": "No es pago a tercero"
+      "cuenta_nombre": "ARREGLOS ORNAMENTALES         ",
+      "concepto_retencion": "servicios",
+      "obs": "Arreglos ornamentales"
     },
     "73501501": {
-      "cuenta_nombre": "REPARACIONES LOCATIVAS",
+      "cuenta_nombre": "REPARACIONES LOCATIVAS        ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
     "73509501": {
-      "cuenta_nombre": "OTRAS REPARACIONES",
+      "cuenta_nombre": "OTRAS REPARACIONES            ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
     "73550501": {
-      "cuenta_nombre": "ALOJAMIENTO Y MANUTENCION",
+      "cuenta_nombre": "ALOJAMIENTO Y MANUTENCION     ",
       "concepto_retencion": "servicios",
-      "obs": "Alojamiento y manutención = servicios"
+      "obs": "Servicios generales"
     },
     "73559501": {
-      "cuenta_nombre": "TIQUETES Y OTROS GTOS VIAJES",
+      "cuenta_nombre": "TIQUETES Y OTROS GTOS VIAJES  ",
       "concepto_retencion": "servicios",
-      "obs": "Gastos de viaje"
+      "obs": "Servicios generales"
+    },
+    "73600801": {
+      "cuenta_nombre": "DEPRECIA. CONSTRUC Y ADECUACIO",
+      "concepto_retencion": "no_retencion",
+      "obs": "Sin pago a tercero"
+    },
+    "73602401": {
+      "cuenta_nombre": "DEPRECIA. MUEBLES Y ENSERES   ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos"
+    },
+    "73602801": {
+      "cuenta_nombre": "DEPRECIA. EQUIPO COMPUTACION Y",
+      "concepto_retencion": "compras",
+      "obs": "Compra de activos"
+    },
+    "73603601": {
+      "cuenta_nombre": "DEPRECIA. EQUI HOTELES Y RESTA",
+      "concepto_retencion": "no_retencion",
+      "obs": "Sin pago a tercero"
+    },
+    "73653501": {
+      "cuenta_nombre": "POLIZAS DIFERIDAS             ",
+      "concepto_retencion": "no_retencion",
+      "obs": "Pólizas diferidas"
     },
     "73952001": {
       "cuenta_nombre": "GASTOS DE REPRESENTACION Y REL",
-      "concepto_retencion": "servicios_publicos",
-      "obs": "Servicios públicos"
+      "concepto_retencion": "servicios",
+      "obs": "Servicios generales"
     },
     "73952501": {
-      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA",
+      "cuenta_nombre": "ELEMENTOS ASEO Y CAFETERIA    ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
     "73953001": {
-      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS",
+      "cuenta_nombre": "UTILES,PAPELERIA, FOTOCOPIAS  ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
     "73953501": {
-      "cuenta_nombre": "COMBUSTIBLES Y LUBRICANTES",
+      "cuenta_nombre": "COMBUSTIBLES Y LUBRICANTES    ",
       "concepto_retencion": "compras",
-      "obs": "Combustibles y lubricantes"
+      "obs": "Compra de bienes"
     },
     "73954001": {
-      "cuenta_nombre": "ENVASES Y EMPAQUES",
+      "cuenta_nombre": "ENVASES Y EMPAQUES            ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
     "73954501": {
-      "cuenta_nombre": "TAXIS Y BUSES",
-      "concepto_retencion": "servicios",
-      "obs": "Gastos de viaje"
+      "cuenta_nombre": "TAXIS Y BUSES                 ",
+      "concepto_retencion": "transporte_carga",
+      "obs": "Transporte/fletes"
     },
     "73956001": {
-      "cuenta_nombre": "CASINO Y RESTAURANTE",
+      "cuenta_nombre": "CASINO Y RESTAURANTE          ",
       "concepto_retencion": "servicios",
       "obs": "Servicios generales"
     },
     "73956501": {
-      "cuenta_nombre": "PARQUEADERO",
+      "cuenta_nombre": "PARQUEADERO                   ",
       "concepto_retencion": "servicios",
-      "obs": "Servicios generales"
+      "obs": "Parqueadero gasto"
     },
     "73959501": {
-      "cuenta_nombre": "ELEMENTOS PARA PRUEBAS",
+      "cuenta_nombre": "ELEMENTOS PARA PRUEBAS        ",
       "concepto_retencion": "compras",
-      "obs": "Fallback automático (revisar)"
+      "obs": "Elementos para pruebas (compras)"
     },
     "73959502": {
-      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI",
+      "cuenta_nombre": "MENAJE, LENCERIA Y CRISTALERI ",
       "concepto_retencion": "compras",
       "obs": "Compra de bienes"
     },
     "73959503": {
-      "cuenta_nombre": "GASTOS CAMION",
-      "concepto_retencion": "servicios_publicos",
-      "obs": "Servicios públicos"
+      "cuenta_nombre": "GASTOS CAMION                 ",
+      "concepto_retencion": "compras",
+      "obs": "Compra de bienes"
     }
   }
 }
