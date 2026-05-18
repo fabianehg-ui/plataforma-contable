@@ -8,7 +8,7 @@ los XMLs por su trackId (la columna "CUFE/CUDE" del Excel del Token, que
 en realidad es el `Id` interno de DIAN).
 
 Restricciones reales observadas:
-  • La sesión del Token DIAN expira a los ~30 minutos / ~700 documentos.
+  • La sesión del Token DIAN expira a los ~30 minutos / ~500 documentos (margen seguridad reducido de 700).
   • Cuando expira, la próxima descarga falla y hay que renovar el Token
     con un link nuevo del usuario.
   • El portal puede tener rate-limit; se usa un delay configurable.
@@ -21,7 +21,7 @@ progreso.
 EXPONE:
     autenticar(token_url) -> Session
     descargar_xml(session, cufe) -> bytes (ZIP)
-    descargar_lote(session, cufes, max_docs=700, ...) -> ResultadoDescarga
+    descargar_lote(session, cufes, max_docs=500, ...) -> ResultadoDescarga
     juntar_zips(lista_bytes_zip) -> bytes (ZIP plano consolidado)
 """
 from __future__ import annotations
@@ -45,8 +45,8 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Bloque por defecto: 700 docs antes de renovar token (límite empírico)
-DEFAULT_BLOCK_SIZE = 700
+# Bloque por defecto: 500 docs antes de renovar token (límite empírico)
+DEFAULT_BLOCK_SIZE = 500
 
 # Delay entre descargas para no saturar DIAN (segundos)
 DEFAULT_DELAY = 0.15  # ~6-7 docs/seg, conservador
@@ -234,7 +234,7 @@ def descargar_lote(
     Args:
         session: sesión autenticada.
         cufes: lista de CUFEs (trackIds) a descargar.
-        max_docs: máximo a procesar en este bloque (default 700).
+        max_docs: máximo a procesar en este bloque (default 500).
         delay: segundos entre descargas para no saturar.
         timeout: timeout por petición.
         on_progress: callback (procesados, total_lote, mensaje) opcional.
@@ -291,7 +291,7 @@ def descargar_lote(
     return res
 
 
-# ─── Descarga paralela por bloques de 700 ──────────────────────
+# ─── Descarga paralela por bloques de 500 ──────────────────────
 @dataclass
 class ProgresoHilo:
     """Estado en vivo de un hilo de descarga."""
@@ -326,7 +326,7 @@ def descargar_paralelo_por_bloques(
     Args:
         token_url: URL del Token DIAN (la misma para todos los hilos).
         cufes: lista completa de CUFEs.
-        tam_bloque: docs por hilo (default 700).
+        tam_bloque: docs por hilo (default 500).
         delay: pausa entre descargas dentro de cada hilo.
         timeout: timeout por petición.
         on_progress: callback que recibe la lista actual de ProgresoHilo
@@ -766,7 +766,7 @@ def descargar_con_bloques(
     Args:
         token_url_inicial: primer link de Token.
         cufes: lista completa de CUFEs a descargar.
-        max_docs_por_bloque: corte por bloque (default 700).
+        max_docs_por_bloque: corte por bloque (default 500).
         delay: segundos entre peticiones.
         on_progress: callback de progreso.
         renovar_token_fn: función que pide al usuario un nuevo token URL.
