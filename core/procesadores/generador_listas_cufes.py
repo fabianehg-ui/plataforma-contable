@@ -152,12 +152,21 @@ def generar_lista_ventas_mixtas(df: pd.DataFrame) -> List[dict]:
     return out
 
 
-def generar_lista_proveedores_unicos(df_token, maestro_existente: Optional[dict] = None) -> List[dict]:
+def generar_lista_proveedores_unicos(
+    df_token,
+    maestro_existente: Optional[dict] = None,
+    mapeo_historico: Optional[dict] = None,
+) -> List[dict]:
     """
     Para cada NIT proveedor único en los recibidos, devuelve UN CUFE representativo
     (el de mayor valor). Útil para descargar 1 XML por NIT y extraer régimen + dirección.
 
-    Si se pasa `maestro_existente`, se excluyen los NITs que ya están en el maestro.
+    Excluye NITs que ya están en:
+      - maestro_existente['terceros']  (régimen + dirección ya conocidos)
+      - mapeo_historico['mapeo']        (NIT ya tiene cuenta gasto histórica)
+
+    Es decir: solo trae los proveedores REALMENTE NUEVOS, los que no aparecen ni
+    en el maestro ni en la contabilidad existente.
 
     Returns:
         Lista de dicts con campos cufe, folio, prefijo, nit_emisor, nombre_emisor, total.
@@ -173,10 +182,19 @@ def generar_lista_proveedores_unicos(df_token, maestro_existente: Optional[dict]
 
     df["NIT_norm"] = df["nit_emisor"].apply(_normalizar)
 
-    # Filtrar los que ya están en el maestro
+    # Construir set de NITs ya conocidos (maestro + histórico)
+    nits_conocidos = set()
     if maestro_existente:
-        ya_conocidos = set(maestro_existente.get("terceros", {}).keys())
-        df = df[~df["NIT_norm"].isin(ya_conocidos)]
+        nits_conocidos |= set(maestro_existente.get("terceros", {}).keys())
+    if mapeo_historico:
+        # mapeo_historico tiene formato {"mapeo": [{"nit": "...", ...}, ...]}
+        for entry in mapeo_historico.get("mapeo", []):
+            nit = _normalizar(entry.get("nit", ""))
+            if nit:
+                nits_conocidos.add(nit)
+
+    if nits_conocidos:
+        df = df[~df["NIT_norm"].isin(nits_conocidos)]
         if len(df) == 0:
             return []
 
