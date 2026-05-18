@@ -683,6 +683,7 @@ else:
                 "progresos_hilos": [],
                 "lista_origen": [],     # lista del Excel para el dictamen
                 "dictamen": None,
+                "intento_realizado": False,  # Solo True después de un click
             }
 
     # Generar las 2 listas siempre que haya df_token_filt
@@ -731,31 +732,38 @@ else:
             st.info("Ya está todo descargado para este tipo. Limpia el progreso si quieres rehacer.")
             return
 
-        # Placeholders para progreso en vivo
-        progreso_placeholder = st.empty()
+        # IMPORTANTE: los callbacks de threads NO pueden llamar a st.* directamente
+        # (Streamlit lo rompe porque las llamadas a st.* deben venir del hilo
+        # principal). Usamos un diccionario thread-safe que el hilo principal
+        # lee cada cierto tiempo, NO llamamos st.* desde los workers.
+        progreso_compartido = {"progresos": []}
 
         def on_prog(progresos):
-            with progreso_placeholder.container():
-                st.markdown(f"#### Progreso en vivo — {len(progresos)} hilo(s)")
-                for p in progresos:
-                    rango_label = f"Hilo {p.hilo_id} ({p.rango_desde}-{p.rango_hasta})"
-                    total_hilo = p.rango_hasta - p.rango_desde + 1
-                    pct = (p.procesados / total_hilo) if total_hilo else 0
-                    estado_icon = {
-                        "pendiente": "⏳",
-                        "descargando": "⬇️",
-                        "ok": "✅",
-                        "sesion_expirada": "⚠️",
-                        "error": "❌",
-                    }.get(p.estado, "❓")
-                    st.progress(
-                        pct,
-                        text=f"{estado_icon} {rango_label}: {p.procesados}/{total_hilo} "
-                             f"(ok={p.exitosos}, fail={p.fallidos}) {p.mensaje[:40]}"
-                    )
+            # SOLO actualiza el dict — no llamadas a st.* aquí
+            progreso_compartido["progresos"] = [
+                {
+                    "hilo_id": p.hilo_id,
+                    "rango_desde": p.rango_desde,
+                    "rango_hasta": p.rango_hasta,
+                    "procesados": p.procesados,
+                    "exitosos": p.exitosos,
+                    "fallidos": p.fallidos,
+                    "estado": p.estado,
+                    "mensaje": p.mensaje,
+                }
+                for p in progresos
+            ]
 
         try:
-            with st.spinner(f"Descargando {len(cufes_pendientes):,} XMLs en paralelo..."):
+            # Marcar que se intentó descarga (esto activa el dictamen)
+            estado["intento_realizado"] = True
+            estado["lista_origen"] = lista_excel_completa
+
+            with st.spinner(
+                f"Descargando {len(cufes_pendientes):,} XMLs en "
+                f"{(len(cufes_pendientes) + 699) // 700} hilo(s)... "
+                f"Esto puede tardar varios minutos."
+            ):
                 res, progresos_final = dd.descargar_paralelo_por_bloques(
                     token_url,
                     cufes_pendientes,
@@ -781,38 +789,58 @@ else:
                 }
                 for p in progresos_final
             ]
-            estado["lista_origen"] = lista_excel_completa
             estado["dictamen"] = dd.generar_dictamen(
                 lista_excel_completa,
                 set(estado["zips_por_cufe"].keys()),
                 estado["fallidos"],
             )
 
-            progreso_placeholder.empty()
-
             if res.motivo_parada == "completo":
                 st.success(
                     f"🎉 Descarga COMPLETA: {res.total_exitosos:,} XMLs "
-                    f"({res.duracion_seg:.0f}s)"
+                    f"({res.duracion_seg:.0f}s, "
+                    f"{res.total_exitosos / max(res.duracion_seg, 1):.1f} XMLs/seg)"
                 )
             elif res.motivo_parada == "sesion_expirada":
                 st.warning(
                     f"⚠️ La sesión DIAN expiró en uno o más hilos. "
-                    f"Total descargado: {len(estado['zips_por_cufe']):,}. "
+                    f"Descargados en este intento: {res.total_exitosos:,}. "
+                    f"Total acumulado: {len(estado['zips_por_cufe']):,}. "
                     f"Genera un Token nuevo y vuelve a darle al botón "
                     f"para descargar los faltantes."
                 )
             else:
-                st.info(f"Descarga parcial: {res.total_exitosos} OK. Motivo: {res.motivo_parada}")
+                st.info(
+                    f"Descarga parcial: {res.total_exitosos:,} OK. "
+                    f"Motivo: {res.motivo_parada}"
+                )
+
+            # Mostrar progreso final por hilo
+            if progresos_final:
+                with st.expander("Detalle por hilo", expanded=True):
+                    for p in progresos_final:
+                        total_hilo = p.rango_hasta - p.rango_desde + 1
+                        pct = (p.procesados / total_hilo * 100) if total_hilo else 0
+                        icon = {
+                            "ok": "✅",
+                            "sesion_expirada": "⚠️",
+                            "error": "❌",
+                        }.get(p.estado, "❓")
+                        st.text(
+                            f"{icon} Hilo {p.hilo_id} ({p.rango_desde}-{p.rango_hasta}): "
+                            f"{p.exitosos}/{total_hilo} ok ({pct:.0f}%), "
+                            f"{p.fallidos} fallidos — {p.mensaje[:60]}"
+                        )
+
             st.rerun()
         except dd.SesionExpirada as e:
             st.error(f"❌ Token inválido o expirado al autenticar: {e}")
         except ValueError as e:
             st.error(f"❌ URL inválida: {e}")
         except Exception as e:
-            st.error(f"❌ Error inesperado: {e}")
+            st.error(f"❌ Error inesperado: {type(e).__name__}: {e}")
             import traceback
-            with st.expander("Detalle"):
+            with st.expander("Detalle del error", expanded=True):
                 st.code(traceback.format_exc())
 
     with col_em:
@@ -847,10 +875,11 @@ else:
         ):
             _ejecutar_descarga("recibidos", lr)
 
-    # ─── Mostrar DICTAMEN para cada tipo que tenga descarga ───
+    # ─── Mostrar DICTAMEN solo si hubo un INTENTO de descarga ───
+    # (No mostrar al cargar la página sin haber clickeado nada)
     for tipo_str, label_emoji in [("emitidos", "📤 EMITIDOS"), ("recibidos", "📥 RECIBIDOS")]:
         estado = st.session_state[f"dian_dl_{tipo_str}"]
-        if not estado["zips_por_cufe"] and not estado["fallidos"]:
+        if not estado.get("intento_realizado"):
             continue
 
         st.markdown(f"---")
@@ -972,6 +1001,7 @@ else:
                     "progresos_hilos": [],
                     "lista_origen": [],
                     "dictamen": None,
+                    "intento_realizado": False,
                 }
                 st.session_state.pop(f"res_proc_{tipo_str}", None)
                 st.rerun()
