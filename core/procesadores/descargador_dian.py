@@ -600,6 +600,152 @@ def generar_dictamen(
     }
 
 
+# ─── Controlador background + polling para progreso en vivo ──
+class DescargaParalelaController:
+    """
+    Lanza la descarga paralela en background y permite hacer polling
+    desde el hilo principal para mostrar progreso en vivo (compatible
+    con Streamlit, que no puede recibir llamadas st.* desde workers).
+
+    Uso típico desde Streamlit:
+        ctrl = iniciar_descarga_paralela(token_url, cufes)
+        slot = st.empty()
+        while ctrl.esta_corriendo():
+            with slot.container():
+                for p in ctrl.obtener_progreso():
+                    st.progress(p.procesados / total_hilo, text=...)
+            time.sleep(0.5)
+        res, progresos_final = ctrl.esperar_resultado()
+    """
+    def __init__(
+        self,
+        token_url: str,
+        cufes: list[str],
+        tam_bloque: int = DEFAULT_BLOCK_SIZE,
+        delay: float = DEFAULT_DELAY,
+        timeout: int = DEFAULT_TIMEOUT,
+        parar_todos_si_uno_falla: bool = True,
+    ):
+        self.token_url = token_url
+        self.cufes = cufes
+        self.tam_bloque = tam_bloque
+        self.delay = delay
+        self.timeout = timeout
+        self.parar_todos_si_uno_falla = parar_todos_si_uno_falla
+
+        # Estado interno
+        self._progresos: list[ProgresoHilo] = []
+        self._lock = threading.Lock()
+        self._resultado_final: Optional[ResultadoDescarga] = None
+        self._hilo_orquestador: Optional[threading.Thread] = None
+        self._terminado = threading.Event()
+
+    def obtener_progreso(self) -> list[ProgresoHilo]:
+        """Retorna snapshot (copia) del progreso actual de todos los hilos."""
+        with self._lock:
+            # Copia superficial — los ProgresoHilo son dataclasses simples
+            return [
+                ProgresoHilo(
+                    hilo_id=p.hilo_id,
+                    rango_desde=p.rango_desde,
+                    rango_hasta=p.rango_hasta,
+                    procesados=p.procesados,
+                    exitosos=p.exitosos,
+                    fallidos=p.fallidos,
+                    estado=p.estado,
+                    mensaje=p.mensaje,
+                )
+                for p in self._progresos
+            ]
+
+    def esta_corriendo(self) -> bool:
+        """True mientras la descarga sigue activa."""
+        return not self._terminado.is_set()
+
+    def iniciar(self):
+        """Arranca la descarga en background. Retorna inmediato."""
+        if self._hilo_orquestador is not None:
+            raise RuntimeError("Ya se inició esta descarga")
+        self._hilo_orquestador = threading.Thread(
+            target=self._ejecutar,
+            daemon=True,
+        )
+        self._hilo_orquestador.start()
+
+    def esperar_resultado(
+        self, timeout: Optional[float] = None
+    ) -> tuple[ResultadoDescarga, list[ProgresoHilo]]:
+        """
+        Bloquea hasta que termine la descarga (o pasa el timeout).
+        Retorna (ResultadoDescarga, lista de ProgresoHilo final).
+        """
+        self._terminado.wait(timeout=timeout)
+        if self._resultado_final is None:
+            # Aún no terminó (timeout)
+            return ResultadoDescarga(motivo_parada="aun_corriendo"), self.obtener_progreso()
+        return self._resultado_final, self.obtener_progreso()
+
+    def _ejecutar(self):
+        """Orquesta los workers en threads y consolida el resultado."""
+        try:
+            # Callback que actualiza nuestro estado interno (thread-safe)
+            def _on_prog(progresos):
+                with self._lock:
+                    # Copia los objetos pasados al estado interno
+                    self._progresos = [
+                        ProgresoHilo(
+                            hilo_id=p.hilo_id,
+                            rango_desde=p.rango_desde,
+                            rango_hasta=p.rango_hasta,
+                            procesados=p.procesados,
+                            exitosos=p.exitosos,
+                            fallidos=p.fallidos,
+                            estado=p.estado,
+                            mensaje=p.mensaje,
+                        )
+                        for p in progresos
+                    ]
+
+            res, progresos_final = descargar_paralelo_por_bloques(
+                self.token_url,
+                self.cufes,
+                tam_bloque=self.tam_bloque,
+                delay=self.delay,
+                timeout=self.timeout,
+                on_progress=_on_prog,
+                parar_todos_si_uno_falla=self.parar_todos_si_uno_falla,
+            )
+            self._resultado_final = res
+            with self._lock:
+                self._progresos = progresos_final
+        except Exception as e:
+            # Si falla algo grave, marcar resultado de error y dejar trace
+            self._resultado_final = ResultadoDescarga(
+                motivo_parada=f"error_orquestador: {type(e).__name__}: {e}"
+            )
+        finally:
+            self._terminado.set()
+
+
+def iniciar_descarga_paralela(
+    token_url: str,
+    cufes: list[str],
+    tam_bloque: int = DEFAULT_BLOCK_SIZE,
+    delay: float = DEFAULT_DELAY,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> DescargaParalelaController:
+    """Helper: crea el controlador y arranca la descarga. Retorna inmediato."""
+    ctrl = DescargaParalelaController(
+        token_url=token_url,
+        cufes=cufes,
+        tam_bloque=tam_bloque,
+        delay=delay,
+        timeout=timeout,
+    )
+    ctrl.iniciar()
+    return ctrl
+
+
 # ─── Helper: descargar TODO con renovación interactiva ────────
 # (Pensado para uso desde la UI con sesiones de Streamlit, no para
 #  scripts batch. La UI maneja la pausa entre bloques.)
