@@ -200,3 +200,19 @@ def generar_lista_proveedores_unicos(df_token, maestro_existente: Optional[dict]
             "razon":            "PROVEEDOR_UNICO",
         })
     return out
+
+
+def generar_lista_stl_completa(df_token, fecha_desde=None, fecha_hasta=None) -> List[str]:
+    """
+    Genera la lista de TODOS los CUFEs de STL emitidas (no solo MIXTAS).
+    El procesador desde XML necesita todos para parsear IVA por línea.
+    """
+    df = df_token[df_token["grupo"].str.lower() == "emitido"].copy()
+    df = df[df["prefijo"].astype(str).str.upper().str.startswith("STL")]
+
+    if fecha_desde is not None:
+        df = df[df["fecha_emision"].dt.date >= fecha_desde]
+    if fecha_hasta is not None:
+        df = df[df["fecha_emision"].dt.date <= fecha_hasta]
+
+    return df["cufe"].dropna().astype(str).tolist()

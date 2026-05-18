@@ -39,34 +39,29 @@ TARIFAS_INC = [0.08, 0.16]
 # Cuenta de proveedores (PUC estándar)
 CUENTA_PROVEEDORES = "22050505"
 
-# IVA descontable por tarifa (cuentas estándar PUC)
+# IVA descontable por tarifa - cuenta oficial JIPER
 CUENTAS_IVA_DESCONTABLE = {
-    "19%":  "24080601",
-    "5%":   "24080605",
-    "16%":  "24080606",
+    "19%":  "24081003",   # IVA DESCONTABLE 19% (JIPER usa también 71050102 para alimentos)
+    "5%":   "24081003",   # JIPER usa 71050103 para alimentos 5%
+    "16%":  "24081003",
 }
 
-# INC pagado en compras (gasto, no descontable normalmente)
-CUENTA_INC_COMPRAS = "51959505"
+# INC pagado en compras (cuenta histórica JIPER)
+CUENTA_INC_COMPRAS = "71050205"   # IMPTO CONSUMO VINOS Y LICORES (también sirve para INC en general)
 
-# Cuentas PUC para impuestos discriminados en compras
-# NOTA: IBUA, ICUI, IC, ICL son mayor valor del costo del producto en compras
-# (Ley 2277/2022 art. 513-3 — no descontables). Para JIPER que compra los
-# productos (no los produce), estos impuestos suben el costo.
-# Agrupación pedida por el usuario:
-#   - Impuesto saludable    = IBUA + ICUI
-#   - Impuesto al consumo   = IC + INC Bolsas
-#   - Impuesto a los licores = ICL
+# Cuentas PUC reales de JIPER para impuestos discriminados
+# (verificadas contra histórico marzo+abril 2026)
 CUENTAS_IMPUESTOS_COMPRAS = {
-    "saludable":   "71050601",  # IBUA + ICUI
-    "consumo":     "71050603",  # IC + INC Bolsas
-    "licores":     "71050605",  # ICL
-    "ica":         "23686801",  # ICA retenido (si aparece)
-    "carbono":     "71050606",
-    "combustibles":"71050607",
-    "datos":       "71050608",
-    "inpp":        "71050609",
-    "timbre":      "51959501",
+    "saludable":   "71050104",  # IPTO SALUDABLE ALIMENTOS - IBUA + ICUI
+    "consumo":     "71050205",  # IMPTO CONSUMO VINOS Y LICORES - IC + INC Bolsas
+    "licores":     "71050205",  # ICL (misma cuenta de consumo bebidas)
+    "ica":         "23681510",  # RET. ICA MEDELLIN (cuando aparece)
+    "timbre":      "51959501",  # genérico (no encontrado en histórico)
+    # Estas categorías no aparecen en el histórico real, pero quedan para futuro
+    "carbono":     "71050104",  # fallback a saludable
+    "combustibles":"71050104",
+    "datos":       "71050104",
+    "inpp":        "71050104",
 }
 
 # Mapeo columna del Excel → categoría
