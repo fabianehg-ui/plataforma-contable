@@ -125,6 +125,10 @@ class FacturaXML:
     ciudad_emisor: str = ""
     direccion_emisor: str = ""
 
+    # Régimen del RECEPTOR (cliente) — para STL detectar si es Régimen Simple
+    tax_level_receptor: str = ""
+    tax_level_principal_receptor: str = ""
+
 
 def _normalizar_nit(s: str) -> str:
     if not s:
@@ -206,6 +210,7 @@ def parsear_factura(xml_str: str) -> Optional[FacturaXML]:
     # Cliente
     nit_cli = ""
     nombre_cli = ""
+    tax_level_cli = ""
     customer = root.find("cac:AccountingCustomerParty/cac:Party", NS)
     if customer is not None:
         tax_scheme = customer.find("cac:PartyTaxScheme", NS)
@@ -216,6 +221,9 @@ def parsear_factura(xml_str: str) -> Optional[FacturaXML]:
             rn = tax_scheme.find("cbc:RegistrationName", NS)
             if rn is not None and rn.text:
                 nombre_cli = rn.text.strip()
+            tlc = tax_scheme.find("cbc:TaxLevelCode", NS)
+            if tlc is not None and tlc.text:
+                tax_level_cli = tlc.text.strip()
 
     # Total
     total_factura = 0
@@ -242,6 +250,8 @@ def parsear_factura(xml_str: str) -> Optional[FacturaXML]:
         tax_level_principal_emisor=tax_level.split(";")[0].strip() if tax_level else "",
         ciudad_emisor=ciudad_em,
         direccion_emisor=direccion_em,
+        tax_level_receptor=tax_level_cli,
+        tax_level_principal_receptor=tax_level_cli.split(";")[0].strip() if tax_level_cli else "",
     )
 
     # Líneas
@@ -503,6 +513,75 @@ def _generar_lineas_stl(fac: FacturaXML) -> list[dict]:
             "CENTRO DE COSTO": CC_INSTITUCIONAL,
         })
 
+    # ── Si el CLIENTE STL es agente retenedor, nos retiene a nosotros ──
+    # Cuando JIPER vende a un Gran Contribuyente (O-13) o Agente de Retención
+    # IVA (O-23), el CLIENTE practica retenciones que JIPER debe registrar
+    # como anticipos por cobrar (no como egreso).
+    #
+    # Reglas:
+    #   O-13 Gran Contribuyente → cliente nos retiene retef Y reteIVA
+    #   O-23 Agente Ret IVA     → cliente nos retiene reteIVA solamente
+    #   O-15 Autorretenedor     → NO nos retiene
+    #   O-47 RST                → NO nos retiene
+    #   R-99-PN                 → NO nos retiene
+    #
+    # Asiento:
+    #   Db CxC (al cliente) = total - retef_anticipo - reteiva_anticipo
+    #   Db 135515 ANTICIPO RETEFUENTE   = retef que el cliente nos descontó
+    #   Db 135517 ANTICIPO RETEIVA      = reteIVA que el cliente nos descontó
+    #   (los Cr ingresos+IVA+INC no cambian)
+    regimen_receptor = (fac.tax_level_receptor or "").upper()
+    codigos_receptor = [c.strip() for c in regimen_receptor.replace(",", ";").split(";") if c.strip()]
+    cliente_es_gc = "O-13" in codigos_receptor
+    cliente_es_arIVA = "O-23" in codigos_receptor
+
+    base_total = sum(fac.bases_por_tarifa.values())
+
+    if (cliente_es_gc or cliente_es_arIVA) and base_total > 0:
+        # Tarifa retefuente típica para venta de productos: 2.5%
+        # (compras puro = 2.5%, servicios = 4%, en STL casi siempre es producto)
+        retef_anticipo = round(base_total * 0.025, 0) if cliente_es_gc else 0
+        # ReteIVA del 15% sobre IVA generado (aplica a O-13 y O-23)
+        reteiva_anticipo = round(fac.total_iva * 0.15, 0) if (cliente_es_gc or cliente_es_arIVA) and fac.total_iva > 0 else 0
+
+        total_anticipos = retef_anticipo + reteiva_anticipo
+
+        if total_anticipos > 0:
+            # Db 135515 ANTICIPO RETEFUENTE
+            if retef_anticipo > 0:
+                out.append({
+                    "CUENTA": "135515",
+                    "COMPROBANTE": COMPROBANTE_STL,
+                    "FECHA": fecha_str,
+                    "DOCUMENTO": fac.folio,
+                    "DOC REFERENCIA": "",
+                    "NIT": fac.nit_receptor,
+                    "DETALLE": f"ANT RETEF 2.5% (cliente GC retiene) - {detalle}",
+                    "TR": TR_DEBITO,
+                    "VALOR": retef_anticipo,
+                    "BASE": round(base_total, 0),
+                    "CENTRO DE COSTO": CC_INSTITUCIONAL,
+                })
+            # Db 135517 ANTICIPO RETEIVA
+            if reteiva_anticipo > 0:
+                tipo_cliente = "GC" if cliente_es_gc else "AR IVA"
+                out.append({
+                    "CUENTA": "135517",
+                    "COMPROBANTE": COMPROBANTE_STL,
+                    "FECHA": fecha_str,
+                    "DOCUMENTO": fac.folio,
+                    "DOC REFERENCIA": "",
+                    "NIT": fac.nit_receptor,
+                    "DETALLE": f"ANT RETEIVA 15% (cliente {tipo_cliente} retiene) - {detalle}",
+                    "TR": TR_DEBITO,
+                    "VALOR": reteiva_anticipo,
+                    "BASE": round(fac.total_iva, 0),
+                    "CENTRO DE COSTO": CC_INSTITUCIONAL,
+                })
+            # Ajustar el Db CxC original (primer item): el cliente paga MENOS
+            if out and out[0]["CUENTA"] == CUENTA_CXC_STL:
+                out[0]["VALOR"] = round(out[0]["VALOR"] - total_anticipos, 0)
+
     return out
 
 
@@ -543,8 +622,16 @@ def procesar_zip_para_maestro(zip_bytes: bytes, maestro: dict) -> dict:
 
 
 # ─── Procesador de COMPRAS MIXTAS → plano contable detallado ────
-# Constantes contables compras (de procesador_compras_excel_token.py)
-COMPROBANTE_COMPRAS = "20"
+# Comprobantes contables JIPER (verificado contra histórico marzo+abril 2026):
+#   3   = CXP COMPRAS (causación facturas recibidas)        ✅
+#   5   = NC VENTAS no-POS (notas crédito ventas externas)  ✅
+#   6   = NC COMPRAS / Arrendamientos                       ✅
+#   8   = DOCUMENTOS SOPORTE (DSE compras no electrónicas)  ✅
+#   20  = NO EXISTE — antes lo usaba mal
+COMPROBANTE_COMPRAS = "3"          # CXP compras (era "20", corregido v22)
+COMPROBANTE_NC_COMPRAS = "6"       # NC compras
+COMPROBANTE_NC_VENTAS = "5"        # NC ventas (no POS)
+COMPROBANTE_DOC_SOPORTE = "8"      # Documentos Soporte
 CC_COMPRAS = "001001"
 CUENTA_PROVEEDORES_COM = "22050505"
 CUENTAS_IVA_DESCONTABLE_COM = {
@@ -640,7 +727,23 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
 
     out = []
     fecha_str = fac.fecha.strftime("%m/%d/%Y")
-    detalle = f"COMPRA {fac.nombre_emisor[:30]} ({fac.folio})"
+
+    # Decidir comprobante según tipo de documento (verificado contra histórico):
+    #   "01" Factura Electrónica recibida → CXP comprobante 3
+    #   "05" Documento Soporte (DSE)      → comprobante 8
+    #   "91" Nota Crédito recibida        → NC compras comprobante 6
+    tipo = (fac.tipo_documento or "01").strip()
+    if tipo == "91":
+        comprobante = COMPROBANTE_NC_COMPRAS
+        prefijo_det = "NC COMPRA"
+    elif tipo == "05":
+        comprobante = COMPROBANTE_DOC_SOPORTE
+        prefijo_det = "DS"
+    else:
+        comprobante = COMPROBANTE_COMPRAS
+        prefijo_det = "COMPRA"
+
+    detalle = f"{prefijo_det} {fac.nombre_emisor[:30]} ({fac.folio})"
 
     # Buscar cuenta gasto del proveedor
     info_map = mapeo_nit_cuenta.get(fac.nit_emisor, {})
@@ -660,25 +763,34 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
         declarante=True,
     )
 
+    # Si es NC compras (tipo 91), invertir los TR (Db ↔ Cr)
+    # Es decir, en NC el proveedor nos devuelve, así que:
+    #   Db proveedor (reverso de la causación)
+    #   Cr cuenta gasto + Cr IVA descontable (reverso)
+    es_nc = (tipo == "91")
+    tr_principal = TR_CREDITO if es_nc else TR_DEBITO   # gasto/IVA: si NC va a Cr (reverso)
+    tr_proveedor = TR_DEBITO if es_nc else TR_CREDITO   # proveedor: si NC va a Db (reverso)
+    tr_retenciones = TR_DEBITO if es_nc else TR_CREDITO  # retenciones también se reversan
+
     # Db cuenta gasto (por cada tarifa de IVA con base > 0)
     for tarifa, base in fac.bases_por_tarifa.items():
         if base <= 0.5:
             continue
         out.append({
             "CUENTA": cuenta_gasto,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
             "NIT": fac.nit_emisor,
             "DETALLE": f"{detalle} [base {tarifa}]",
-            "TR": TR_DEBITO,
+            "TR": tr_principal,
             "VALOR": round(base, 0),
             "BASE": "",
             "CENTRO DE COSTO": CC_COMPRAS,
         })
 
-    # Db IVA descontable por tarifa
+    # Db IVA descontable por tarifa (Cr si es NC)
     for tarifa, iva_tarifa in fac.iva_por_tarifa.items():
         if iva_tarifa <= 0.5:
             continue
@@ -686,47 +798,47 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
         base_tarifa = fac.bases_por_tarifa.get(tarifa, 0)
         out.append({
             "CUENTA": cuenta_iva,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
             "NIT": fac.nit_emisor,
             "DETALLE": f"IVA {tarifa} DESC - {detalle}",
-            "TR": TR_DEBITO,
+            "TR": tr_principal,
             "VALOR": round(iva_tarifa, 0),
             "BASE": round(base_tarifa, 0),
             "CENTRO DE COSTO": CC_COMPRAS,
         })
 
-    # Db INC pagado
+    # Db INC pagado (Cr si es NC)
     if fac.inc_total > 0.5:
         out.append({
             "CUENTA": CUENTA_INC_COMPRAS_PAGADO,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
             "NIT": fac.nit_emisor,
             "DETALLE": f"INC pagado - {detalle}",
-            "TR": TR_DEBITO,
+            "TR": tr_principal,
             "VALOR": round(fac.inc_total, 0),
             "BASE": "",
             "CENTRO DE COSTO": CC_COMPRAS,
         })
 
-    # Total Cr proveedor = total factura - retenciones
+    # Total Cr proveedor = total factura - retenciones (Db si es NC)
     cr_total = fac.total_factura
     if res_ret.aplica_retefuente:
         cr_total -= res_ret.valor_retefuente
         out.append({
             "CUENTA": res_ret.cuenta_retefuente_puc,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
             "NIT": fac.nit_emisor,
             "DETALLE": f"Retef {res_ret.concepto_retencion} - {detalle}",
-            "TR": TR_CREDITO,
+            "TR": tr_retenciones,
             "VALOR": round(res_ret.valor_retefuente, 0),
             "BASE": round(base_total, 0),
             "CENTRO DE COSTO": CC_COMPRAS,
@@ -735,28 +847,28 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
         cr_total -= res_ret.valor_reteiva
         out.append({
             "CUENTA": res_ret.cuenta_reteiva_puc,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
             "NIT": fac.nit_emisor,
-            "DETALLE": f"ReteIVA 15% - {detalle}",
-            "TR": TR_CREDITO,
+            "DETALLE": f"ReteIVA - {detalle}",
+            "TR": tr_retenciones,
             "VALOR": round(res_ret.valor_reteiva, 0),
             "BASE": round(fac.total_iva, 0),
             "CENTRO DE COSTO": CC_COMPRAS,
         })
 
-    # Cr proveedor (lo que efectivamente se paga)
+    # Cr proveedor (Db si es NC) — lo que efectivamente se paga / devuelve
     out.append({
         "CUENTA": CUENTA_PROVEEDORES_COM,
-        "COMPROBANTE": COMPROBANTE_COMPRAS,
+        "COMPROBANTE": comprobante,
         "FECHA": fecha_str,
         "DOCUMENTO": fac.folio,
         "DOC REFERENCIA": "",
         "NIT": fac.nit_emisor,
         "DETALLE": detalle,
-        "TR": TR_CREDITO,
+        "TR": tr_proveedor,
         "VALOR": round(cr_total, 0),
         "BASE": "",
         "CENTRO DE COSTO": CC_COMPRAS,
@@ -766,24 +878,55 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
 
 
 # ─── Procesador de VENTAS MIXTAS → plano contable ───────────────
-COMPROBANTE_VENTAS_MIX = "10"   # comprobante de ventas (ajustar si es otro)
-CC_VENTAS_MIX = "001001"
-CUENTA_CXC_VENTAS_MIX = "13050505"
+# IMPORTANTE: una venta MIXTA va al MISMO comprobante de su sucursal POS.
+# El comprobante se deduce del prefijo del folio (MED→416 Medical Tower, MVI→420 Milagros Viva, etc.)
+# La cuenta de IVA y la cuenta de ingreso varían según la tarifa.
+CUENTA_PROPINAS = "28150505"   # PROPINAS (pasivo a empleados) - verificado histórico
 CUENTAS_INGRESOS_VENTAS_MIX_POR_TARIFA = {
-    "0%":   "41200902",
-    "5%":   "41200905",
-    "19%":  "41200906",
+    "0%":   "41200902",   # PANADERIA CONGELADA SIN IVA
+    "5%":   "41200905",   # OTROS PANADERIA IVA 5%
+    "19%":  "41200906",   # OTRAS VENTAS GVADAS AL 19%
     "16%":  "41200906",
-    "INC8%":"41401501",
+    "INC8%":"41401501",   # VENTAS PUNTOS CON ICO 8%
 }
 
 
-def procesar_zip_ventas_mixtas(zip_bytes: bytes) -> ResultadoXMLs:
+def procesar_zip_ventas_mixtas(
+    zip_bytes: bytes,
+    ruta_mapeo_prefijos: Optional[str] = None,
+) -> ResultadoXMLs:
     """
     Procesa ZIP de XMLs de ventas MIXTAS emitidas por JIPER → plano contable.
+
+    El comprobante y centro de costo de cada venta se deducen del PREFIJO del
+    folio (MED→416 Medical Tower, MVI→420 Milagros Viva, etc.). Esto respeta
+    el modelo contable existente de JIPER donde cada sucursal POS tiene su
+    propio comprobante.
+
+    Args:
+        zip_bytes: bytes del ZIP plano con XMLs
+        ruta_mapeo_prefijos: ruta a mapeo_prefijos_token.json. Si es None usa
+                              "mapeo_prefijos_token.json" en el directorio actual.
     """
     res = ResultadoXMLs()
     NIT_JIPER = "901038325"
+
+    # Cargar mapeo de prefijos
+    if ruta_mapeo_prefijos is None:
+        from pathlib import Path
+        ruta_mapeo_prefijos = "mapeo_prefijos_token.json"
+    try:
+        with open(ruta_mapeo_prefijos, encoding="utf-8") as f:
+            mapeo_pref_raw = json.load(f)
+        # Indexar: prefijo → dict con comprobante, cc, etc.
+        mapeo_pref = {}
+        for entry in mapeo_pref_raw.get("mapeos", []):
+            pref = entry.get("prefijo", "").upper().strip()
+            if pref:
+                mapeo_pref[pref] = entry
+    except Exception as e:
+        res.errores.append(f"No se pudo cargar mapeo de prefijos: {e}")
+        mapeo_pref = {}
 
     for nombre, xml_str in iter_xmls_de_zip(zip_bytes):
         try:
@@ -806,8 +949,18 @@ def procesar_zip_ventas_mixtas(zip_bytes: bytes) -> ResultadoXMLs:
 
     # Generar plano
     filas = []
+    sin_mapeo = []
     for fac in res.facturas:
-        filas.extend(_generar_lineas_venta_mixta(fac))
+        info_pref = mapeo_pref.get(fac.prefijo.upper().strip())
+        if not info_pref:
+            sin_mapeo.append(fac.folio)
+            continue
+        filas.extend(_generar_lineas_venta_mixta(fac, info_pref))
+
+    if sin_mapeo:
+        res.errores.append(
+            f"{len(sin_mapeo)} ventas sin prefijo mapeado: {', '.join(sin_mapeo[:5])}..."
+        )
 
     if filas:
         res.plano_df = pd.DataFrame(filas, columns=COLUMNAS_PLANO)
@@ -820,16 +973,28 @@ def procesar_zip_ventas_mixtas(zip_bytes: bytes) -> ResultadoXMLs:
     return res
 
 
-def _generar_lineas_venta_mixta(fac):
-    """Líneas contables para una venta MIXTA emitida (no STL)."""
+def _generar_lineas_venta_mixta(fac, info_pref: dict):
+    """
+    Líneas contables para una venta MIXTA emitida.
+
+    Modelo:
+        Db CAJA SUCURSAL (cta del mapeo)             total factura
+        Cr Ingresos por tarifa                       base × tarifa
+        Cr IVA por tarifa                            iva
+        Cr INC (si aplica)                           inc
+    """
     out = []
     fecha_str = fac.fecha.strftime("%m/%d/%Y")
     detalle = f"VENTA {fac.nombre_receptor[:30]} ({fac.folio})"
 
-    # Db CxC al cliente
+    comprobante = info_pref.get("comprobante", "426")
+    cc = info_pref.get("cc", "001003")
+    cuenta_caja = info_pref.get("cuenta_caja", "11050505")
+
+    # Db caja sucursal (lo que entra)
     out.append({
-        "CUENTA": CUENTA_CXC_VENTAS_MIX,
-        "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+        "CUENTA": cuenta_caja,
+        "COMPROBANTE": comprobante,
         "FECHA": fecha_str,
         "DOCUMENTO": fac.folio,
         "DOC REFERENCIA": "",
@@ -838,7 +1003,7 @@ def _generar_lineas_venta_mixta(fac):
         "TR": TR_DEBITO,
         "VALOR": round(fac.total_factura, 0),
         "BASE": "",
-        "CENTRO DE COSTO": CC_VENTAS_MIX,
+        "CENTRO DE COSTO": cc,
     })
 
     # Cr ingresos por tarifa
@@ -848,7 +1013,7 @@ def _generar_lineas_venta_mixta(fac):
         cuenta_ing = CUENTAS_INGRESOS_VENTAS_MIX_POR_TARIFA.get(tarifa, "41200902")
         out.append({
             "CUENTA": cuenta_ing,
-            "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
@@ -857,7 +1022,7 @@ def _generar_lineas_venta_mixta(fac):
             "TR": TR_CREDITO,
             "VALOR": round(base, 0),
             "BASE": "",
-            "CENTRO DE COSTO": CC_VENTAS_MIX,
+            "CENTRO DE COSTO": cc,
         })
 
         # Cr IVA por tarifa
@@ -866,7 +1031,7 @@ def _generar_lineas_venta_mixta(fac):
             cuenta_iva = CUENTA_IVA_19_GENERADO if tarifa == "19%" else CUENTA_IVA_5_GENERADO
             out.append({
                 "CUENTA": cuenta_iva,
-                "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+                "COMPROBANTE": comprobante,
                 "FECHA": fecha_str,
                 "DOCUMENTO": fac.folio,
                 "DOC REFERENCIA": "",
@@ -875,13 +1040,13 @@ def _generar_lineas_venta_mixta(fac):
                 "TR": TR_CREDITO,
                 "VALOR": round(iva, 0),
                 "BASE": round(base, 0),
-                "CENTRO DE COSTO": CC_VENTAS_MIX,
+                "CENTRO DE COSTO": cc,
             })
 
     if fac.inc_total > 0.5:
         out.append({
             "CUENTA": CUENTA_INC_GENERADO,
-            "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+            "COMPROBANTE": comprobante,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
@@ -890,8 +1055,49 @@ def _generar_lineas_venta_mixta(fac):
             "TR": TR_CREDITO,
             "VALOR": round(fac.inc_total, 0),
             "BASE": "",
-            "CENTRO DE COSTO": CC_VENTAS_MIX,
+            "CENTRO DE COSTO": cc,
         })
+
+    # ── Cuadre: si el total cobrado (Db) > suma de Cr, la diferencia son
+    # propinas/extras que no llegaron como tarifa en el XML. Van a 28150505
+    # (PROPINAS, pasivo a empleados).
+    cr_acumulado = (
+        sum(fac.bases_por_tarifa.values())
+        + sum(fac.iva_por_tarifa.values())
+        + fac.inc_total
+    )
+    diferencia = round(fac.total_factura - cr_acumulado, 0)
+    if abs(diferencia) > 0.5:
+        if diferencia > 0:
+            # El Db es mayor → necesitamos un Cr extra a propinas
+            out.append({
+                "CUENTA": CUENTA_PROPINAS,
+                "COMPROBANTE": comprobante,
+                "FECHA": fecha_str,
+                "DOCUMENTO": fac.folio,
+                "DOC REFERENCIA": "",
+                "NIT": fac.nit_receptor,
+                "DETALLE": f"PROPINAS/EXTRAS - {detalle}",
+                "TR": TR_CREDITO,
+                "VALOR": round(diferencia, 0),
+                "BASE": "",
+                "CENTRO DE COSTO": cc,
+            })
+        else:
+            # Caso raro: Cr > Db → ajuste al Db (no debería pasar pero por si acaso)
+            out.append({
+                "CUENTA": CUENTA_PROPINAS,
+                "COMPROBANTE": comprobante,
+                "FECHA": fecha_str,
+                "DOCUMENTO": fac.folio,
+                "DOC REFERENCIA": "",
+                "NIT": fac.nit_receptor,
+                "DETALLE": f"AJUSTE - {detalle}",
+                "TR": TR_DEBITO,
+                "VALOR": round(abs(diferencia), 0),
+                "BASE": "",
+                "CENTRO DE COSTO": cc,
+            })
 
     return out
 

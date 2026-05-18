@@ -234,3 +234,78 @@ def generar_lista_stl_completa(df_token, fecha_desde=None, fecha_hasta=None) -> 
         df = df[df["fecha_emision"].dt.date <= fecha_hasta]
 
     return df["cufe"].dropna().astype(str).tolist()
+
+
+def generar_lista_todas_compras_unicas(
+    df_token,
+    fecha_desde=None,
+    fecha_hasta=None,
+    maestro_existente: Optional[dict] = None,
+) -> List[dict]:
+    """
+    Genera la lista de CUFEs para descargar XMLs de TODOS los proveedores únicos
+    de compras del mes (no solo los nuevos).
+
+    Lógica:
+      - Para cada NIT proveedor único en los recibidos, devuelve UN CUFE
+        representativo (el de mayor valor).
+      - Se INCLUYEN proveedores que ya estén en histórico (a diferencia de
+        generar_lista_proveedores_unicos), porque necesitamos su régimen real
+        del XML para decidir retención.
+      - Solo se EXCLUYEN los que ya están en el maestro CON régimen registrado
+        (tax_level_principal no vacío).
+
+    Esto se usa para resolver el bug de retenciones aplicadas a autorretenedores
+    como EPM/Postobón que sí están en el histórico pero sin su régimen real
+    declarado.
+
+    Returns:
+        Lista de dicts con campos cufe, folio, nit_emisor, nombre_emisor, total.
+    """
+    df = df_token[df_token["grupo"].str.lower() == "recibido"].copy()
+    if fecha_desde is not None:
+        df = df[df["fecha_emision"].dt.date >= fecha_desde]
+    if fecha_hasta is not None:
+        df = df[df["fecha_emision"].dt.date <= fecha_hasta]
+    if len(df) == 0:
+        return []
+
+    import re
+    def _normalizar(s):
+        if not s: return ""
+        return re.sub(r"\D", "", str(s).split("-")[0])
+
+    df["NIT_norm"] = df["nit_emisor"].apply(_normalizar)
+
+    # Solo excluir los que YA tienen régimen real en el maestro
+    nits_con_regimen = set()
+    if maestro_existente:
+        for nit, datos in maestro_existente.get("terceros", {}).items():
+            if datos.get("tax_level_principal"):
+                nits_con_regimen.add(_normalizar(nit))
+
+    if nits_con_regimen:
+        df = df[~df["NIT_norm"].isin(nits_con_regimen)]
+        if len(df) == 0:
+            return []
+
+    # Para cada NIT, el CUFE de mayor valor
+    df["total_num"] = pd.to_numeric(df["total"], errors="coerce").fillna(0)
+    df = df.sort_values("total_num", ascending=False).drop_duplicates("NIT_norm")
+
+    out = []
+    for _, row in df.iterrows():
+        if not row.get("cufe"):
+            continue
+        out.append({
+            "cufe":             row["cufe"],
+            "folio":            row["folio"],
+            "prefijo":          row["prefijo"],
+            "tipo_documento":   row["tipo_documento"],
+            "fecha_emision":    row["fecha_emision"].strftime("%Y-%m-%d") if pd.notna(row["fecha_emision"]) else "",
+            "nit_emisor":       row["NIT_norm"],
+            "nombre_emisor":    row["nombre_emisor"],
+            "total":            float(row["total_num"]),
+            "razon":            "PROVEEDOR_REGIMEN",
+        })
+    return out

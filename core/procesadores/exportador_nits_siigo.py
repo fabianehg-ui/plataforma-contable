@@ -119,26 +119,74 @@ def codigo_municipio(ciudad: str) -> str:
     return ""  # vacío si no se reconoce
 
 
-def es_persona_natural(razon_social: str, regimen: str = "") -> bool:
-    """Heurística: si tiene apellidos típicos y régimen R-99-PN, es persona natural."""
-    if regimen and regimen.upper() in ("O-13", "O-15", "O-23", "O-47"):
-        # Estos regímenes son típicamente de jurídicas
-        return False
-    if not razon_social:
-        return False
-    # Si tiene "S.A.S", "LTDA", "S.A.", "S.A.S.", "& CIA", "S EN C", probablemente jurídica
-    rs = razon_social.upper()
+def es_persona_natural(razon_social: str, regimen: str = "", nit: str = "") -> bool:
+    """
+    Heurística para decidir si un tercero es persona natural.
+
+    Reglas en orden de prioridad:
+    1. Si la razón social contiene S.A.S, LTDA, SAS, etc → JURÍDICA (no natural)
+    2. Si el NIT tiene 9-10 dígitos y empieza con 9, 8 o 7 → típicamente JURÍDICA
+       (NITs colombianos de empresas usualmente empiezan con 8 o 9)
+    3. Si el NIT tiene 6-10 dígitos y NO empieza con 8 o 9 → cédula (persona natural)
+       (cédulas colombianas suelen ser de 7-10 dígitos pero NO empiezan con 8/9)
+    4. Si la razón social parece nombre propio (3-4 palabras sin términos jurídicos) → NATURAL
+    """
+    # Regla 1: palabras jurídicas inequívocas
+    rs = (razon_social or "").upper()
     palabras_juridicas = [
-        "S.A.S", "SAS", "LTDA", "S.A.", "S.A ", "& CIA", "SEN C",
+        "S.A.S", " SAS", "SAS.", "LTDA", "S.A.", "S.A ", "& CIA", "SEN C",
         "S EN C", "EMPRESA", "GRUPO", "FUNDACION", "FUNDACIÓN",
         "CORPORACION", "CORPORACIÓN", "ASOCIACION", "ASOCIACIÓN",
         "COOPERATIVA", "SOCIEDAD", "COMERCIALIZADORA", "DISTRIBUIDORA",
         "INVERSIONES", "INDUSTRIAS", "COMERCIAL", "S A S", "ZOMAC",
+        "SERVICIOS", "COMPAÑIA", "COMPAÑÍA", "ADMINISTRADORA",
     ]
     for p in palabras_juridicas:
         if p in rs:
             return False
-    # Si NIT empieza con 9 (típico de jurídicas)
+    # Detecta "XXXX SAS" o "XXXX S A S" al final
+    if rs.endswith(" SAS") or rs.endswith(" S A S") or rs.endswith(" S.A.S"):
+        return False
+
+    # Regla 2: si NIT empieza con 9 (típico de jurídicas creadas después de 2010)
+    nit_limpio = re.sub(r"\D", "", str(nit or "").split("-")[0])
+    if len(nit_limpio) >= 9 and nit_limpio.startswith("9"):
+        # Salvo que sea claramente nombre propio
+        if not _parece_nombre_propio(rs):
+            return False
+        # Si parece nombre propio pero empieza con 9, dudoso → asumir jurídica
+        return False
+
+    # Regla 3: NIT empieza con 8 + 9-10 dígitos = empresa antigua
+    if len(nit_limpio) >= 9 and nit_limpio.startswith("8"):
+        if not _parece_nombre_propio(rs):
+            return False
+        return False
+
+    # Regla 4: NIT corto (5-10 dígitos) sin empezar por 8 o 9 = cédula
+    if 5 <= len(nit_limpio) <= 10 and not nit_limpio.startswith(("8", "9")):
+        return True
+
+    # Regla 5: si régimen es R-99-PN (no responsable / persona natural)
+    if regimen and regimen.upper() == "R-99-PN":
+        if _parece_nombre_propio(rs):
+            return True
+
+    # Por defecto: si tiene nombre que parece propio → natural
+    return _parece_nombre_propio(rs)
+
+
+def _parece_nombre_propio(rs: str) -> bool:
+    """Heurística: 2-5 palabras, todas letras, sin números ni términos jurídicos."""
+    if not rs:
+        return False
+    rs = rs.strip()
+    partes = re.split(r"\s+", rs)
+    if not (2 <= len(partes) <= 5):
+        return False
+    # Sin números y sin caracteres raros
+    if any(re.search(r"\d", p) for p in partes):
+        return False
     return True
 
 
@@ -190,7 +238,7 @@ def construir_fila_siigo(
     Construye una fila con las 20 columnas del formato Siigo NITs.
     """
     nit_clean = normalizar_nit(nit)
-    es_pn = es_persona_natural(nombre, regimen)
+    es_pn = es_persona_natural(nombre, regimen, nit_clean)
 
     # Descomponer nombre si es persona natural
     p1, p2, a1, a2 = ("", "", "", "")
@@ -203,11 +251,16 @@ def construir_fila_siigo(
     # Naturaleza
     naturaleza = "N" if es_pn else "J"
 
+    # Columna C (tipo documento Siigo):
+    #   A = NIT jurídica (empresa)
+    #   C = Cédula (persona natural)
+    tipo_doc = "C" if es_pn else "A"
+
     mpio_cod = codigo_municipio(ciudad)
 
     return {
         "NIT":                nit_clean,
-        "C":                  "C",   # default: cliente/proveedor estándar
+        "C":                  tipo_doc,
         "RAZON SOCIAL":       (nombre or "").upper().strip(),
         "DIRECCION":          (direccion or "").upper().strip(),
         "CIUDAD":             (ciudad or "").upper().strip(),

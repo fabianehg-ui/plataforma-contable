@@ -98,13 +98,39 @@ class MotorRetenciones:
         periodo_id = periodo["id"]
 
         # 3. Reglas por régimen
+        # Normalizar: el XML puede traer múltiples códigos separados por ';' o ','
+        # ej: "O-13;O-15" significa Gran Contribuyente + Autorretenedor
+        regimen_codigos = [
+            r.strip().upper()
+            for r in str(regimen_proveedor or "R-99-PN").replace(",", ";").split(";")
+            if r.strip()
+        ]
+        if not regimen_codigos:
+            regimen_codigos = ["R-99-PN"]
+
+        # REGLA ESPECIAL: si el proveedor declara O-15 (Autorretenedor) en
+        # CUALQUIER posición de su lista de regímenes, NO se le practica retef.
+        # Esto cubre los casos como EPM, POSTOBÓN, BAVARIA que declaran
+        # "O-13;O-15" (Gran Contribuyente + Autorretenedor).
+        es_autorretenedor = "O-15" in regimen_codigos
+
+        # El régimen "principal" para reportería es el primer código
+        regimen_principal = regimen_codigos[0]
+
         reglas_regimen = self.tabla["reglas_por_regimen"].get(
-            regimen_proveedor,
+            regimen_principal,
             self.tabla["reglas_por_regimen"]["R-99-PN"],  # fallback
         )
-        nombre_regimen = reglas_regimen.get("nombre", regimen_proveedor)
-        aplicar_retefuente = reglas_regimen["aplicar_retefuente"]
-        aplicar_reteiva = reglas_regimen["aplicar_reteiva"]
+        nombre_regimen = reglas_regimen.get("nombre", regimen_principal)
+
+        if es_autorretenedor:
+            # Override: el autorretenedor se retiene a sí mismo, no le retenemos nosotros
+            aplicar_retefuente = False
+            aplicar_reteiva = False
+            nombre_regimen = f"{nombre_regimen} + Autorretenedor (O-15)"
+        else:
+            aplicar_retefuente = reglas_regimen["aplicar_retefuente"]
+            aplicar_reteiva = reglas_regimen["aplicar_reteiva"]
 
         # 4. Calcular retefuente
         valor_retefuente = 0.0

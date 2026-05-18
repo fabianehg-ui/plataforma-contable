@@ -96,7 +96,9 @@ NOMBRES_CATEGORIA = {
 CUENTA_GASTO_FALLBACK = "73959501"   # GASTOS DIVERSOS
 
 # Comprobante de compras (revisar con Luz si quiere otro)
-COMPROBANTE_COMPRAS = "20"  # estándar para compras nacionales
+COMPROBANTE_COMPRAS = "3"     # CXP COMPRAS (verificado contra histórico JIPER)
+COMPROBANTE_NC_COMPRAS = "6"  # NC compras / arrendamientos
+COMPROBANTE_DOC_SOPORTE = "8" # Documentos Soporte
 
 # Columnas del plano (mismo formato que ventas)
 COLUMNAS_PLANO = [
@@ -630,7 +632,21 @@ def procesar_compras_v2(
         )
 
         if tipo_doc == TIPO_NC:
+            # NC compras: ahora SÍ asientan (comprobante 6, signos invertidos)
             resultado.notas_credito.append(compra)
+            if not cuenta_gasto:
+                resultado.sin_cuenta.append(compra)
+                continue
+            # Calcular retenciones para reversar
+            regimen = mt.regimen_proveedor(maestro, nit_emisor, default="R-99-PN")
+            res_retencion = motor.calcular(
+                fecha_factura=fecha, base_gravable=base, iva=iva,
+                cuenta_gasto=cuenta_gasto, regimen_proveedor=regimen,
+                declarante=True,
+            )
+            filas_plano.extend(
+                _generar_lineas_compra_con_retencion(compra, cc_default, res_retencion, es_nc=True)
+            )
             continue
         if tarifa == "MIXTA":
             resultado.mixtas.append(compra)
@@ -684,7 +700,7 @@ def procesar_compras_v2(
     return resultado
 
 
-def _generar_lineas_compra_con_retencion(c: "CompraToken", cc: str, res_ret) -> List[dict]:
+def _generar_lineas_compra_con_retencion(c: "CompraToken", cc: str, res_ret, es_nc: bool = False) -> List[dict]:
     """
     Asiento completo de compra con retenciones:
         Db CUENTA GASTO            base
@@ -694,64 +710,70 @@ def _generar_lineas_compra_con_retencion(c: "CompraToken", cc: str, res_ret) -> 
         Cr PROVEEDORES             total - retefuente - reteiva
         Cr RETEFUENTE              retefuente (si aplica)
         Cr RETEIVA                 reteiva (si aplica)
+
+    Si es_nc=True, todos los TR se invierten (Db ↔ Cr) y va a comprobante 6.
     """
     fecha_str = c.fecha.strftime("%m/%d/%Y")
     doc = f"{c.prefijo}{c.folio}" if c.prefijo else c.folio
-    detalle = f"COMPRA {c.nombre_emisor[:35]} ({doc})"
+    detalle = f"{'NC COMPRA' if es_nc else 'COMPRA'} {c.nombre_emisor[:35]} ({doc})"
+
+    # Comprobante y TR según sea factura normal o NC
+    comp = COMPROBANTE_NC_COMPRAS if es_nc else COMPROBANTE_COMPRAS
+    tr_principal = TR_CREDITO if es_nc else TR_DEBITO    # base/IVA/INC/impuestos
+    tr_proveedor = TR_DEBITO if es_nc else TR_CREDITO     # proveedor
+    tr_retenciones = TR_DEBITO if es_nc else TR_CREDITO   # retef/reteIVA
 
     out = []
 
-    # Db cuenta gasto
+    # Db cuenta gasto (Cr si NC)
     out.append({
         "CUENTA": c.cuenta_gasto,
-        "COMPROBANTE": COMPROBANTE_COMPRAS,
+        "COMPROBANTE": comp,
         "FECHA": fecha_str,
         "DOCUMENTO": doc,
         "DOC REFERENCIA": "",
         "NIT": c.nit_emisor,
         "DETALLE": detalle,
-        "TR": TR_DEBITO,
+        "TR": tr_principal,
         "VALOR": round(c.base_calc, 0),
         "BASE": "",
         "CENTRO DE COSTO": cc,
     })
 
-    # Db IVA descontable
+    # Db IVA descontable (Cr si NC)
     if c.iva > 0:
         cuenta_iva = CUENTAS_IVA_DESCONTABLE.get(c.tarifa, CUENTAS_IVA_DESCONTABLE["19%"])
         out.append({
             "CUENTA": cuenta_iva,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comp,
             "FECHA": fecha_str,
             "DOCUMENTO": doc,
             "DOC REFERENCIA": "",
             "NIT": c.nit_emisor,
             "DETALLE": f"IVA {c.tarifa} DESC - {detalle}",
-            "TR": TR_DEBITO,
+            "TR": tr_principal,
             "VALOR": round(c.iva, 0),
             "BASE": round(c.base_calc, 0),
             "CENTRO DE COSTO": cc,
         })
 
-    # Db INC pagado
+    # Db INC pagado (Cr si NC)
     if c.inc > 0:
         out.append({
             "CUENTA": CUENTA_INC_COMPRAS,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comp,
             "FECHA": fecha_str,
             "DOCUMENTO": doc,
             "DOC REFERENCIA": "",
             "NIT": c.nit_emisor,
             "DETALLE": f"INC pagado - {detalle}",
-            "TR": TR_DEBITO,
+            "TR": tr_principal,
             "VALOR": round(c.inc, 0),
             "BASE": round(c.base_calc, 0),
             "CENTRO DE COSTO": cc,
         })
 
-    # Db impuestos discriminados (UNA LÍNEA POR CATEGORÍA con valor>0)
-    # Categorías: saludable (IBUA+ICUI), consumo (IC+INC Bolsas), licores (ICL),
-    # ica, carbono, combustibles, datos, inpp, timbre.
+    # Db impuestos discriminados
     for categoria, valor in (c.impuestos_detalle or {}).items():
         if valor <= 0.5:
             continue
@@ -759,67 +781,67 @@ def _generar_lineas_compra_con_retencion(c: "CompraToken", cc: str, res_ret) -> 
         nombre = NOMBRES_CATEGORIA.get(categoria, categoria.upper())
         out.append({
             "CUENTA": cuenta,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comp,
             "FECHA": fecha_str,
             "DOCUMENTO": doc,
             "DOC REFERENCIA": "",
             "NIT": c.nit_emisor,
             "DETALLE": f"{nombre} - {detalle}",
-            "TR": TR_DEBITO,
+            "TR": tr_principal,
             "VALOR": round(valor, 0),
             "BASE": round(c.base_calc, 0),
             "CENTRO DE COSTO": cc,
         })
 
-    # Calcular Cr proveedor (descontando retenciones)
+    # Calcular Cr proveedor (Db si NC) — descontando retenciones
     cr_total = c.base_calc + c.iva + c.inc + c.otros
     if res_ret.aplica_retefuente:
         cr_total -= res_ret.valor_retefuente
     if res_ret.aplica_reteiva:
         cr_total -= res_ret.valor_reteiva
 
-    # Cr Proveedores (neto a pagar)
+    # Cr Proveedores (Db si NC)
     out.append({
         "CUENTA": CUENTA_PROVEEDORES,
-        "COMPROBANTE": COMPROBANTE_COMPRAS,
+        "COMPROBANTE": comp,
         "FECHA": fecha_str,
         "DOCUMENTO": doc,
         "DOC REFERENCIA": "",
         "NIT": c.nit_emisor,
         "DETALLE": detalle,
-        "TR": TR_CREDITO,
+        "TR": tr_proveedor,
         "VALOR": round(cr_total, 0),
         "BASE": "",
         "CENTRO DE COSTO": cc,
     })
 
-    # Cr Retefuente (si aplica)
+    # Cr Retefuente (Db si NC, reversa la retención)
     if res_ret.aplica_retefuente:
         out.append({
             "CUENTA": res_ret.cuenta_retefuente_puc,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comp,
             "FECHA": fecha_str,
             "DOCUMENTO": doc,
             "DOC REFERENCIA": "",
             "NIT": c.nit_emisor,
             "DETALLE": f"RETEF {res_ret.concepto_retencion} {res_ret.tarifa_retefuente*100:.1f}% - {detalle}",
-            "TR": TR_CREDITO,
+            "TR": tr_retenciones,
             "VALOR": round(res_ret.valor_retefuente, 0),
             "BASE": round(c.base_calc, 0),
             "CENTRO DE COSTO": cc,
         })
 
-    # Cr ReteIVA (si aplica)
+    # Cr ReteIVA (Db si NC)
     if res_ret.aplica_reteiva:
         out.append({
             "CUENTA": res_ret.cuenta_reteiva_puc,
-            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "COMPROBANTE": comp,
             "FECHA": fecha_str,
             "DOCUMENTO": doc,
             "DOC REFERENCIA": "",
             "NIT": c.nit_emisor,
-            "DETALLE": f"RETEIVA 15% RST - {detalle}",
-            "TR": TR_CREDITO,
+            "DETALLE": f"RETEIVA 15% - {detalle}",
+            "TR": tr_retenciones,
             "VALOR": round(res_ret.valor_reteiva, 0),
             "BASE": round(c.iva, 0),
             "CENTRO DE COSTO": cc,
