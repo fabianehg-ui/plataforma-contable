@@ -38,6 +38,7 @@ from core.procesadores import procesador_ventas_excel_token_v2 as pve2
 from core.procesadores import procesador_compras_excel_token as pcom
 from core.procesadores import generador_listas_cufes as glc
 from core.procesadores import maestro_terceros as mt
+from core.procesadores import procesador_xmls_zip as pxz
 
 
 # ─── Auth y setup ────────────────────────────────────────────
@@ -458,7 +459,12 @@ else:
 # PASO 6 — Generar listas JSON para extensión Chrome
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 6️⃣ Generar listas JSON para la extensión Chrome")
+st.markdown("## 6️⃣ (Opcional) Listas JSON para extensión Chrome")
+st.caption(
+    "📌 Esta sección es opcional. Solo úsala si vas a descargar los XMLs con la "
+    "extensión Chrome (flujo antiguo). La descarga directa desde la plataforma "
+    "está más abajo y es el flujo recomendado."
+)
 st.caption(
     "Las extensión descarga XMLs en un **ZIP plano** (sin anidación). "
     "Aquí generas las listas JSON con los CUFEs que la extensión necesita."
@@ -646,262 +652,328 @@ if "lista_compras_mixtas" in st.session_state:
             f"(~{total / 8 / 60:.1f} min)."
         )
 
-
 # ════════════════════════════════════════════════════════════
-# PASO 6.5 — Descarga DIRECTA desde DIAN (sin extensión Chrome)
+# PASO 6.5 — Descarga DIRECTA desde DIAN (con paralelismo)
 # ════════════════════════════════════════════════════════════
-# Flujo alternativo al de la extensión:
+# Flujo simplificado:
 #   1. Pegas la URL del Token DIAN
-#   2. Eliges qué descargar (Lista A = STL+DSE emitidos, Lista B = todos
-#      los recibidos)
-#   3. La plataforma descarga en bloques de 700 (límite empírico antes
-#      de que la sesión expire)
-#   4. Si la sesión se cierra a mitad, pides un Token nuevo y continúas
-#      donde quedaste — el progreso NO se pierde
+#   2. Eliges Emitidos (STL+DSE) o Recibidos (todos)
+#   3. La plataforma calcula cuántos hilos paralelos necesita
+#      (ceil(total / 700)) y descarga simultáneamente
+#   4. Si un hilo detecta sesión expirada → todos paran y reportan
+#   5. Se muestra DICTAMEN: lista Excel vs descargados (con faltantes)
+#   6. Botón para procesar al plano contable o reintentar faltantes
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 6.5 🚀 Descarga DIRECTA desde DIAN")
-
-with st.expander("ℹ️ ¿Cuándo usar esto vs la extensión Chrome?", expanded=False):
-    st.markdown(
-        "**Descarga directa (esta sección):**\n"
-        "- Pegas la URL del Token y la plataforma descarga sola.\n"
-        "- No necesitas instalar nada.\n"
-        "- Bloques automáticos de 700 documentos (la sesión DIAN cierra a "
-        "los ~30 min). Cuando se acabe el bloque, te pide otro Token y sigue.\n"
-        "- Ideal para volúmenes grandes desatendidos.\n\n"
-        "**Extensión Chrome (sección anterior y siguiente):**\n"
-        "- Sigue funcionando como antes; queda como respaldo.\n"
-        "- Útil si la descarga directa falla por bloqueos de DIAN.\n"
-    )
+st.markdown("## 🚀 Descarga DIRECTA desde DIAN")
 
 if "lista_compras_mixtas" not in st.session_state:
     st.caption("⚠️ Primero genera las listas en el paso 6 ⬆️")
 else:
     from core.procesadores import descargador_dian as dd
 
-    # ─── Estado de la descarga (sobrevive a reruns) ───
-    if "dian_dl_estado" not in st.session_state:
-        st.session_state["dian_dl_estado"] = {
-            "zips_por_cufe": {},     # acumulado entre bloques
-            "fallidos": [],
-            "pendientes": [],
-            "lista_origen": "",      # "emitidos" | "recibidos"
-            "total_inicial": 0,
-            "bloques_completados": 0,
-        }
+    # Estado por tipo de descarga (emitidos vs recibidos)
+    # Cada tipo conserva su propio estado para no perder progreso al cambiar
+    for _tipo in ("emitidos", "recibidos"):
+        _key = f"dian_dl_{_tipo}"
+        if _key not in st.session_state:
+            st.session_state[_key] = {
+                "zips_por_cufe": {},
+                "fallidos": [],
+                "progresos_hilos": [],
+                "lista_origen": [],     # lista del Excel para el dictamen
+                "dictamen": None,
+            }
 
-    estado_dl = st.session_state["dian_dl_estado"]
-
-    # ─── Selección de qué descargar ───
-    st.markdown("### 1️⃣ Elige qué descargar")
+    # Generar las 2 listas siempre que haya df_token_filt
     lr = st.session_state.get("lista_todos_recibidos", [])
     le_stl_dse = glc.generar_lista_emitidos_stl_y_dse(df_token_filt, f_desde, f_hasta)
     st.session_state["lista_emitidos_stl_dse"] = le_stl_dse
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.metric("Lista A — Emitidos (STL + DSE)", f"{len(le_stl_dse):,}")
-    with col_b:
-        st.metric("Lista B — Recibidos (todos)", f"{len(lr):,}")
-
-    opcion = st.radio(
-        "¿Qué quieres descargar?",
-        ["Lista A: Emitidos (STL + DSE)", "Lista B: Recibidos (todos)"],
-        horizontal=True,
-        key="dian_dl_opcion",
-    )
-
-    if opcion.startswith("Lista A"):
-        lista_a_descargar = [item["cufe"] for item in le_stl_dse if item.get("cufe")]
-        nombre_lista = "emitidos"
-    else:
-        lista_a_descargar = [item["cufe"] for item in lr if item.get("cufe")]
-        nombre_lista = "recibidos"
-
-    # Si cambió la lista que se va a descargar, resetear estado
-    if estado_dl.get("lista_origen") != nombre_lista and estado_dl.get("lista_origen"):
-        if st.button("🔄 La selección cambió. Limpiar progreso anterior"):
-            st.session_state["dian_dl_estado"] = {
-                "zips_por_cufe": {},
-                "fallidos": [],
-                "pendientes": [],
-                "lista_origen": "",
-                "total_inicial": 0,
-                "bloques_completados": 0,
-            }
-            st.rerun()
-
-    # Si no hay descarga en curso, inicializar
-    if not estado_dl["pendientes"] and not estado_dl["zips_por_cufe"]:
-        estado_dl["pendientes"] = list(lista_a_descargar)
-        estado_dl["lista_origen"] = nombre_lista
-        estado_dl["total_inicial"] = len(lista_a_descargar)
-
-    pendientes_n = len(estado_dl["pendientes"])
-    completados_n = len(estado_dl["zips_por_cufe"])
-    fallidos_n = len(estado_dl["fallidos"])
-
-    st.markdown("### 2️⃣ Estado de la descarga")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total a descargar", f"{estado_dl['total_inicial']:,}")
-    c2.metric("✅ Completados", f"{completados_n:,}")
-    c3.metric("❌ Fallidos", f"{fallidos_n:,}")
-    c4.metric("⏳ Pendientes", f"{pendientes_n:,}")
-
-    if estado_dl["total_inicial"] > 0:
-        pct = (completados_n / estado_dl["total_inicial"]) * 100
-        st.progress(pct / 100, text=f"{pct:.1f}% completado")
-
     # ─── URL del Token ───
-    st.markdown("### 3️⃣ Pega la URL del Token DIAN")
+    st.markdown("### 1️⃣ Pega la URL del Token DIAN")
     token_url = st.text_input(
         "URL completa del Token (de catalogo-vpfe.dian.gov.co)",
         placeholder="https://catalogo-vpfe.dian.gov.co/User/AuthToken?pk=...&rk=...&token=...",
-        key="dian_token_url",
+        key="dian_token_url_v2",
         type="password",
-        help="Genera un Token desde el portal DIAN y pega aquí la URL completa. "
-             "Es una credencial: no la compartas.",
+        help="Genera un Token desde el portal DIAN y pega aquí la URL completa.",
     )
 
-    # ─── Tamaño del bloque ───
-    col_bs1, col_bs2 = st.columns([2, 1])
-    with col_bs1:
-        max_docs = st.number_input(
-            "Máximo de documentos por bloque",
-            min_value=50, max_value=1500, value=700, step=50,
-            help="La sesión DIAN cierra a los ~30 min / ~700 docs. "
-                 "Si te aparece 'sesión expirada' baja este número.",
-        )
-    with col_bs2:
-        delay = st.number_input(
-            "Delay (seg)",
-            min_value=0.0, max_value=2.0, value=0.15, step=0.05,
-            help="Pausa entre descargas para no saturar DIAN.",
-        )
+    # ─── 2 botones lado a lado ───
+    st.markdown("### 2️⃣ Elige qué descargar")
 
-    # ─── Botón de descarga del bloque ───
-    st.markdown("### 4️⃣ Descargar el siguiente bloque")
-    if pendientes_n == 0 and completados_n > 0:
-        st.success(f"🎉 Descarga completa: {completados_n:,} XMLs descargados.")
-    else:
-        boton_label = f"⬇️ Descargar próximo bloque ({min(pendientes_n, int(max_docs)):,} docs)"
-        if st.button(boton_label, type="primary", disabled=not token_url, use_container_width=True):
-            try:
-                with st.spinner(f"Autenticando con DIAN..."):
-                    sess = dd.autenticar(token_url)
-                st.success("✅ Sesión DIAN autenticada")
+    import math as _math
+    n_emit = len(le_stl_dse)
+    n_recb = len(lr)
+    hilos_emit = max(1, _math.ceil(n_emit / 700)) if n_emit else 0
+    hilos_recb = max(1, _math.ceil(n_recb / 700)) if n_recb else 0
 
-                # Descarga con progreso visible
-                progress_bar = st.progress(0.0, text="Descargando...")
-                status_text = st.empty()
+    col_em, col_rc = st.columns(2)
 
-                def on_prog(i, total, msg):
-                    if total > 0:
-                        progress_bar.progress(i / total, text=f"{i}/{total} — {msg}")
+    # ─── Función reutilizable para ejecutar la descarga ───
+    def _ejecutar_descarga(tipo_str, lista_excel_completa):
+        """Ejecuta descarga paralela y guarda en session_state."""
+        if not token_url:
+            st.error("Pega primero la URL del Token DIAN")
+            return
+        cufes = [it["cufe"] for it in lista_excel_completa if it.get("cufe")]
+        if not cufes:
+            st.warning("No hay CUFEs para descargar.")
+            return
 
-                with st.spinner(f"Descargando {min(pendientes_n, int(max_docs)):,} XMLs (puede tomar ~5-10 min)..."):
-                    res = dd.descargar_lote(
-                        sess,
-                        estado_dl["pendientes"],
-                        max_docs=int(max_docs),
-                        delay=float(delay),
-                        on_progress=on_prog,
+        estado = st.session_state[f"dian_dl_{tipo_str}"]
+
+        # Si hay descarga previa, descargar solo los faltantes del Excel
+        ya_descargados = set(estado["zips_por_cufe"].keys())
+        cufes_pendientes = [c for c in cufes if c not in ya_descargados]
+        if not cufes_pendientes:
+            st.info("Ya está todo descargado para este tipo. Limpia el progreso si quieres rehacer.")
+            return
+
+        # Placeholders para progreso en vivo
+        progreso_placeholder = st.empty()
+
+        def on_prog(progresos):
+            with progreso_placeholder.container():
+                st.markdown(f"#### Progreso en vivo — {len(progresos)} hilo(s)")
+                for p in progresos:
+                    rango_label = f"Hilo {p.hilo_id} ({p.rango_desde}-{p.rango_hasta})"
+                    total_hilo = p.rango_hasta - p.rango_desde + 1
+                    pct = (p.procesados / total_hilo) if total_hilo else 0
+                    estado_icon = {
+                        "pendiente": "⏳",
+                        "descargando": "⬇️",
+                        "ok": "✅",
+                        "sesion_expirada": "⚠️",
+                        "error": "❌",
+                    }.get(p.estado, "❓")
+                    st.progress(
+                        pct,
+                        text=f"{estado_icon} {rango_label}: {p.procesados}/{total_hilo} "
+                             f"(ok={p.exitosos}, fail={p.fallidos}) {p.mensaje[:40]}"
                     )
 
-                # Acumular en el estado
-                estado_dl["zips_por_cufe"].update(res.exitosos)
-                estado_dl["fallidos"].extend(res.fallidos)
-                estado_dl["pendientes"] = res.cufes_pendientes(estado_dl["pendientes"])
-                estado_dl["bloques_completados"] += 1
+        try:
+            with st.spinner(f"Descargando {len(cufes_pendientes):,} XMLs en paralelo..."):
+                res, progresos_final = dd.descargar_paralelo_por_bloques(
+                    token_url,
+                    cufes_pendientes,
+                    tam_bloque=700,
+                    delay=0.15,
+                    on_progress=on_prog,
+                    parar_todos_si_uno_falla=True,
+                )
 
-                progress_bar.empty()
-                status_text.empty()
+            # Acumular en el estado
+            estado["zips_por_cufe"].update(res.exitosos)
+            estado["fallidos"].extend(res.fallidos)
+            estado["progresos_hilos"] = [
+                {
+                    "hilo_id": p.hilo_id,
+                    "rango_desde": p.rango_desde,
+                    "rango_hasta": p.rango_hasta,
+                    "procesados": p.procesados,
+                    "exitosos": p.exitosos,
+                    "fallidos": p.fallidos,
+                    "estado": p.estado,
+                    "mensaje": p.mensaje,
+                }
+                for p in progresos_final
+            ]
+            estado["lista_origen"] = lista_excel_completa
+            estado["dictamen"] = dd.generar_dictamen(
+                lista_excel_completa,
+                set(estado["zips_por_cufe"].keys()),
+                estado["fallidos"],
+            )
 
-                # Mensaje según motivo de parada
-                if res.motivo_parada == "completo":
-                    st.success(
-                        f"🎉 Descarga COMPLETA. "
-                        f"Total: {len(estado_dl['zips_por_cufe']):,} XMLs."
-                    )
-                elif res.motivo_parada == "sesion_expirada":
-                    st.warning(
-                        f"⚠️ La sesión DIAN expiró tras {res.total_exitosos} docs de este bloque. "
-                        f"**Genera un Token nuevo** y pégalo arriba para continuar. "
-                        f"El progreso está guardado: te quedan **{len(estado_dl['pendientes']):,} pendientes**."
-                    )
-                elif res.motivo_parada == "limite_bloque":
-                    st.info(
-                        f"✅ Bloque completado ({res.total_exitosos} XMLs). "
-                        f"Quedan **{len(estado_dl['pendientes']):,} pendientes**. "
-                        f"Puedes pegar el mismo Token (si todavía es vigente) o uno nuevo "
-                        f"y darle al botón otra vez."
-                    )
+            progreso_placeholder.empty()
 
-                if res.duracion_seg > 0:
-                    rate = res.total_exitosos / res.duracion_seg
-                    st.caption(
-                        f"⏱️ {res.duracion_seg:.0f}s ({rate:.1f} XMLs/seg) · "
-                        f"este bloque: {res.total_exitosos} ok, {res.total_fallidos} fallidos"
-                    )
+            if res.motivo_parada == "completo":
+                st.success(
+                    f"🎉 Descarga COMPLETA: {res.total_exitosos:,} XMLs "
+                    f"({res.duracion_seg:.0f}s)"
+                )
+            elif res.motivo_parada == "sesion_expirada":
+                st.warning(
+                    f"⚠️ La sesión DIAN expiró en uno o más hilos. "
+                    f"Total descargado: {len(estado['zips_por_cufe']):,}. "
+                    f"Genera un Token nuevo y vuelve a darle al botón "
+                    f"para descargar los faltantes."
+                )
+            else:
+                st.info(f"Descarga parcial: {res.total_exitosos} OK. Motivo: {res.motivo_parada}")
+            st.rerun()
+        except dd.SesionExpirada as e:
+            st.error(f"❌ Token inválido o expirado al autenticar: {e}")
+        except ValueError as e:
+            st.error(f"❌ URL inválida: {e}")
+        except Exception as e:
+            st.error(f"❌ Error inesperado: {e}")
+            import traceback
+            with st.expander("Detalle"):
+                st.code(traceback.format_exc())
 
-                st.rerun()
-            except dd.SesionExpirada as e:
-                st.error(f"❌ Token inválido o expirado: {e}")
-            except ValueError as e:
-                st.error(f"❌ URL inválida: {e}")
-            except Exception as e:
-                st.error(f"❌ Error inesperado: {e}")
-                import traceback
-                with st.expander("Detalle"):
-                    st.code(traceback.format_exc())
+    with col_em:
+        st.markdown(f"**📤 EMITIDOS (STL + DSE)**")
+        st.metric("Documentos en Excel", f"{n_emit:,}")
+        st.caption(f"→ {hilos_emit} hilo(s) paralelo(s) de hasta 700 docs")
+        descargados_em = len(st.session_state["dian_dl_emitidos"]["zips_por_cufe"])
+        if descargados_em > 0:
+            st.caption(f"✅ Ya descargados: {descargados_em:,}")
+        if st.button(
+            "⬇️ Descargar emitidos",
+            key="btn_dl_emitidos_v2",
+            use_container_width=True,
+            type="primary",
+            disabled=not token_url or n_emit == 0,
+        ):
+            _ejecutar_descarga("emitidos", le_stl_dse)
 
-    # ─── Descargar el ZIP consolidado ───
-    if completados_n > 0:
-        st.markdown("### 5️⃣ ZIP consolidado")
-        if st.button("📦 Generar ZIP consolidado para procesar", use_container_width=True):
-            with st.spinner("Consolidando..."):
-                zip_consol = dd.juntar_zips(estado_dl["zips_por_cufe"])
-            st.session_state["dian_dl_zip_consolidado"] = zip_consol
-            st.success(f"✅ ZIP consolidado: {len(zip_consol):,} bytes "
-                       f"({len(estado_dl['zips_por_cufe']):,} XMLs)")
+    with col_rc:
+        st.markdown(f"**📥 RECIBIDOS (todos)**")
+        st.metric("Documentos en Excel", f"{n_recb:,}")
+        st.caption(f"→ {hilos_recb} hilo(s) paralelo(s) de hasta 700 docs")
+        descargados_rc = len(st.session_state["dian_dl_recibidos"]["zips_por_cufe"])
+        if descargados_rc > 0:
+            st.caption(f"✅ Ya descargados: {descargados_rc:,}")
+        if st.button(
+            "⬇️ Descargar recibidos",
+            key="btn_dl_recibidos_v2",
+            use_container_width=True,
+            type="primary",
+            disabled=not token_url or n_recb == 0,
+        ):
+            _ejecutar_descarga("recibidos", lr)
 
-        if "dian_dl_zip_consolidado" in st.session_state:
-            from datetime import date as _date
-            hoy = _date.today().strftime("%Y%m%d")
-            st.download_button(
-                f"⬇️ Descargar ZIP consolidado ({len(estado_dl['zips_por_cufe']):,} XMLs)",
-                data=st.session_state["dian_dl_zip_consolidado"],
-                file_name=f"dian_directo_{estado_dl['lista_origen']}_{hoy}.zip",
-                mime="application/zip",
+    # ─── Mostrar DICTAMEN para cada tipo que tenga descarga ───
+    for tipo_str, label_emoji in [("emitidos", "📤 EMITIDOS"), ("recibidos", "📥 RECIBIDOS")]:
+        estado = st.session_state[f"dian_dl_{tipo_str}"]
+        if not estado["zips_por_cufe"] and not estado["fallidos"]:
+            continue
+
+        st.markdown(f"---")
+        st.markdown(f"### 📋 Dictamen — {label_emoji}")
+
+        dict_resultado = estado["dictamen"]
+        if not dict_resultado:
+            # Recalcular dictamen por si cambió el Excel
+            dict_resultado = dd.generar_dictamen(
+                estado["lista_origen"],
+                set(estado["zips_por_cufe"].keys()),
+                estado["fallidos"],
+            )
+            estado["dictamen"] = dict_resultado
+
+        tot = dict_resultado["totales"]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("📋 Excel", f"{tot['total_esperado']:,}")
+        c2.metric("✅ Descargados", f"{tot['descargados']:,}",
+                  f"{tot['pct_completado']:.1f}%")
+        c3.metric("❌ Faltantes", f"{tot['faltantes']:,}")
+        c4.metric("💰 Valor descargado",
+                  f"${tot['sum_descargado']:,.0f}",
+                  f"de ${tot['sum_esperado']:,.0f}")
+
+        # Tabla de faltantes (si los hay)
+        if tot["faltantes"] > 0:
+            with st.expander(f"📋 Ver {tot['faltantes']} documentos faltantes", expanded=True):
+                if dict_resultado["desglose_tipos_faltantes"]:
+                    desg = ", ".join(f"{t}: {n}" for t, n in dict_resultado["desglose_tipos_faltantes"].items())
+                    st.caption(f"Desglose por tipo: {desg}")
+
+                df_falt = pd.DataFrame(dict_resultado["tabla_faltantes"])
+                if not df_falt.empty:
+                    cols_mostrar = [c for c in
+                                    ["cufe", "folio", "prefijo", "tipo_documento",
+                                     "fecha_emision", "nombre_emisor", "total", "razon_fallo"]
+                                    if c in df_falt.columns]
+                    st.dataframe(df_falt[cols_mostrar], use_container_width=True, hide_index=True)
+
+                # Descargar Excel del dictamen
+                buf = io.BytesIO()
+                with pd.ExcelWriter(buf, engine="openpyxl") as xlw:
+                    df_falt.to_excel(xlw, sheet_name="Faltantes", index=False)
+                    pd.DataFrame([tot]).T.to_excel(xlw, sheet_name="Resumen", header=False)
+                st.download_button(
+                    f"⬇️ Excel del dictamen ({tipo_str})",
+                    data=buf.getvalue(),
+                    file_name=f"dictamen_{tipo_str}_{f_desde}_a_{f_hasta}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_dictamen_{tipo_str}",
+                )
+
+        # ─── Procesar al plano contable ───
+        if tot["descargados"] > 0:
+            st.markdown(f"#### ⚙️ Procesar al plano contable")
+            if st.button(
+                f"▶️ Procesar {tot['descargados']:,} XMLs descargados de {tipo_str}",
+                key=f"btn_proc_{tipo_str}",
                 use_container_width=True,
-            )
-            st.caption(
-                "👇 Sube este ZIP en la sección 7 para procesarlo "
-                "(igual que un ZIP de la extensión)."
-            )
+            ):
+                with st.spinner("Generando ZIP consolidado y procesando..."):
+                    zip_consol = dd.juntar_zips(estado["zips_por_cufe"])
+                    try:
+                        if tipo_str == "emitidos":
+                            # STL emitidas → procesador STL
+                            res_proc = pxz.procesar_zip_stl(
+                                zip_consol,
+                                str(RUTA_MAPEO),
+                                str(RUTA_DSE),
+                            )
+                            st.session_state[f"res_proc_{tipo_str}"] = res_proc
+                        else:
+                            # Recibidos → procesador compras mixtas (incluye NC/ND/DSE)
+                            # Primero actualizar maestro
+                            maestro = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"_meta": {}, "terceros": {}}
+                            resumen_maestro = pxz.procesar_zip_para_maestro(zip_consol, maestro)
+                            mt.guardar_maestro_terceros(maestro, str(RUTA_MAESTRO))
 
-    # ─── Errores detallados ───
-    if fallidos_n > 0:
-        with st.expander(f"❌ Ver {fallidos_n} errores"):
-            for cufe, razon in estado_dl["fallidos"][:50]:
-                st.text(f"{cufe[:40]}... → {razon}")
-            if fallidos_n > 50:
-                st.caption(f"... y {fallidos_n - 50} más")
+                            res_proc = pxz.procesar_zip_compras_mixtas(
+                                zip_consol,
+                                str(RUTA_COMPRAS),
+                                str(RUTA_TABLA_RET),
+                                str(RUTA_MAPEO_CONCEPTO),
+                                str(RUTA_MAESTRO) if RUTA_MAESTRO.exists() else None,
+                            )
+                            st.session_state[f"res_proc_{tipo_str}"] = res_proc
+                            st.session_state[f"resumen_maestro_{tipo_str}"] = resumen_maestro
+                    except Exception as e:
+                        st.error(f"❌ Error procesando: {e}")
+                        import traceback
+                        with st.expander("Detalle"):
+                            st.code(traceback.format_exc())
 
-    # ─── Resetear todo ───
-    if completados_n > 0 or fallidos_n > 0:
-        with st.expander("🗑️ Limpiar progreso y empezar de cero"):
-            if st.button("⚠️ Resetear descarga (perderás lo descargado en memoria)"):
-                st.session_state["dian_dl_estado"] = {
+            # Mostrar resultado del procesamiento si existe
+            if f"res_proc_{tipo_str}" in st.session_state:
+                res_proc = st.session_state[f"res_proc_{tipo_str}"]
+                r_info = res_proc.resumen() if hasattr(res_proc, "resumen") else {}
+                st.success(f"✅ {r_info.get('facturas_procesadas', 0):,} documentos procesados al plano contable")
+
+                if res_proc.plano_df is not None and len(res_proc.plano_df) > 0:
+                    tsv = res_proc.plano_df.to_csv(sep="\t", index=False, encoding="utf-8")
+                    st.download_button(
+                        f"⬇️ Plano contable {tipo_str} (TSV)",
+                        data=tsv.encode("utf-8"),
+                        file_name=f"plano_{tipo_str}_{f_desde}_a_{f_hasta}.tsv",
+                        mime="text/tab-separated-values",
+                        key=f"dl_plano_{tipo_str}",
+                        use_container_width=True,
+                    )
+
+        # ─── Resetear ───
+        with st.expander(f"🗑️ Limpiar descarga de {tipo_str}"):
+            if st.button(f"⚠️ Borrar todo lo descargado de {tipo_str}",
+                         key=f"reset_{tipo_str}"):
+                st.session_state[f"dian_dl_{tipo_str}"] = {
                     "zips_por_cufe": {},
                     "fallidos": [],
-                    "pendientes": [],
-                    "lista_origen": "",
-                    "total_inicial": 0,
-                    "bloques_completados": 0,
+                    "progresos_hilos": [],
+                    "lista_origen": [],
+                    "dictamen": None,
                 }
-                st.session_state.pop("dian_dl_zip_consolidado", None)
+                st.session_state.pop(f"res_proc_{tipo_str}", None)
                 st.rerun()
 
 
@@ -909,13 +981,15 @@ else:
 # PASO 7 — Subir ZIPs descargados y procesar
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 7️⃣ Subir ZIPs de XMLs descargados")
+st.markdown("## 7️⃣ (Opcional) Subir ZIPs descargados con extensión")
+st.caption(
+    "📌 Solo si descargaste con la extensión Chrome. Si usaste la descarga "
+    "directa, el procesamiento ya se hace en esa misma sección."
+)
 st.caption(
     "Sube el ZIP plano que descargó la extensión Chrome. Cada ZIP tiene un rol "
     "diferente. La plataforma detecta el tipo y procesa en consecuencia."
 )
-
-from core.procesadores import procesador_xmls_zip as pxz
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "🧾 STL completas",
