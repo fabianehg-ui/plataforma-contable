@@ -26,6 +26,7 @@ EXPONE:
 from __future__ import annotations
 
 import io
+import json
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -616,7 +617,6 @@ def procesar_zip_compras_mixtas(
             res.errores.append(f"{nombre}: {e}")
 
     # Generar plano
-    import json as _json
     filas = []
     for fac in res.facturas:
         filas.extend(_generar_lineas_compra_mixta(
@@ -719,13 +719,13 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
     if res_ret.aplica_retefuente:
         cr_total -= res_ret.valor_retefuente
         out.append({
-            "CUENTA": res_ret.cuenta_retefuente,
+            "CUENTA": res_ret.cuenta_retefuente_puc,
             "COMPROBANTE": COMPROBANTE_COMPRAS,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
             "DOC REFERENCIA": "",
             "NIT": fac.nit_emisor,
-            "DETALLE": f"Retef {res_ret.concepto} - {detalle}",
+            "DETALLE": f"Retef {res_ret.concepto_retencion} - {detalle}",
             "TR": TR_CREDITO,
             "VALOR": round(res_ret.valor_retefuente, 0),
             "BASE": round(base_total, 0),
@@ -734,7 +734,7 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
     if res_ret.aplica_reteiva:
         cr_total -= res_ret.valor_reteiva
         out.append({
-            "CUENTA": res_ret.cuenta_reteiva,
+            "CUENTA": res_ret.cuenta_reteiva_puc,
             "COMPROBANTE": COMPROBANTE_COMPRAS,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
