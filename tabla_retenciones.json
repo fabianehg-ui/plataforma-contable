@@ -173,9 +173,8 @@
     },
     "O-47": {
       "nombre": "Régimen Simple de Tributación (RST)",
-      "aplicar_retefuente": false,
-      "aplicar_reteiva": true,
-      "obs": "NO se le retiene renta (no es sujeto). SÍ se le practica reteIVA al 15% sobre el IVA."
+      "aplicar_retefuente": true,
+      "aplicar_reteiva": true
     },
     "R-99-PN": {
       "nombre": "No responsable / Régimen ordinario por defecto",
