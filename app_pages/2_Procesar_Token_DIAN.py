@@ -37,6 +37,7 @@ from core.procesadores import lector_excel_token as lex
 from core.procesadores import procesador_ventas_excel_token_v2 as pve2
 from core.procesadores import procesador_compras_excel_token as pcom
 from core.procesadores import generador_listas_cufes as glc
+from core.procesadores import maestro_terceros as mt
 
 
 # ─── Auth y setup ────────────────────────────────────────────
