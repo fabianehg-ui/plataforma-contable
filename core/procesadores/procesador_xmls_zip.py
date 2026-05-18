@@ -363,8 +363,20 @@ class ResultadoXMLs:
 # Constantes contables (cuentas reales JIPER)
 COMPROBANTE_STL = "426"
 CC_INSTITUCIONAL = "001003"
-CUENTA_CXC_STL = "13050501"           # CLIENTES NACIONALES
-CUENTA_INGRESOS_VENTA = "41401501"    # VENTAS PUNTOS CON ICO 8%
+CUENTA_CXC_STL = "13050505"           # CLIENTES NACIONALES (verificado en histórico)
+
+# Ingresos por tarifa — cuentas REALES JIPER del comprobante 426
+# Verificadas con histórico marzo+abril 2026
+CUENTAS_INGRESOS_STL_POR_TARIFA = {
+    "0%":   "41200902",   # PANADERIA CONGELADA SIN IVA (la principal, excluida)
+    "5%":   "41200905",   # OTROS PANADERIA IVA 5%
+    "19%":  "41200906",   # OTRAS VENTAS GVADAS AL 19%
+    "16%":  "41200906",   # fallback a 19%
+    "INC8%":"41401501",   # VENTAS PUNTOS CON ICO 8%
+}
+# Cuenta fallback si la tarifa es inesperada
+CUENTA_INGRESOS_STL_FALLBACK = "41200902"
+
 CUENTA_IVA_19_GENERADO = "24080503"   # IVA GENERADO 19%
 CUENTA_IVA_5_GENERADO = "24080501"    # IVA GENERADO 5%
 CUENTA_INC_GENERADO = "24800505"      # IMPUESTO AL CONSUMO 8%
@@ -436,12 +448,16 @@ def _generar_lineas_stl(fac: FacturaXML) -> list[dict]:
         "CENTRO DE COSTO": CC_INSTITUCIONAL,
     })
 
-    # Cr ingresos por tarifa
+    # Cr ingresos por tarifa (cuenta cambia según tarifa real)
     for tarifa, base in fac.bases_por_tarifa.items():
         if base <= 0.5:
             continue
+        # Cuenta de ingreso según tarifa (JIPER usa cuentas distintas por % IVA)
+        cuenta_ingresos = CUENTAS_INGRESOS_STL_POR_TARIFA.get(
+            tarifa, CUENTA_INGRESOS_STL_FALLBACK
+        )
         out.append({
-            "CUENTA": CUENTA_INGRESOS_VENTA,
+            "CUENTA": cuenta_ingresos,
             "COMPROBANTE": COMPROBANTE_STL,
             "FECHA": fecha_str,
             "DOCUMENTO": fac.folio,
