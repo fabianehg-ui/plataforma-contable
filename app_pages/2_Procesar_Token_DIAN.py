@@ -958,40 +958,63 @@ if "consolidado" in st.session_state:
     # Plano de terceros nuevos (los que no estaban en histórico ni en maestro)
     st.markdown("### 👥 Plano de TERCEROS NUEVOS para Siigo")
     if RUTA_MAESTRO.exists():
+        from core.procesadores import exportador_nits_siigo as exp_nits
+
         maestro_final = mt.cargar_maestro_terceros(str(RUTA_MAESTRO))
-        terceros_nuevos = []
+
+        # Calcular NITs nuevos (los que NO están en histórico)
         nits_historico = set()
         if RUTA_COMPRAS.exists():
             with open(RUTA_COMPRAS, encoding="utf-8") as _f:
                 hist = json.load(_f)
             for e in hist.get("mapeo", []):
-                nit = str(e.get("nit", "")).strip()
+                nit = exp_nits.normalizar_nit(str(e.get("nit", "")))
                 if nit:
                     nits_historico.add(nit)
-        # Cualquier tercero del maestro que NO esté en histórico = nuevo para Siigo
-        for nit, datos in maestro_final.get("terceros", {}).items():
-            if nit and nit not in nits_historico:
-                terceros_nuevos.append({
-                    "NIT": nit,
-                    "RAZON_SOCIAL": datos.get("nombre", ""),
-                    "REGIMEN": datos.get("tax_level_principal", ""),
-                    "CIUDAD": datos.get("ciudad", ""),
-                    "DIRECCION": datos.get("direccion", ""),
-                    "EMAIL": datos.get("email", ""),
-                    "TELEFONO": datos.get("telefono", ""),
-                })
 
-        if terceros_nuevos:
-            df_terc = pd.DataFrame(terceros_nuevos)
+        nits_maestro = {exp_nits.normalizar_nit(k) for k in maestro_final.get("terceros", {}).keys()}
+        nits_nuevos = nits_maestro - nits_historico
+
+        if nits_nuevos:
+            df_terc = exp_nits.exportar_nits_desde_maestro(maestro_final, nits_filtrar=nits_nuevos)
             st.metric("Terceros nuevos a crear en Siigo", f"{len(df_terc):,}")
+            st.caption(
+                f"Formato Siigo NITs (20 columnas) con códigos DANE, naturaleza y "
+                f"responsabilidad IVA deducidos automáticamente."
+            )
+
+            # Distribución de naturaleza
+            nat_dist = df_terc["NATURALEZA"].value_counts().to_dict()
+            naturales = nat_dist.get("N", 0)
+            juridicas = nat_dist.get("J", 0)
+            c1, c2 = st.columns(2)
+            c1.metric("Jurídicas (J)", f"{juridicas:,}")
+            c2.metric("Naturales (N)", f"{naturales:,}")
+
+            # Excel formato Siigo
+            xlsx_bytes = exp_nits.generar_excel_nits_siigo(df_terc)
+            st.download_button(
+                f"⬇️ NITs nuevos Excel formato Siigo ({len(df_terc):,})",
+                data=xlsx_bytes,
+                file_name=f"nits_jiper_{f_desde}_a_{f_hasta}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                type="primary",
+            )
+
+            # También TSV por si el usuario lo prefiere
             tsv_t = df_terc.to_csv(sep="\t", index=False, encoding="utf-8")
             st.download_button(
-                f"⬇️ PLANO TERCEROS NUEVOS TSV",
+                f"⬇️ NITs nuevos TSV ({len(df_terc):,})",
                 data=tsv_t.encode("utf-8"),
-                file_name=f"plano_TERCEROS_NUEVOS_{f_desde}_a_{f_hasta}.txt",
+                file_name=f"nits_jiper_{f_desde}_a_{f_hasta}.txt",
                 mime="text/tab-separated-values",
                 use_container_width=True,
             )
+
+            # Mostrar muestra
+            with st.expander("Vista previa de los primeros 10 terceros"):
+                st.dataframe(df_terc.head(10), use_container_width=True, hide_index=True)
         else:
             st.info("ℹ️ No hay terceros nuevos: todos los proveedores ya están en tu contabilidad.")
     else:
