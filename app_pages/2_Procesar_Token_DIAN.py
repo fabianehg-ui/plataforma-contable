@@ -648,6 +648,264 @@ if "lista_compras_mixtas" in st.session_state:
 
 
 # ════════════════════════════════════════════════════════════
+# PASO 6.5 — Descarga DIRECTA desde DIAN (sin extensión Chrome)
+# ════════════════════════════════════════════════════════════
+# Flujo alternativo al de la extensión:
+#   1. Pegas la URL del Token DIAN
+#   2. Eliges qué descargar (Lista A = STL+DSE emitidos, Lista B = todos
+#      los recibidos)
+#   3. La plataforma descarga en bloques de 700 (límite empírico antes
+#      de que la sesión expire)
+#   4. Si la sesión se cierra a mitad, pides un Token nuevo y continúas
+#      donde quedaste — el progreso NO se pierde
+# ════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("## 6.5 🚀 Descarga DIRECTA desde DIAN")
+
+with st.expander("ℹ️ ¿Cuándo usar esto vs la extensión Chrome?", expanded=False):
+    st.markdown(
+        "**Descarga directa (esta sección):**\n"
+        "- Pegas la URL del Token y la plataforma descarga sola.\n"
+        "- No necesitas instalar nada.\n"
+        "- Bloques automáticos de 700 documentos (la sesión DIAN cierra a "
+        "los ~30 min). Cuando se acabe el bloque, te pide otro Token y sigue.\n"
+        "- Ideal para volúmenes grandes desatendidos.\n\n"
+        "**Extensión Chrome (sección anterior y siguiente):**\n"
+        "- Sigue funcionando como antes; queda como respaldo.\n"
+        "- Útil si la descarga directa falla por bloqueos de DIAN.\n"
+    )
+
+if "lista_compras_mixtas" not in st.session_state:
+    st.caption("⚠️ Primero genera las listas en el paso 6 ⬆️")
+else:
+    from core.procesadores import descargador_dian as dd
+
+    # ─── Estado de la descarga (sobrevive a reruns) ───
+    if "dian_dl_estado" not in st.session_state:
+        st.session_state["dian_dl_estado"] = {
+            "zips_por_cufe": {},     # acumulado entre bloques
+            "fallidos": [],
+            "pendientes": [],
+            "lista_origen": "",      # "emitidos" | "recibidos"
+            "total_inicial": 0,
+            "bloques_completados": 0,
+        }
+
+    estado_dl = st.session_state["dian_dl_estado"]
+
+    # ─── Selección de qué descargar ───
+    st.markdown("### 1️⃣ Elige qué descargar")
+    lr = st.session_state.get("lista_todos_recibidos", [])
+    le_stl_dse = glc.generar_lista_emitidos_stl_y_dse(df_token_filt, f_desde, f_hasta)
+    st.session_state["lista_emitidos_stl_dse"] = le_stl_dse
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.metric("Lista A — Emitidos (STL + DSE)", f"{len(le_stl_dse):,}")
+    with col_b:
+        st.metric("Lista B — Recibidos (todos)", f"{len(lr):,}")
+
+    opcion = st.radio(
+        "¿Qué quieres descargar?",
+        ["Lista A: Emitidos (STL + DSE)", "Lista B: Recibidos (todos)"],
+        horizontal=True,
+        key="dian_dl_opcion",
+    )
+
+    if opcion.startswith("Lista A"):
+        lista_a_descargar = [item["cufe"] for item in le_stl_dse if item.get("cufe")]
+        nombre_lista = "emitidos"
+    else:
+        lista_a_descargar = [item["cufe"] for item in lr if item.get("cufe")]
+        nombre_lista = "recibidos"
+
+    # Si cambió la lista que se va a descargar, resetear estado
+    if estado_dl.get("lista_origen") != nombre_lista and estado_dl.get("lista_origen"):
+        if st.button("🔄 La selección cambió. Limpiar progreso anterior"):
+            st.session_state["dian_dl_estado"] = {
+                "zips_por_cufe": {},
+                "fallidos": [],
+                "pendientes": [],
+                "lista_origen": "",
+                "total_inicial": 0,
+                "bloques_completados": 0,
+            }
+            st.rerun()
+
+    # Si no hay descarga en curso, inicializar
+    if not estado_dl["pendientes"] and not estado_dl["zips_por_cufe"]:
+        estado_dl["pendientes"] = list(lista_a_descargar)
+        estado_dl["lista_origen"] = nombre_lista
+        estado_dl["total_inicial"] = len(lista_a_descargar)
+
+    pendientes_n = len(estado_dl["pendientes"])
+    completados_n = len(estado_dl["zips_por_cufe"])
+    fallidos_n = len(estado_dl["fallidos"])
+
+    st.markdown("### 2️⃣ Estado de la descarga")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total a descargar", f"{estado_dl['total_inicial']:,}")
+    c2.metric("✅ Completados", f"{completados_n:,}")
+    c3.metric("❌ Fallidos", f"{fallidos_n:,}")
+    c4.metric("⏳ Pendientes", f"{pendientes_n:,}")
+
+    if estado_dl["total_inicial"] > 0:
+        pct = (completados_n / estado_dl["total_inicial"]) * 100
+        st.progress(pct / 100, text=f"{pct:.1f}% completado")
+
+    # ─── URL del Token ───
+    st.markdown("### 3️⃣ Pega la URL del Token DIAN")
+    token_url = st.text_input(
+        "URL completa del Token (de catalogo-vpfe.dian.gov.co)",
+        placeholder="https://catalogo-vpfe.dian.gov.co/User/AuthToken?pk=...&rk=...&token=...",
+        key="dian_token_url",
+        type="password",
+        help="Genera un Token desde el portal DIAN y pega aquí la URL completa. "
+             "Es una credencial: no la compartas.",
+    )
+
+    # ─── Tamaño del bloque ───
+    col_bs1, col_bs2 = st.columns([2, 1])
+    with col_bs1:
+        max_docs = st.number_input(
+            "Máximo de documentos por bloque",
+            min_value=50, max_value=1500, value=700, step=50,
+            help="La sesión DIAN cierra a los ~30 min / ~700 docs. "
+                 "Si te aparece 'sesión expirada' baja este número.",
+        )
+    with col_bs2:
+        delay = st.number_input(
+            "Delay (seg)",
+            min_value=0.0, max_value=2.0, value=0.15, step=0.05,
+            help="Pausa entre descargas para no saturar DIAN.",
+        )
+
+    # ─── Botón de descarga del bloque ───
+    st.markdown("### 4️⃣ Descargar el siguiente bloque")
+    if pendientes_n == 0 and completados_n > 0:
+        st.success(f"🎉 Descarga completa: {completados_n:,} XMLs descargados.")
+    else:
+        boton_label = f"⬇️ Descargar próximo bloque ({min(pendientes_n, int(max_docs)):,} docs)"
+        if st.button(boton_label, type="primary", disabled=not token_url, use_container_width=True):
+            try:
+                with st.spinner(f"Autenticando con DIAN..."):
+                    sess = dd.autenticar(token_url)
+                st.success("✅ Sesión DIAN autenticada")
+
+                # Descarga con progreso visible
+                progress_bar = st.progress(0.0, text="Descargando...")
+                status_text = st.empty()
+
+                def on_prog(i, total, msg):
+                    if total > 0:
+                        progress_bar.progress(i / total, text=f"{i}/{total} — {msg}")
+
+                with st.spinner(f"Descargando {min(pendientes_n, int(max_docs)):,} XMLs (puede tomar ~5-10 min)..."):
+                    res = dd.descargar_lote(
+                        sess,
+                        estado_dl["pendientes"],
+                        max_docs=int(max_docs),
+                        delay=float(delay),
+                        on_progress=on_prog,
+                    )
+
+                # Acumular en el estado
+                estado_dl["zips_por_cufe"].update(res.exitosos)
+                estado_dl["fallidos"].extend(res.fallidos)
+                estado_dl["pendientes"] = res.cufes_pendientes(estado_dl["pendientes"])
+                estado_dl["bloques_completados"] += 1
+
+                progress_bar.empty()
+                status_text.empty()
+
+                # Mensaje según motivo de parada
+                if res.motivo_parada == "completo":
+                    st.success(
+                        f"🎉 Descarga COMPLETA. "
+                        f"Total: {len(estado_dl['zips_por_cufe']):,} XMLs."
+                    )
+                elif res.motivo_parada == "sesion_expirada":
+                    st.warning(
+                        f"⚠️ La sesión DIAN expiró tras {res.total_exitosos} docs de este bloque. "
+                        f"**Genera un Token nuevo** y pégalo arriba para continuar. "
+                        f"El progreso está guardado: te quedan **{len(estado_dl['pendientes']):,} pendientes**."
+                    )
+                elif res.motivo_parada == "limite_bloque":
+                    st.info(
+                        f"✅ Bloque completado ({res.total_exitosos} XMLs). "
+                        f"Quedan **{len(estado_dl['pendientes']):,} pendientes**. "
+                        f"Puedes pegar el mismo Token (si todavía es vigente) o uno nuevo "
+                        f"y darle al botón otra vez."
+                    )
+
+                if res.duracion_seg > 0:
+                    rate = res.total_exitosos / res.duracion_seg
+                    st.caption(
+                        f"⏱️ {res.duracion_seg:.0f}s ({rate:.1f} XMLs/seg) · "
+                        f"este bloque: {res.total_exitosos} ok, {res.total_fallidos} fallidos"
+                    )
+
+                st.rerun()
+            except dd.SesionExpirada as e:
+                st.error(f"❌ Token inválido o expirado: {e}")
+            except ValueError as e:
+                st.error(f"❌ URL inválida: {e}")
+            except Exception as e:
+                st.error(f"❌ Error inesperado: {e}")
+                import traceback
+                with st.expander("Detalle"):
+                    st.code(traceback.format_exc())
+
+    # ─── Descargar el ZIP consolidado ───
+    if completados_n > 0:
+        st.markdown("### 5️⃣ ZIP consolidado")
+        if st.button("📦 Generar ZIP consolidado para procesar", use_container_width=True):
+            with st.spinner("Consolidando..."):
+                zip_consol = dd.juntar_zips(estado_dl["zips_por_cufe"])
+            st.session_state["dian_dl_zip_consolidado"] = zip_consol
+            st.success(f"✅ ZIP consolidado: {len(zip_consol):,} bytes "
+                       f"({len(estado_dl['zips_por_cufe']):,} XMLs)")
+
+        if "dian_dl_zip_consolidado" in st.session_state:
+            from datetime import date as _date
+            hoy = _date.today().strftime("%Y%m%d")
+            st.download_button(
+                f"⬇️ Descargar ZIP consolidado ({len(estado_dl['zips_por_cufe']):,} XMLs)",
+                data=st.session_state["dian_dl_zip_consolidado"],
+                file_name=f"dian_directo_{estado_dl['lista_origen']}_{hoy}.zip",
+                mime="application/zip",
+                use_container_width=True,
+            )
+            st.caption(
+                "👇 Sube este ZIP en la sección 7 para procesarlo "
+                "(igual que un ZIP de la extensión)."
+            )
+
+    # ─── Errores detallados ───
+    if fallidos_n > 0:
+        with st.expander(f"❌ Ver {fallidos_n} errores"):
+            for cufe, razon in estado_dl["fallidos"][:50]:
+                st.text(f"{cufe[:40]}... → {razon}")
+            if fallidos_n > 50:
+                st.caption(f"... y {fallidos_n - 50} más")
+
+    # ─── Resetear todo ───
+    if completados_n > 0 or fallidos_n > 0:
+        with st.expander("🗑️ Limpiar progreso y empezar de cero"):
+            if st.button("⚠️ Resetear descarga (perderás lo descargado en memoria)"):
+                st.session_state["dian_dl_estado"] = {
+                    "zips_por_cufe": {},
+                    "fallidos": [],
+                    "pendientes": [],
+                    "lista_origen": "",
+                    "total_inicial": 0,
+                    "bloques_completados": 0,
+                }
+                st.session_state.pop("dian_dl_zip_consolidado", None)
+                st.rerun()
+
+
+# ════════════════════════════════════════════════════════════
 # PASO 7 — Subir ZIPs descargados y procesar
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
