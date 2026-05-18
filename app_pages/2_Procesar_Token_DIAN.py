@@ -453,384 +453,303 @@ else:
 
 
 # ════════════════════════════════════════════════════════════
-# PASO 6 — Listas de CUFEs para descarga XML (extensión Chrome)
+# ════════════════════════════════════════════════════════════
+# PASO 6 — Generar listas JSON para extensión Chrome
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 6️⃣ Listas de CUFEs para extensión Chrome")
+st.markdown("## 6️⃣ Generar listas JSON para la extensión Chrome")
 st.caption(
-    "Compras y ventas MIXTAS (mezcla de tarifas IVA) + TODAS las STL emitidas "
-    "(para parseo detallado de IVA por línea)."
+    "Las extensión descarga XMLs en un **ZIP plano** (sin anidación). "
+    "Aquí generas las listas JSON con los CUFEs que la extensión necesita."
 )
 
-if st.button("📋 Calcular listas"):
+if st.button("📋 Calcular listas de CUFEs"):
     with st.spinner("Analizando..."):
-        from core.procesadores import procesador_stl_xml as stl_xml
-        st.session_state["mix_compras"] = glc.generar_lista_compras_mixtas(df_token_filt)
-        st.session_state["mix_ventas"] = glc.generar_lista_ventas_mixtas(df_token_filt)
-        st.session_state["stl_cufes"] = stl_xml.generar_lista_cufes_stl(
+        st.session_state["lista_compras_mixtas"] = glc.generar_lista_compras_mixtas(df_token_filt)
+        st.session_state["lista_ventas_mixtas"] = glc.generar_lista_ventas_mixtas(df_token_filt)
+        st.session_state["lista_stl_completa"] = glc.generar_lista_stl_completa(
             df_token_filt, f_desde, f_hasta
         )
+        # Proveedores únicos (para construir maestro de terceros)
+        maestro_actual = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"terceros": {}}
+        st.session_state["lista_proveedores_unicos"] = glc.generar_lista_proveedores_unicos(
+            df_token_filt, maestro_actual
+        )
 
-if "mix_compras" in st.session_state:
-    lc = st.session_state["mix_compras"]
-    lv = st.session_state["mix_ventas"]
-    ls = st.session_state.get("stl_cufes", [])
+if "lista_compras_mixtas" in st.session_state:
+    lc = st.session_state["lista_compras_mixtas"]
+    lv = st.session_state["lista_ventas_mixtas"]
+    ls = st.session_state["lista_stl_completa"]
+    lp = st.session_state["lista_proveedores_unicos"]
 
-    cx, cy, cs = st.columns(3)
-    with cx:
-        st.metric("Compras MIXTAS", f"{len(lc):,}")
-        if lc:
-            payload = {
-                "meta": {
-                    "rol": "recibidos_mixtas",
-                    "fecha_desde": str(f_desde),
-                    "fecha_hasta": str(f_hasta),
-                    "total_cufes": len(lc),
-                },
-                "cufes": lc,
-            }
-            st.download_button(
-                "⬇️ Lista compras MIXTAS",
-                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                file_name=f"cufes_compras_mixtas_{f_desde}_a_{f_hasta}.json",
-                mime="application/json",
-                use_container_width=True,
-            )
+    st.markdown("### Listas disponibles")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Compras MIXTAS", f"{len(lc):,}")
+    c2.metric("Ventas MIXTAS", f"{len(lv):,}")
+    c3.metric("STL completas", f"{len(ls):,}")
+    c4.metric("Proveedores únicos", f"{len(lp):,}")
 
-    with cy:
-        st.metric("Ventas MIXTAS", f"{len(lv):,}")
-        if lv:
-            payload = {
-                "meta": {
-                    "rol": "emitidos_mixtas",
-                    "fecha_desde": str(f_desde),
-                    "fecha_hasta": str(f_hasta),
-                    "total_cufes": len(lv),
-                },
-                "cufes": lv,
-            }
-            st.download_button(
-                "⬇️ Lista ventas MIXTAS",
-                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                file_name=f"cufes_ventas_mixtas_{f_desde}_a_{f_hasta}.json",
-                mime="application/json",
-                use_container_width=True,
-            )
+    # Lista 1: Compras MIXTAS
+    if lc:
+        payload = {
+            "meta": {
+                "rol": "compras_mixtas",
+                "descripcion": "Compras con MIXTA tarifa IVA - requieren XML para discriminar",
+                "fecha_desde": str(f_desde),
+                "fecha_hasta": str(f_hasta),
+                "total_cufes": len(lc),
+            },
+            "cufes": lc,
+        }
+        st.download_button(
+            f"⬇️ JSON Compras MIXTAS ({len(lc)})",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            file_name=f"lista_compras_mixtas_{f_desde}_a_{f_hasta}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
 
-    with cs:
-        st.metric("STL todas", f"{len(ls):,}")
-        if ls:
-            payload = {
-                "meta": {
-                    "rol": "stl_todas",
-                    "descripcion": "Todas las STL emitidas (para parseo detallado de IVA por línea)",
-                    "fecha_desde": str(f_desde),
-                    "fecha_hasta": str(f_hasta),
-                    "total_cufes": len(ls),
-                },
-                "cufes": ls,
-            }
-            st.download_button(
-                "⬇️ Lista STL completa",
-                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                file_name=f"cufes_stl_todas_{f_desde}_a_{f_hasta}.json",
-                mime="application/json",
-                use_container_width=True,
-            )
+    # Lista 2: Ventas MIXTAS
+    if lv:
+        payload = {
+            "meta": {
+                "rol": "ventas_mixtas",
+                "descripcion": "Ventas con MIXTA tarifa IVA",
+                "fecha_desde": str(f_desde),
+                "fecha_hasta": str(f_hasta),
+                "total_cufes": len(lv),
+            },
+            "cufes": lv,
+        }
+        st.download_button(
+            f"⬇️ JSON Ventas MIXTAS ({len(lv)})",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            file_name=f"lista_ventas_mixtas_{f_desde}_a_{f_hasta}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
 
-    total_descargar = len(lc) + len(lv) + len(ls)
-    if total_descargar > 0:
+    # Lista 3: STL completas
+    if ls:
+        payload = {
+            "meta": {
+                "rol": "stl_completa",
+                "descripcion": "TODAS las STL emitidas (parseo detallado IVA por línea)",
+                "fecha_desde": str(f_desde),
+                "fecha_hasta": str(f_hasta),
+                "total_cufes": len(ls),
+            },
+            "cufes": ls,
+        }
+        st.download_button(
+            f"⬇️ JSON STL completas ({len(ls)})",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            file_name=f"lista_stl_completa_{f_desde}_a_{f_hasta}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    # Lista 4: Proveedores únicos
+    if lp:
+        payload = {
+            "meta": {
+                "rol": "proveedores_unicos",
+                "descripcion": "1 CUFE por NIT proveedor nuevo (extracción de régimen + dirección)",
+                "fecha_desde": str(f_desde),
+                "fecha_hasta": str(f_hasta),
+                "total_cufes": len(lp),
+            },
+            "cufes": [item["cufe"] for item in lp],
+        }
+        st.download_button(
+            f"⬇️ JSON Proveedores únicos ({len(lp)})",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            file_name=f"lista_proveedores_unicos_{f_desde}_a_{f_hasta}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    total = len(lc) + len(lv) + len(ls) + len(lp)
+    if total > 0:
         st.info(
-            f"💡 Total: {total_descargar:,} XMLs a descargar con la extensión Chrome "
-            f"(~{total_descargar / 8 / 60:.1f} min)."
+            f"💡 Total: {total:,} XMLs para descargar con la extensión Chrome "
+            f"(~{total / 8 / 60:.1f} min)."
         )
 
 
 # ════════════════════════════════════════════════════════════
-# PASO 6B — Procesar captura DIAN (JSON o ZIP) → plano STL detallado
+# PASO 7 — Subir ZIPs descargados y procesar
 # ════════════════════════════════════════════════════════════
 st.markdown("---")
-st.markdown("## 6️⃣B Procesar captura DIAN → plano STL detallado")
+st.markdown("## 7️⃣ Subir ZIPs de XMLs descargados")
 st.caption(
-    "Sube el archivo de la extensión Chrome (JSON v1.1+ o ZIP legacy) que contiene "
-    "los XMLs de las STL. Genera plano con IVA discriminado real por línea "
-    "(reemplaza el procesamiento STL desde Excel del Token)."
+    "Sube el ZIP plano que descargó la extensión Chrome. Cada ZIP tiene un rol "
+    "diferente. La plataforma detecta el tipo y procesa en consecuencia."
 )
 
-stl_file = st.file_uploader(
-    "JSON de captura DIAN (extensión v1.1+) o ZIP de XMLs",
-    type=["json", "zip"],
-    key="stl_capture_file",
-    help="JSON: formato nuevo de la extensión (recomendado). ZIP: formato anterior.",
-)
+from core.procesadores import procesador_xmls_zip as pxz
 
-if stl_file is not None:
-    if st.button("⚙️ Procesar captura → STL", use_container_width=True):
-        from core.procesadores import procesador_stl_xml as stl_xml
-        from core.procesadores import lector_captura_dian as lcd
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🧾 STL completas",
+    "🔀 Compras MIXTAS",
+    "🔀 Ventas MIXTAS",
+    "👥 Proveedores → Maestro",
+])
 
-        with st.spinner("Procesando captura..."):
+# ─── Tab 1: STL ────────────────────────────────────────────
+with tab1:
+    st.markdown("**Procesar ZIP de STL emitidas** → genera plano contable detallado con IVA por línea.")
+    stl_zip = st.file_uploader(
+        "ZIP de XMLs de STL",
+        type=["zip"],
+        key="stl_zip",
+    )
+    if stl_zip and st.button("⚙️ Procesar STL", key="btn_stl", use_container_width=True):
+        with st.spinner("Procesando..."):
             try:
-                file_bytes = stl_file.read()
-                if stl_file.name.lower().endswith(".json"):
-                    # Formato nuevo (JSON)
-                    captura = lcd.cargar_captura(file_bytes)
-                    resumen_cap = lcd.resumen_captura(captura)
-                    st.session_state["captura_resumen"] = resumen_cap
-                    st.session_state["captura_data"] = captura
-
-                    # Procesar STL del JSON
-                    res_stl = stl_xml.procesar_captura_json(captura, solo_prefijo="STL")
-                else:
-                    # Formato ZIP (legacy)
-                    res_stl = stl_xml.procesar_zip_xmls_stl(file_bytes)
-
-                st.session_state["stl_res"] = res_stl
+                res = pxz.procesar_zip_stl(stl_zip.read())
+                st.session_state["res_stl"] = res
             except Exception as e:
                 st.error(f"❌ Error: {e}")
                 import traceback
                 with st.expander("Detalle"):
                     st.code(traceback.format_exc())
 
-# Mostrar resumen de captura si se cargó JSON
-if "captura_resumen" in st.session_state:
-    with st.expander("📋 Resumen de la captura DIAN", expanded=False):
-        rc = st.session_state["captura_resumen"]
-        st.write(f"**Periodo:** {rc['fecha_desde']} a {rc['fecha_hasta']}")
-        st.write(f"**Versión extensión:** {rc.get('version_extension', '?')}")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Documentos", f"{rc['total_documentos']:,}")
-        col2.metric("XMLs descargados", f"{rc['xmls_descargados']:,}")
-        col3.metric("Fallidos", f"{rc['fallidos']:,}")
-
-        if rc.get('tipos'):
-            st.markdown("**Tipos:**")
-            for t, n in rc['tipos'].items():
-                st.write(f"  • {t}: {n}")
-        if rc.get('prefijos_top10'):
-            st.markdown("**Prefijos (top 10):**")
-            for p, n in rc['prefijos_top10'].items():
-                st.write(f"  • {p}: {n}")
-
-    # Botón para descargar ZIP de XMLs (útil si el usuario los necesita sueltos)
-    if "captura_data" in st.session_state:
-        if st.button("📦 Generar ZIP con todos los XMLs descargados"):
-            from core.procesadores import lector_captura_dian as lcd
-            with st.spinner("Empaquetando..."):
-                zip_bytes = lcd.generar_zip_xmls(st.session_state["captura_data"])
+    if "res_stl" in st.session_state:
+        res = st.session_state["res_stl"]
+        r = res.resumen()
+        st.success(f"✅ {r['facturas_procesadas']:,} STL procesadas")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Facturas", f"{r['facturas_procesadas']:,}")
+        c2.metric("Total facturado", f"${r['total_facturado']:,.0f}")
+        c3.metric("Total IVA", f"${r['total_iva']:,.0f}")
+        if r.get("errores", 0) > 0:
+            with st.expander(f"⚠️ {r['errores']} errores"):
+                for e in res.errores[:20]:
+                    st.text(e)
+        if res.plano_df is not None and len(res.plano_df) > 0:
+            import io as _io
+            tsv = res.plano_df.to_csv(sep="\t", index=False, encoding="utf-8")
+            buf = _io.BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as w:
+                res.plano_df.to_excel(w, sheet_name="STL", index=False)
+            s1, s2 = st.columns(2)
+            with s1:
                 st.download_button(
-                    f"⬇️ Descargar ZIP de XMLs ({len(zip_bytes):,} bytes)",
-                    data=zip_bytes,
-                    file_name=f"xmls_{f_desde}_a_{f_hasta}.zip",
-                    mime="application/zip",
+                    f"⬇️ Plano STL TSV ({len(res.plano_df):,})",
+                    data=tsv.encode("utf-8"),
+                    file_name=f"plano_stl_{f_desde}_a_{f_hasta}.txt",
+                    mime="text/tab-separated-values",
+                    use_container_width=True,
+                )
+            with s2:
+                st.download_button(
+                    "⬇️ Plano STL Excel",
+                    data=buf.getvalue(),
+                    file_name=f"plano_stl_{f_desde}_a_{f_hasta}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
 
-if "stl_res" in st.session_state:
-    res_stl = st.session_state["stl_res"]
-    resumen_stl = res_stl.resumen()
-
-    st.success(f"✅ {resumen_stl['facturas_procesadas']:,} STL procesadas")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Facturas STL", f"{resumen_stl['facturas_procesadas']:,}")
-    c2.metric("Total base", f"${resumen_stl['total_base']:,.0f}")
-    c3.metric("Total IVA", f"${resumen_stl['total_iva']:,.0f}")
-    c4.metric("Total facturado", f"${resumen_stl['total_facturado']:,.0f}")
-
-    if resumen_stl.get('errores', 0) > 0:
-        with st.expander(f"⚠️ {resumen_stl['errores']} errores"):
-            for e in res_stl.errores[:20]:
-                st.text(e)
-
-    # Descargar plano
-    if res_stl.plano_df is not None and len(res_stl.plano_df) > 0:
-        import io as _io2
-        # TSV
-        tsv = res_stl.plano_df.to_csv(sep="\t", index=False, encoding="utf-8")
-        # Excel
-        buf = _io2.BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as w:
-            res_stl.plano_df.to_excel(w, sheet_name="STL", index=False)
-
-        s1, s2 = st.columns(2)
-        with s1:
-            st.download_button(
-                f"⬇️ Plano STL TSV ({len(res_stl.plano_df):,} líneas)",
-                data=tsv.encode("utf-8"),
-                file_name=f"plano_stl_{f_desde}_a_{f_hasta}.txt",
-                mime="text/tab-separated-values",
-                use_container_width=True,
-            )
-        with s2:
-            st.download_button(
-                f"⬇️ Plano STL Excel",
-                data=buf.getvalue(),
-                file_name=f"plano_stl_{f_desde}_a_{f_hasta}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-
-
-# ════════════════════════════════════════════════════════════
-# PASO 7 — Maestro de Terceros (régimen + dirección)
-# ════════════════════════════════════════════════════════════
-st.markdown("---")
-st.markdown("## 7️⃣ Maestro de Terceros (régimen + dirección)")
-st.caption(
-    "Para que las retenciones excluyan correctamente a Grandes Contribuyentes, "
-    "Autorretenedores y Régimen Simple, descarga UN XML por proveedor único. "
-    "El sistema extrae régimen, ciudad, dirección y los guarda para el futuro."
-)
-
-from core.procesadores import maestro_terceros as mt
-
-# Estado actual del maestro
-maestro = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"terceros": {}}
-n_maestro = len(maestro.get("terceros", {}))
-
-mcol1, mcol2 = st.columns(2)
-mcol1.metric("Terceros en maestro", f"{n_maestro:,}")
-
-# Lista de proveedores únicos sin maestro
-lista_unicos = glc.generar_lista_proveedores_unicos(df_token_filt, maestro)
-mcol2.metric("Proveedores nuevos por consultar", f"{len(lista_unicos):,}")
-
-if lista_unicos:
-    st.markdown("### 📥 Lista CUFEs únicos por proveedor para descargar con extensión Chrome")
-    st.caption(
-        f"Esta lista trae 1 CUFE por NIT proveedor nuevo. La extensión los descarga, "
-        f"se sube el ZIP en el paso 8 y se actualiza el maestro automáticamente."
+# ─── Tab 2: Compras MIXTAS ─────────────────────────────────
+with tab2:
+    st.markdown(
+        "**Procesar ZIP de compras MIXTAS** → cada XML se parsea con IVA discriminado "
+        "y se agrega al plano de compras como complemento del Excel del Token."
     )
-    payload_unicos = {
-        "meta": {
-            "rol": "recibidos_por_proveedor_unico",
-            "descripcion": "Un CUFE por NIT proveedor (extracción de régimen + dirección)",
-            "fecha_desde": str(f_desde),
-            "fecha_hasta": str(f_hasta),
-            "total_cufes": len(lista_unicos),
-        },
-        "cufes": [item["cufe"] for item in lista_unicos],
-    }
-    st.download_button(
-        f"⬇️ Descargar lista de {len(lista_unicos)} CUFEs proveedor-único",
-        data=json.dumps(payload_unicos, ensure_ascii=False).encode("utf-8"),
-        file_name=f"cufes_proveedores_unicos_{f_desde}_a_{f_hasta}.json",
-        mime="application/json",
-        use_container_width=True,
+    st.info(
+        "💡 Por ahora estos XMLs se procesan para extraer datos al maestro de terceros. "
+        "El plano contable detallado de mixtas viene en próxima iteración."
     )
+    cmix_zip = st.file_uploader("ZIP compras MIXTAS", type=["zip"], key="cmix_zip")
+    if cmix_zip and st.button("⚙️ Procesar compras MIXTAS", key="btn_cmix", use_container_width=True):
+        with st.spinner("Procesando..."):
+            try:
+                maestro = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"_meta":{}, "terceros":{}}
+                resumen = pxz.procesar_zip_para_maestro(cmix_zip.read(), maestro)
+                mt.guardar_maestro_terceros(maestro, str(RUTA_MAESTRO))
+                st.success(
+                    f"✅ {resumen['nuevos']} nuevos, {resumen['actualizados']} actualizados, "
+                    f"{resumen['errores']} errores."
+                )
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
 
-# ════════════════════════════════════════════════════════════
-# PASO 8 — Cargar captura DIAN y actualizar maestro de terceros
-# ════════════════════════════════════════════════════════════
-st.markdown("---")
-st.markdown("## 8️⃣ Cargar captura DIAN → actualizar maestro de terceros")
-st.caption(
-    "Sube el archivo de la extensión Chrome (JSON v1.1+ o ZIP legacy). "
-    "Extrae régimen, ciudad y dirección de cada proveedor."
-)
+# ─── Tab 3: Ventas MIXTAS ──────────────────────────────────
+with tab3:
+    st.markdown(
+        "**Procesar ZIP de ventas MIXTAS** → cada XML se parsea con IVA discriminado. "
+        "(En desarrollo: por ahora solo se valida que los XMLs sean parseables.)"
+    )
+    vmix_zip = st.file_uploader("ZIP ventas MIXTAS", type=["zip"], key="vmix_zip")
+    if vmix_zip and st.button("⚙️ Validar ventas MIXTAS", key="btn_vmix", use_container_width=True):
+        with st.spinner("Procesando..."):
+            count = 0
+            total_base = 0
+            total_iva = 0
+            for _, xml_str in pxz.iter_xmls_de_zip(vmix_zip.read()):
+                f = pxz.parsear_factura(xml_str)
+                if f:
+                    count += 1
+                    total_base += f.total_base
+                    total_iva += f.total_iva
+            st.success(f"✅ {count} ventas MIXTAS parseadas")
+            st.metric("Total base", f"${total_base:,.0f}")
+            st.metric("Total IVA", f"${total_iva:,.0f}")
 
-xml_file = st.file_uploader(
-    "JSON de captura DIAN o ZIP de XMLs",
-    type=["json", "zip"],
-    key="xml_maestro_file",
-)
+# ─── Tab 4: Proveedores → Maestro ──────────────────────────
+with tab4:
+    st.markdown(
+        "**Procesar ZIP de proveedores únicos** → extrae régimen, ciudad, dirección "
+        "y actualiza `maestro_terceros.json`."
+    )
+    maestro = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"_meta":{}, "terceros":{}}
+    st.metric("Terceros actualmente en maestro", f"{len(maestro.get('terceros', {})):,}")
 
-if xml_file is not None:
-    if st.button("🔍 Procesar captura y actualizar maestro", use_container_width=True):
-        import zipfile
-        import io as _io
-        from core.procesadores import lector_captura_dian as lcd
+    prov_zip = st.file_uploader("ZIP proveedores únicos", type=["zip"], key="prov_zip")
+    if prov_zip and st.button("⚙️ Actualizar maestro", key="btn_prov", use_container_width=True):
+        with st.spinner("Procesando..."):
+            try:
+                resumen = pxz.procesar_zip_para_maestro(prov_zip.read(), maestro)
+                mt.guardar_maestro_terceros(maestro, str(RUTA_MAESTRO))
+                st.success(
+                    f"✅ Maestro actualizado: {resumen['nuevos']} nuevos, "
+                    f"{resumen['actualizados']} actualizados, {resumen['errores']} errores."
+                )
+                st.info(
+                    f"💡 Total en maestro: **{len(maestro.get('terceros', {})):,}** terceros."
+                )
 
-        nuevos = 0
-        actualizados = 0
-        errores = 0
-        log_proc = []
+                # Distribución por régimen
+                from collections import Counter
+                ctos_reg = Counter(
+                    t.get("tax_level_principal", "desconocido")
+                    for t in maestro.get("terceros", {}).values()
+                )
+                if ctos_reg:
+                    st.markdown("### Distribución por régimen")
+                    df_reg = pd.DataFrame([
+                        {"Régimen": r, "Cantidad": n,
+                         "Significa": {
+                             "O-13": "Gran Contribuyente",
+                             "O-15": "Autorretenedor",
+                             "O-23": "Agente Retención IVA",
+                             "O-47": "Régimen Simple (RST)",
+                             "R-99-PN": "No responsable / ordinario",
+                         }.get(r, "Otro")}
+                        for r, n in ctos_reg.most_common()
+                    ])
+                    st.dataframe(df_reg, use_container_width=True, hide_index=True)
 
-        try:
-            zb = xml_file.read()
-
-            if xml_file.name.lower().endswith(".json"):
-                # ─── Formato nuevo: JSON ─────────────────────
-                captura = lcd.cargar_captura(zb)
-                for cufe, xml_str, _pdf in lcd.iter_xmls(captura):
-                    try:
-                        parsed = mt.extraer_datos_tercero_de_xml(xml_str)
-                        if parsed:
-                            es_nuevo = mt.actualizar_maestro_desde_xml(maestro, parsed)
-                            if es_nuevo:
-                                nuevos += 1
-                            else:
-                                actualizados += 1
-                    except Exception as e:
-                        errores += 1
-                        log_proc.append(f"CUFE {cufe[:20]}...: {e}")
-            else:
-                # ─── Formato legacy: ZIP de ZIPs ─────────────
-                with zipfile.ZipFile(_io.BytesIO(zb)) as zf:
-                    for nombre in zf.namelist():
-                        if not nombre.endswith(".zip"):
-                            continue
-                        try:
-                            inner_bytes = zf.read(nombre)
-                            with zipfile.ZipFile(_io.BytesIO(inner_bytes)) as inner_zf:
-                                for inner_name in inner_zf.namelist():
-                                    if inner_name.endswith(".xml"):
-                                        xml_bytes = inner_zf.read(inner_name)
-                                        xml_str = xml_bytes.decode("utf-8", errors="ignore")
-                                        parsed = mt.extraer_datos_tercero_de_xml(xml_str)
-                                        if parsed:
-                                            es_nuevo = mt.actualizar_maestro_desde_xml(maestro, parsed)
-                                            if es_nuevo:
-                                                nuevos += 1
-                                            else:
-                                                actualizados += 1
-                                        break  # 1 XML por ZIP basta
-                        except Exception as e:
-                            errores += 1
-                            log_proc.append(f"{nombre}: {e}")
-
-            # Guardar maestro
-            mt.guardar_maestro_terceros(maestro, str(RUTA_MAESTRO))
-
-            st.success(
-                f"✅ Maestro actualizado: {nuevos} terceros nuevos, "
-                f"{actualizados} actualizados, {errores} errores."
-            )
-            st.info(
-                f"💡 Total en maestro: **{len(maestro.get('terceros', {})):,}** terceros. "
-                f"En el próximo procesamiento las retenciones se calcularán con el régimen real."
-            )
-
-            # Mostrar resumen por régimen
-            from collections import Counter
-            ctos_reg = Counter(
-                t.get("tax_level_principal", "desconocido")
-                for t in maestro.get("terceros", {}).values()
-            )
-            st.markdown("### 📊 Distribución de regímenes en el maestro")
-            df_reg = pd.DataFrame([
-                {"Régimen": r, "Cantidad": n,
-                 "Significa": {
-                     "O-13": "Gran Contribuyente",
-                     "O-15": "Autorretenedor",
-                     "O-23": "Agente Retención IVA",
-                     "O-47": "Régimen Simple (RST)",
-                     "R-99-PN": "No responsable / ordinario",
-                 }.get(r, "Otro")}
-                for r, n in ctos_reg.most_common()
-            ])
-            st.dataframe(df_reg, use_container_width=True, hide_index=True)
-
-            if errores > 0 and log_proc:
-                with st.expander(f"⚠️ {errores} errores procesando"):
-                    for e in log_proc[:20]:
-                        st.text(e)
-
-        except Exception as e:
-            st.error(f"❌ Error procesando archivo: {e}")
-            with st.expander("Detalle"):
+                if resumen.get("errores", 0) > 0 and resumen.get("log"):
+                    with st.expander(f"⚠️ {resumen['errores']} errores"):
+                        for e in resumen["log"][:20]:
+                            st.text(e)
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
                 import traceback
-                st.code(traceback.format_exc())
+                with st.expander("Detalle"):
+                    st.code(traceback.format_exc())
 
 
 # ─── Reset ──────────────────────────────────────────────────
