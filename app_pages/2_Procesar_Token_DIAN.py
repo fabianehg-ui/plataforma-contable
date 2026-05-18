@@ -659,48 +659,105 @@ with tab1:
 # ─── Tab 2: Compras MIXTAS ─────────────────────────────────
 with tab2:
     st.markdown(
-        "**Procesar ZIP de compras MIXTAS** → cada XML se parsea con IVA discriminado "
-        "y se agrega al plano de compras como complemento del Excel del Token."
-    )
-    st.info(
-        "💡 Por ahora estos XMLs se procesan para extraer datos al maestro de terceros. "
-        "El plano contable detallado de mixtas viene en próxima iteración."
+        "**Procesar ZIP de compras MIXTAS** → genera plano contable detallado con "
+        "IVA discriminado real por línea, aplicando retenciones según régimen."
     )
     cmix_zip = st.file_uploader("ZIP compras MIXTAS", type=["zip"], key="cmix_zip")
     if cmix_zip and st.button("⚙️ Procesar compras MIXTAS", key="btn_cmix", use_container_width=True):
         with st.spinner("Procesando..."):
             try:
+                zb = cmix_zip.read()
+                # 1) Actualizar maestro con datos de los proveedores
                 maestro = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"_meta":{}, "terceros":{}}
-                resumen = pxz.procesar_zip_para_maestro(cmix_zip.read(), maestro)
+                resumen_maestro = pxz.procesar_zip_para_maestro(zb, maestro)
                 mt.guardar_maestro_terceros(maestro, str(RUTA_MAESTRO))
-                st.success(
-                    f"✅ {resumen['nuevos']} nuevos, {resumen['actualizados']} actualizados, "
-                    f"{resumen['errores']} errores."
+
+                # 2) Generar plano contable detallado
+                res_cmix = pxz.procesar_zip_compras_mixtas(
+                    zb,
+                    str(RUTA_COMPRAS),
+                    str(RUTA_TABLA_RET),
+                    str(RUTA_MAPEO_CONCEPTO),
+                    str(RUTA_MAESTRO) if RUTA_MAESTRO.exists() else None,
                 )
+                st.session_state["res_cmix"] = res_cmix
+                st.session_state["resumen_maestro_cmix"] = resumen_maestro
             except Exception as e:
                 st.error(f"❌ Error: {e}")
+                import traceback
+                with st.expander("Detalle"):
+                    st.code(traceback.format_exc())
+
+    if "res_cmix" in st.session_state:
+        res = st.session_state["res_cmix"]
+        rmm = st.session_state.get("resumen_maestro_cmix", {})
+        r = res.resumen()
+
+        st.success(f"✅ {r['facturas_procesadas']:,} compras MIXTAS procesadas")
+        if rmm:
+            st.caption(
+                f"Maestro: {rmm.get('nuevos',0)} nuevos, "
+                f"{rmm.get('actualizados',0)} actualizados."
+            )
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Facturas", f"{r['facturas_procesadas']:,}")
+        c2.metric("Total base", f"${r['total_base']:,.0f}")
+        c3.metric("Total IVA", f"${r['total_iva']:,.0f}")
+
+        if r.get('errores', 0) > 0:
+            with st.expander(f"⚠️ {r['errores']} errores"):
+                for e in res.errores[:20]:
+                    st.text(e)
+
+        if res.plano_df is not None and len(res.plano_df) > 0:
+            tsv = res.plano_df.to_csv(sep="\t", index=False, encoding="utf-8")
+            st.download_button(
+                f"⬇️ Plano compras MIXTAS TSV ({len(res.plano_df):,} líneas)",
+                data=tsv.encode("utf-8"),
+                file_name=f"plano_compras_mixtas_{f_desde}_a_{f_hasta}.txt",
+                mime="text/tab-separated-values",
+                use_container_width=True,
+            )
 
 # ─── Tab 3: Ventas MIXTAS ──────────────────────────────────
 with tab3:
     st.markdown(
-        "**Procesar ZIP de ventas MIXTAS** → cada XML se parsea con IVA discriminado. "
-        "(En desarrollo: por ahora solo se valida que los XMLs sean parseables.)"
+        "**Procesar ZIP de ventas MIXTAS** → genera plano contable detallado con "
+        "IVA discriminado por tarifa."
     )
     vmix_zip = st.file_uploader("ZIP ventas MIXTAS", type=["zip"], key="vmix_zip")
-    if vmix_zip and st.button("⚙️ Validar ventas MIXTAS", key="btn_vmix", use_container_width=True):
+    if vmix_zip and st.button("⚙️ Procesar ventas MIXTAS", key="btn_vmix", use_container_width=True):
         with st.spinner("Procesando..."):
-            count = 0
-            total_base = 0
-            total_iva = 0
-            for _, xml_str in pxz.iter_xmls_de_zip(vmix_zip.read()):
-                f = pxz.parsear_factura(xml_str)
-                if f:
-                    count += 1
-                    total_base += f.total_base
-                    total_iva += f.total_iva
-            st.success(f"✅ {count} ventas MIXTAS parseadas")
-            st.metric("Total base", f"${total_base:,.0f}")
-            st.metric("Total IVA", f"${total_iva:,.0f}")
+            try:
+                res_vmix = pxz.procesar_zip_ventas_mixtas(vmix_zip.read())
+                st.session_state["res_vmix"] = res_vmix
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+                import traceback
+                with st.expander("Detalle"):
+                    st.code(traceback.format_exc())
+
+    if "res_vmix" in st.session_state:
+        res = st.session_state["res_vmix"]
+        r = res.resumen()
+        st.success(f"✅ {r['facturas_procesadas']:,} ventas MIXTAS procesadas")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Facturas", f"{r['facturas_procesadas']:,}")
+        c2.metric("Total base", f"${r['total_base']:,.0f}")
+        c3.metric("Total IVA", f"${r['total_iva']:,.0f}")
+        if r.get('errores', 0) > 0:
+            with st.expander(f"⚠️ {r['errores']} errores"):
+                for e in res.errores[:20]:
+                    st.text(e)
+        if res.plano_df is not None and len(res.plano_df) > 0:
+            tsv = res.plano_df.to_csv(sep="\t", index=False, encoding="utf-8")
+            st.download_button(
+                f"⬇️ Plano ventas MIXTAS TSV ({len(res.plano_df):,} líneas)",
+                data=tsv.encode("utf-8"),
+                file_name=f"plano_ventas_mixtas_{f_desde}_a_{f_hasta}.txt",
+                mime="text/tab-separated-values",
+                use_container_width=True,
+            )
 
 # ─── Tab 4: Proveedores → Maestro ──────────────────────────
 with tab4:
@@ -755,6 +812,190 @@ with tab4:
                 import traceback
                 with st.expander("Detalle"):
                     st.code(traceback.format_exc())
+
+
+# ════════════════════════════════════════════════════════════
+# PASO 8 — Plano CONSOLIDADO del mes (la cereza del pastel)
+# ════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("## 8️⃣ Plano CONSOLIDADO del mes")
+st.caption(
+    "Genera DOS planos finales (ventas y compras) listos para subir a Siigo. "
+    "Cuando un documento aparezca en varios planos, gana el más detallado "
+    "(XML > Token), evitando duplicaciones."
+)
+
+# Detectar qué piezas hay disponibles
+piezas_ventas = []
+piezas_compras = []
+
+# Pieza 1: plano del paso 3 (ventas Token: POS+STL+DSE)
+res_ventas_token = st.session_state.get("token_res")
+if res_ventas_token is not None and hasattr(res_ventas_token, "plano_df"):
+    if res_ventas_token.plano_df is not None and len(res_ventas_token.plano_df) > 0:
+        piezas_ventas.append({
+            "nombre": "Ventas Token (POS + STL + DSE)",
+            "df": res_ventas_token.plano_df,
+            "lineas": len(res_ventas_token.plano_df),
+            "prioridad": 1,  # base
+        })
+
+# Pieza 2: plano del paso 5 (compras Token, sin MIXTAS)
+res_compras_token = st.session_state.get("compras_res")
+if res_compras_token is not None and hasattr(res_compras_token, "plano_df"):
+    if res_compras_token.plano_df is not None and len(res_compras_token.plano_df) > 0:
+        piezas_compras.append({
+            "nombre": "Compras Token (sin MIXTAS)",
+            "df": res_compras_token.plano_df,
+            "lineas": len(res_compras_token.plano_df),
+            "prioridad": 1,  # base
+        })
+
+# Pieza 3: STL del XML (reemplaza STL del Token si está)
+res_stl = st.session_state.get("res_stl")
+if res_stl is not None and res_stl.plano_df is not None and len(res_stl.plano_df) > 0:
+    piezas_ventas.append({
+        "nombre": "STL detalladas desde XML (reemplaza Token)",
+        "df": res_stl.plano_df,
+        "lineas": len(res_stl.plano_df),
+        "prioridad": 2,  # gana sobre Token
+    })
+
+# Pieza 4: Ventas MIXTAS del XML
+res_vmix = st.session_state.get("res_vmix")
+if res_vmix is not None and res_vmix.plano_df is not None and len(res_vmix.plano_df) > 0:
+    piezas_ventas.append({
+        "nombre": "Ventas MIXTAS desde XML",
+        "df": res_vmix.plano_df,
+        "lineas": len(res_vmix.plano_df),
+        "prioridad": 2,
+    })
+
+# Pieza 5: Compras MIXTAS del XML
+res_cmix = st.session_state.get("res_cmix")
+if res_cmix is not None and res_cmix.plano_df is not None and len(res_cmix.plano_df) > 0:
+    piezas_compras.append({
+        "nombre": "Compras MIXTAS desde XML",
+        "df": res_cmix.plano_df,
+        "lineas": len(res_cmix.plano_df),
+        "prioridad": 2,
+    })
+
+# Mostrar resumen de piezas
+st.markdown("### Piezas disponibles para consolidar")
+if piezas_ventas:
+    st.markdown("**🟢 Ventas:**")
+    for p in piezas_ventas:
+        st.markdown(f"  - {p['nombre']}: **{p['lineas']:,} líneas**")
+else:
+    st.warning("⚠️ No hay piezas de ventas. Procesa primero el paso 3 (ventas Token).")
+
+if piezas_compras:
+    st.markdown("**🟠 Compras:**")
+    for p in piezas_compras:
+        st.markdown(f"  - {p['nombre']}: **{p['lineas']:,} líneas**")
+else:
+    st.warning("⚠️ No hay piezas de compras. Procesa primero el paso 5 (compras Token).")
+
+# Botón generar consolidado
+if piezas_ventas or piezas_compras:
+    if st.button("🎯 Generar planos consolidados del mes", use_container_width=True, type="primary"):
+        with st.spinner("Consolidando y deduplicando..."):
+            # Ordenar por prioridad ascendente (Token primero, XML al final → XML gana)
+            piezas_ventas_ord = sorted(piezas_ventas, key=lambda x: x["prioridad"])
+            piezas_compras_ord = sorted(piezas_compras, key=lambda x: x["prioridad"])
+
+            resultado_consol = pxz.consolidar_planos(
+                planos_ventas=[p["df"] for p in piezas_ventas_ord],
+                planos_compras=[p["df"] for p in piezas_compras_ord],
+            )
+            st.session_state["consolidado"] = resultado_consol
+
+if "consolidado" in st.session_state:
+    consol = st.session_state["consolidado"]
+    pv = consol["ventas"]
+    pc = consol["compras"]
+
+    st.markdown("### 📊 Resultado consolidado")
+    cv, cc = st.columns(2)
+
+    with cv:
+        st.metric("Plano VENTAS", f"{len(pv):,} líneas")
+        if len(pv) > 0:
+            pv2 = pv.copy()
+            pv2["V"] = pd.to_numeric(pv2["VALOR"], errors="coerce").fillna(0)
+            db = pv2[pv2["TR"] == "1"]["V"].sum()
+            cr = pv2[pv2["TR"] == "2"]["V"].sum()
+            st.caption(f"Db ${db:,.0f}  /  Cr ${cr:,.0f}  /  dif ${abs(db-cr):,.0f}")
+            tsv_v = pv.to_csv(sep="\t", index=False, encoding="utf-8")
+            st.download_button(
+                f"⬇️ PLANO VENTAS consolidado TSV",
+                data=tsv_v.encode("utf-8"),
+                file_name=f"plano_VENTAS_{f_desde}_a_{f_hasta}.txt",
+                mime="text/tab-separated-values",
+                use_container_width=True,
+                type="primary",
+            )
+
+    with cc:
+        st.metric("Plano COMPRAS", f"{len(pc):,} líneas")
+        if len(pc) > 0:
+            pc2 = pc.copy()
+            pc2["V"] = pd.to_numeric(pc2["VALOR"], errors="coerce").fillna(0)
+            db = pc2[pc2["TR"] == "1"]["V"].sum()
+            cr = pc2[pc2["TR"] == "2"]["V"].sum()
+            st.caption(f"Db ${db:,.0f}  /  Cr ${cr:,.0f}  /  dif ${abs(db-cr):,.0f}")
+            tsv_c = pc.to_csv(sep="\t", index=False, encoding="utf-8")
+            st.download_button(
+                f"⬇️ PLANO COMPRAS consolidado TSV",
+                data=tsv_c.encode("utf-8"),
+                file_name=f"plano_COMPRAS_{f_desde}_a_{f_hasta}.txt",
+                mime="text/tab-separated-values",
+                use_container_width=True,
+                type="primary",
+            )
+
+    # Plano de terceros nuevos (los que no estaban en histórico ni en maestro)
+    st.markdown("### 👥 Plano de TERCEROS NUEVOS para Siigo")
+    if RUTA_MAESTRO.exists():
+        maestro_final = mt.cargar_maestro_terceros(str(RUTA_MAESTRO))
+        terceros_nuevos = []
+        nits_historico = set()
+        if RUTA_COMPRAS.exists():
+            with open(RUTA_COMPRAS, encoding="utf-8") as _f:
+                hist = json.load(_f)
+            for e in hist.get("mapeo", []):
+                nit = str(e.get("nit", "")).strip()
+                if nit:
+                    nits_historico.add(nit)
+        # Cualquier tercero del maestro que NO esté en histórico = nuevo para Siigo
+        for nit, datos in maestro_final.get("terceros", {}).items():
+            if nit and nit not in nits_historico:
+                terceros_nuevos.append({
+                    "NIT": nit,
+                    "RAZON_SOCIAL": datos.get("nombre", ""),
+                    "REGIMEN": datos.get("tax_level_principal", ""),
+                    "CIUDAD": datos.get("ciudad", ""),
+                    "DIRECCION": datos.get("direccion", ""),
+                    "EMAIL": datos.get("email", ""),
+                    "TELEFONO": datos.get("telefono", ""),
+                })
+
+        if terceros_nuevos:
+            df_terc = pd.DataFrame(terceros_nuevos)
+            st.metric("Terceros nuevos a crear en Siigo", f"{len(df_terc):,}")
+            tsv_t = df_terc.to_csv(sep="\t", index=False, encoding="utf-8")
+            st.download_button(
+                f"⬇️ PLANO TERCEROS NUEVOS TSV",
+                data=tsv_t.encode("utf-8"),
+                file_name=f"plano_TERCEROS_NUEVOS_{f_desde}_a_{f_hasta}.txt",
+                mime="text/tab-separated-values",
+                use_container_width=True,
+            )
+        else:
+            st.info("ℹ️ No hay terceros nuevos: todos los proveedores ya están en tu contabilidad.")
+    else:
+        st.info("ℹ️ Sube primero el ZIP de proveedores en el tab 'Proveedores → Maestro' para detectar terceros nuevos.")
 
 
 # ─── Reset ──────────────────────────────────────────────────
