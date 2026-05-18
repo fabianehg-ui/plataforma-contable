@@ -470,10 +470,14 @@ if st.button("📋 Calcular listas de CUFEs"):
         st.session_state["lista_stl_completa"] = glc.generar_lista_stl_completa(
             df_token_filt, f_desde, f_hasta
         )
-        # Proveedores únicos (para construir maestro de terceros)
+        # Proveedores únicos: filtrar contra maestro Y contra histórico de compras
         maestro_actual = mt.cargar_maestro_terceros(str(RUTA_MAESTRO)) if RUTA_MAESTRO.exists() else {"terceros": {}}
+        mapeo_historico_actual = {}
+        if RUTA_COMPRAS.exists():
+            with open(RUTA_COMPRAS, encoding="utf-8") as _f:
+                mapeo_historico_actual = json.load(_f)
         st.session_state["lista_proveedores_unicos"] = glc.generar_lista_proveedores_unicos(
-            df_token_filt, maestro_actual
+            df_token_filt, maestro_actual, mapeo_historico_actual
         )
 
 if "lista_compras_mixtas" in st.session_state:
