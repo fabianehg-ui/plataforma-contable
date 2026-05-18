@@ -93,6 +93,58 @@ def clasificar_df_por_tarifa(df: pd.DataFrame) -> pd.DataFrame:
 TIPOS_NO_CONTABLES = {"Application response", "Nomina Individual"}
 
 
+def generar_lista_todos_recibidos(
+    df: pd.DataFrame,
+    fecha_desde=None,
+    fecha_hasta=None,
+) -> List[dict]:
+    """
+    Lista TODOS los CUFEs recibidos del mes, sin filtros de tarifa.
+    Útil para descargar el 100% de XMLs recibidos: FE, NC, ND, DSE, doc
+    equivalentes, etc. — todo lo que entra a contabilidad por compras.
+
+    Excluye únicamente los TIPOS_NO_CONTABLES (Application response, Nómina
+    Individual) que no representan documentos contables de compra.
+
+    Args:
+        df: DataFrame de la captura DIAN/token, con columnas grupo,
+            tipo_documento, cufe, fecha_emision, etc.
+        fecha_desde, fecha_hasta: opcional, filtra por fecha_emision (date).
+
+    Returns:
+        Lista de dicts ordenados por fecha asc, listos para la extensión Chrome.
+    """
+    df_recb = df[df["grupo"].str.lower() == "recibido"].copy()
+    df_recb = df_recb[~df_recb["tipo_documento"].isin(TIPOS_NO_CONTABLES)]
+
+    if fecha_desde is not None:
+        df_recb = df_recb[df_recb["fecha_emision"].dt.date >= fecha_desde]
+    if fecha_hasta is not None:
+        df_recb = df_recb[df_recb["fecha_emision"].dt.date <= fecha_hasta]
+
+    df_recb = df_recb.sort_values("fecha_emision")
+
+    out = []
+    for _, row in df_recb.iterrows():
+        if not row.get("cufe"):
+            continue
+        out.append({
+            "cufe":             row["cufe"],
+            "folio":            row.get("folio", ""),
+            "prefijo":          row.get("prefijo", ""),
+            "tipo_documento":   row["tipo_documento"],
+            "fecha_emision":    row["fecha_emision"].strftime("%Y-%m-%d") if pd.notna(row["fecha_emision"]) else "",
+            "nit_emisor":       row.get("nit_emisor", ""),
+            "nombre_emisor":    row.get("nombre_emisor", ""),
+            "nit_receptor":     row.get("nit_receptor", ""),
+            "nombre_receptor":  row.get("nombre_receptor", ""),
+            "total":            float(row.get("total", 0) or 0),
+            "grupo":            row["grupo"],
+            "razon":            "TODOS_RECIBIDOS",
+        })
+    return out
+
+
 def generar_lista_compras_mixtas(df: pd.DataFrame) -> List[dict]:
     """
     Genera lista de CUFEs de COMPRAS RECIBIDAS MIXTAS.

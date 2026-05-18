@@ -728,16 +728,25 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
     out = []
     fecha_str = fac.fecha.strftime("%m/%d/%Y")
 
-    # Decidir comprobante según tipo de documento (verificado contra histórico):
+    # Decidir comprobante según tipo de documento (verificado contra histórico
+    # JIPER marzo+abril 2026, confirmado en sesión 2026-05-18):
     #   "01" Factura Electrónica recibida → CXP comprobante 3
-    #   "05" Documento Soporte (DSE)      → comprobante 8
-    #   "91" Nota Crédito recibida        → NC compras comprobante 6
+    #   "05" Documento Soporte (DSE recibido, ej. servicios públicos EPM/Comfama
+    #        y otros emitidos por persona natural) → comprobante 3
+    #        Nota: DSE *emitidos* por JIPER irían al comp 8, pero este procesador
+    #        solo trabaja recibidos (filtra por nit_receptor == NIT_JIPER).
+    #   "91" Nota Crédito recibida        → NC compras comprobante 6 (reversa TR)
+    #   "92" Nota Débito recibida         → comprobante 6, MISMO sentido que FE
+    #        (la ND aumenta la deuda con el proveedor, no la reversa).
     tipo = (fac.tipo_documento or "01").strip()
     if tipo == "91":
         comprobante = COMPROBANTE_NC_COMPRAS
         prefijo_det = "NC COMPRA"
+    elif tipo == "92":
+        comprobante = COMPROBANTE_NC_COMPRAS   # mismo comp que NC
+        prefijo_det = "ND COMPRA"
     elif tipo == "05":
-        comprobante = COMPROBANTE_DOC_SOPORTE
+        comprobante = COMPROBANTE_COMPRAS      # DSE recibido va al 3 (no al 8)
         prefijo_det = "DS"
     else:
         comprobante = COMPROBANTE_COMPRAS
@@ -763,10 +772,11 @@ def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
         declarante=True,
     )
 
-    # Si es NC compras (tipo 91), invertir los TR (Db ↔ Cr)
-    # Es decir, en NC el proveedor nos devuelve, así que:
+    # Si es NC compras (tipo 91), invertir los TR (Db ↔ Cr) porque la NC
+    # reversa la causación original: el proveedor nos devuelve, así que:
     #   Db proveedor (reverso de la causación)
     #   Cr cuenta gasto + Cr IVA descontable (reverso)
+    # La ND (tipo 92) NO se reversa: aumenta la deuda, va en mismo sentido que FE.
     es_nc = (tipo == "91")
     tr_principal = TR_CREDITO if es_nc else TR_DEBITO   # gasto/IVA: si NC va a Cr (reverso)
     tr_proveedor = TR_DEBITO if es_nc else TR_CREDITO   # proveedor: si NC va a Db (reverso)
