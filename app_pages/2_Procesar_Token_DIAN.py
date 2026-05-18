@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -732,46 +733,78 @@ else:
             st.info("Ya está todo descargado para este tipo. Limpia el progreso si quieres rehacer.")
             return
 
-        # IMPORTANTE: los callbacks de threads NO pueden llamar a st.* directamente
-        # (Streamlit lo rompe porque las llamadas a st.* deben venir del hilo
-        # principal). Usamos un diccionario thread-safe que el hilo principal
-        # lee cada cierto tiempo, NO llamamos st.* desde los workers.
-        progreso_compartido = {"progresos": []}
-
-        def on_prog(progresos):
-            # SOLO actualiza el dict — no llamadas a st.* aquí
-            progreso_compartido["progresos"] = [
-                {
-                    "hilo_id": p.hilo_id,
-                    "rango_desde": p.rango_desde,
-                    "rango_hasta": p.rango_hasta,
-                    "procesados": p.procesados,
-                    "exitosos": p.exitosos,
-                    "fallidos": p.fallidos,
-                    "estado": p.estado,
-                    "mensaje": p.mensaje,
-                }
-                for p in progresos
-            ]
-
         try:
             # Marcar que se intentó descarga (esto activa el dictamen)
             estado["intento_realizado"] = True
             estado["lista_origen"] = lista_excel_completa
 
-            with st.spinner(
-                f"Descargando {len(cufes_pendientes):,} XMLs en "
-                f"{(len(cufes_pendientes) + 699) // 700} hilo(s)... "
-                f"Esto puede tardar varios minutos."
-            ):
-                res, progresos_final = dd.descargar_paralelo_por_bloques(
-                    token_url,
-                    cufes_pendientes,
-                    tam_bloque=700,
-                    delay=0.15,
-                    on_progress=on_prog,
-                    parar_todos_si_uno_falla=True,
-                )
+            import math as _math
+            n_hilos = max(1, _math.ceil(len(cufes_pendientes) / 700))
+            st.info(
+                f"🚀 Iniciando descarga: **{len(cufes_pendientes):,} XMLs** "
+                f"en **{n_hilos} hilo(s) paralelo(s)** de hasta 700 docs c/u."
+            )
+
+            # ── PATRÓN BACKGROUND + POLLING ──
+            # Los workers descargan en threads aparte. El hilo principal hace
+            # polling cada 0.5s para actualizar las barras de progreso.
+            # Esto permite ver el progreso en VIVO sin romper Streamlit.
+            ctrl = dd.iniciar_descarga_paralela(
+                token_url,
+                cufes_pendientes,
+                tam_bloque=700,
+                delay=0.15,
+            )
+
+            # Slot único donde se redibujan las barras en cada iteración
+            slot_progreso = st.empty()
+            slot_resumen = st.empty()
+
+            iconos_estado = {
+                "pendiente":        "⏳",
+                "descargando":      "⬇️",
+                "ok":               "✅",
+                "sesion_expirada":  "⚠️",
+                "error":            "❌",
+            }
+
+            while ctrl.esta_corriendo():
+                progresos_actuales = ctrl.obtener_progreso()
+
+                with slot_progreso.container():
+                    if not progresos_actuales:
+                        st.caption("Inicializando hilos…")
+                    else:
+                        total_procesados = sum(p.procesados for p in progresos_actuales)
+                        total_ok = sum(p.exitosos for p in progresos_actuales)
+                        total_lote = sum(
+                            p.rango_hasta - p.rango_desde + 1 for p in progresos_actuales
+                        )
+                        st.markdown(
+                            f"#### Progreso global: "
+                            f"**{total_procesados:,} / {total_lote:,}** "
+                            f"(✅ {total_ok:,} OK)"
+                        )
+                        for p in progresos_actuales:
+                            total_hilo = p.rango_hasta - p.rango_desde + 1
+                            pct = (p.procesados / total_hilo) if total_hilo else 0
+                            icon = iconos_estado.get(p.estado, "❓")
+                            st.progress(
+                                pct,
+                                text=(
+                                    f"{icon} Hilo {p.hilo_id} "
+                                    f"({p.rango_desde:,}–{p.rango_hasta:,}): "
+                                    f"{p.procesados}/{total_hilo} "
+                                    f"· ok={p.exitosos} · fail={p.fallidos} "
+                                    f"· {p.mensaje[:40]}"
+                                ),
+                            )
+
+                time.sleep(0.5)
+
+            # Terminó: obtener resultado final
+            res, progresos_final = ctrl.esperar_resultado()
+            slot_progreso.empty()
 
             # Acumular en el estado
             estado["zips_por_cufe"].update(res.exitosos)
@@ -809,25 +842,24 @@ else:
                     f"Genera un Token nuevo y vuelve a darle al botón "
                     f"para descargar los faltantes."
                 )
+            elif res.motivo_parada and res.motivo_parada.startswith("error_orquestador"):
+                st.error(f"❌ Error del orquestador: {res.motivo_parada}")
             else:
                 st.info(
                     f"Descarga parcial: {res.total_exitosos:,} OK. "
                     f"Motivo: {res.motivo_parada}"
                 )
 
-            # Mostrar progreso final por hilo
+            # Mostrar resumen final por hilo
             if progresos_final:
-                with st.expander("Detalle por hilo", expanded=True):
+                with st.expander("📊 Detalle final por hilo", expanded=False):
                     for p in progresos_final:
                         total_hilo = p.rango_hasta - p.rango_desde + 1
                         pct = (p.procesados / total_hilo * 100) if total_hilo else 0
-                        icon = {
-                            "ok": "✅",
-                            "sesion_expirada": "⚠️",
-                            "error": "❌",
-                        }.get(p.estado, "❓")
+                        icon = iconos_estado.get(p.estado, "❓")
                         st.text(
-                            f"{icon} Hilo {p.hilo_id} ({p.rango_desde}-{p.rango_hasta}): "
+                            f"{icon} Hilo {p.hilo_id} "
+                            f"({p.rango_desde:,}–{p.rango_hasta:,}): "
                             f"{p.exitosos}/{total_hilo} ok ({pct:.0f}%), "
                             f"{p.fallidos} fallidos — {p.mensaje[:60]}"
                         )
@@ -945,12 +977,8 @@ else:
                     zip_consol = dd.juntar_zips(estado["zips_por_cufe"])
                     try:
                         if tipo_str == "emitidos":
-                            # STL emitidas → procesador STL
-                            res_proc = pxz.procesar_zip_stl(
-                                zip_consol,
-                                str(RUTA_MAPEO),
-                                str(RUTA_DSE),
-                            )
+                            # STL emitidas → procesador STL (solo recibe los bytes)
+                            res_proc = pxz.procesar_zip_stl(zip_consol)
                             st.session_state[f"res_proc_{tipo_str}"] = res_proc
                         else:
                             # Recibidos → procesador compras mixtas (incluye NC/ND/DSE)
