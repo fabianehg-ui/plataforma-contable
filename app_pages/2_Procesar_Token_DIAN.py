@@ -480,19 +480,24 @@ if st.button("📋 Calcular listas de CUFEs"):
         st.session_state["lista_proveedores_unicos"] = glc.generar_lista_proveedores_unicos(
             df_token_filt, maestro_actual, mapeo_historico_actual
         )
+        st.session_state["lista_todas_compras"] = glc.generar_lista_todas_compras_unicas(
+            df_token_filt, f_desde, f_hasta, maestro_actual
+        )
 
 if "lista_compras_mixtas" in st.session_state:
     lc = st.session_state["lista_compras_mixtas"]
     lv = st.session_state["lista_ventas_mixtas"]
     ls = st.session_state["lista_stl_completa"]
     lp = st.session_state["lista_proveedores_unicos"]
+    lt = st.session_state.get("lista_todas_compras", [])
 
     st.markdown("### Listas disponibles")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Compras MIXTAS", f"{len(lc):,}")
     c2.metric("Ventas MIXTAS", f"{len(lv):,}")
     c3.metric("STL completas", f"{len(ls):,}")
-    c4.metric("Proveedores únicos", f"{len(lp):,}")
+    c4.metric("Proveedores nuevos", f"{len(lp):,}")
+    c5.metric("**Compras p/régimen**", f"{len(lt):,}", help="Todas las compras únicas para detectar autorretenedores")
 
     # Lista 1: Compras MIXTAS
     if lc:
@@ -574,7 +579,28 @@ if "lista_compras_mixtas" in st.session_state:
             use_container_width=True,
         )
 
-    total = len(lc) + len(lv) + len(ls) + len(lp)
+    # Lista 5: TODAS las compras únicas para detectar régimen (autorretenedores)
+    if lt:
+        payload = {
+            "meta": {
+                "rol": "compras_regimen",
+                "descripcion": "1 CUFE por NIT (TODOS los proveedores del mes) para detectar régimen real desde XML y evitar retef a autorretenedores como EPM/Postobón",
+                "fecha_desde": str(f_desde),
+                "fecha_hasta": str(f_hasta),
+                "total_cufes": len(lt),
+            },
+            "cufes": [item["cufe"] for item in lt],
+        }
+        st.download_button(
+            f"⬇️ JSON Compras p/régimen ({len(lt)})",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            file_name=f"lista_compras_regimen_{f_desde}_a_{f_hasta}.json",
+            mime="application/json",
+            use_container_width=True,
+            help="Descarga TODOS los XML únicos de compras para detectar el régimen real de cada proveedor (O-15 autorretenedor, etc.). Imprescindible para evitar aplicar retef a EPM y similares.",
+        )
+
+    total = len(lc) + len(lv) + len(ls) + len(lp) + len(lt)
     if total > 0:
         st.info(
             f"💡 Total: {total:,} XMLs para descargar con la extensión Chrome "
@@ -729,7 +755,7 @@ with tab3:
     if vmix_zip and st.button("⚙️ Procesar ventas MIXTAS", key="btn_vmix", use_container_width=True):
         with st.spinner("Procesando..."):
             try:
-                res_vmix = pxz.procesar_zip_ventas_mixtas(vmix_zip.read())
+                res_vmix = pxz.procesar_zip_ventas_mixtas(vmix_zip.read(), str(RUTA_MAPEO))
                 st.session_state["res_vmix"] = res_vmix
             except Exception as e:
                 st.error(f"❌ Error: {e}")
