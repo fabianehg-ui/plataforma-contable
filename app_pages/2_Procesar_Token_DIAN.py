@@ -660,7 +660,7 @@ if "lista_compras_mixtas" in st.session_state:
 #   1. Pegas la URL del Token DIAN
 #   2. Eliges Emitidos (STL+DSE) o Recibidos (todos)
 #   3. La plataforma calcula cuántos hilos paralelos necesita
-#      (ceil(total / 700)) y descarga simultáneamente
+#      (ceil(total / 500)) y descarga simultáneamente
 #   4. Si un hilo detecta sesión expirada → todos paran y reportan
 #   5. Se muestra DICTAMEN: lista Excel vs descargados (con faltantes)
 #   6. Botón para procesar al plano contable o reintentar faltantes
@@ -708,8 +708,8 @@ else:
     import math as _math
     n_emit = len(le_stl_dse)
     n_recb = len(lr)
-    hilos_emit = max(1, _math.ceil(n_emit / 700)) if n_emit else 0
-    hilos_recb = max(1, _math.ceil(n_recb / 700)) if n_recb else 0
+    hilos_emit = max(1, _math.ceil(n_emit / 500)) if n_emit else 0
+    hilos_recb = max(1, _math.ceil(n_recb / 500)) if n_recb else 0
 
     col_em, col_rc = st.columns(2)
 
@@ -739,10 +739,10 @@ else:
             estado["lista_origen"] = lista_excel_completa
 
             import math as _math
-            n_hilos = max(1, _math.ceil(len(cufes_pendientes) / 700))
+            n_hilos = max(1, _math.ceil(len(cufes_pendientes) / 500))
             st.info(
                 f"🚀 Iniciando descarga: **{len(cufes_pendientes):,} XMLs** "
-                f"en **{n_hilos} hilo(s) paralelo(s)** de hasta 700 docs c/u."
+                f"en **{n_hilos} hilo(s) paralelo(s)** de hasta 500 docs c/u."
             )
 
             # ── PATRÓN BACKGROUND + POLLING ──
@@ -752,7 +752,7 @@ else:
             ctrl = dd.iniciar_descarga_paralela(
                 token_url,
                 cufes_pendientes,
-                tam_bloque=700,
+                tam_bloque=500,
                 delay=0.15,
             )
 
@@ -878,7 +878,7 @@ else:
     with col_em:
         st.markdown(f"**📤 EMITIDOS (STL + DSE)**")
         st.metric("Documentos en Excel", f"{n_emit:,}")
-        st.caption(f"→ {hilos_emit} hilo(s) paralelo(s) de hasta 700 docs")
+        st.caption(f"→ {hilos_emit} hilo(s) paralelo(s) de hasta 500 docs")
         descargados_em = len(st.session_state["dian_dl_emitidos"]["zips_por_cufe"])
         if descargados_em > 0:
             st.caption(f"✅ Ya descargados: {descargados_em:,}")
@@ -894,7 +894,7 @@ else:
     with col_rc:
         st.markdown(f"**📥 RECIBIDOS (todos)**")
         st.metric("Documentos en Excel", f"{n_recb:,}")
-        st.caption(f"→ {hilos_recb} hilo(s) paralelo(s) de hasta 700 docs")
+        st.caption(f"→ {hilos_recb} hilo(s) paralelo(s) de hasta 500 docs")
         descargados_rc = len(st.session_state["dian_dl_recibidos"]["zips_por_cufe"])
         if descargados_rc > 0:
             st.caption(f"✅ Ya descargados: {descargados_rc:,}")
