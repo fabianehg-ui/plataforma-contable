@@ -145,6 +145,68 @@ def generar_lista_todos_recibidos(
     return out
 
 
+def generar_lista_emitidos_stl_y_dse(
+    df: pd.DataFrame,
+    fecha_desde=None,
+    fecha_hasta=None,
+) -> List[dict]:
+    """
+    Lista A para descarga directa desde DIAN:
+    EMITIDOS por la empresa donde prefijo == "STL" (mayoristas) MÁS
+    todos los DSE emitidos (tipo "Documento Soporte Electrónico", o
+    cualquier nombre que contenga "Soporte" — el Excel del Token a veces
+    nombra esto distinto).
+
+    No incluye otros prefijos emitidos (MED, MVI, IND, OVI, etc.) porque
+    esos se resuelven 100% desde el Excel.
+
+    Args:
+        df: DataFrame del Excel del Token normalizado.
+        fecha_desde, fecha_hasta: filtros opcionales (datetime.date).
+
+    Returns:
+        Lista de dicts ordenados por fecha asc, con cufe, folio, prefijo, etc.
+    """
+    df_em = df[df["grupo"].str.lower() == "emitido"].copy()
+    df_em = df_em[~df_em["tipo_documento"].isin(TIPOS_NO_CONTABLES)]
+
+    if fecha_desde is not None:
+        df_em = df_em[df_em["fecha_emision"].dt.date >= fecha_desde]
+    if fecha_hasta is not None:
+        df_em = df_em[df_em["fecha_emision"].dt.date <= fecha_hasta]
+
+    # Filtro: prefijo STL O tipo documento soporte (DSE)
+    es_stl = df_em["prefijo"].astype(str).str.upper().str.startswith("STL")
+    es_dse = df_em["tipo_documento"].astype(str).str.contains(
+        "Soporte", case=False, na=False
+    )
+    df_filt = df_em[es_stl | es_dse]
+
+    df_filt = df_filt.sort_values("fecha_emision")
+
+    out = []
+    for _, row in df_filt.iterrows():
+        if not row.get("cufe"):
+            continue
+        es_stl_row = str(row.get("prefijo", "")).upper().startswith("STL")
+        razon = "STL_EMITIDO" if es_stl_row else "DSE_EMITIDO"
+        out.append({
+            "cufe":             row["cufe"],
+            "folio":            row.get("folio", ""),
+            "prefijo":          row.get("prefijo", ""),
+            "tipo_documento":   row["tipo_documento"],
+            "fecha_emision":    row["fecha_emision"].strftime("%Y-%m-%d") if pd.notna(row["fecha_emision"]) else "",
+            "nit_emisor":       row.get("nit_emisor", ""),
+            "nombre_emisor":    row.get("nombre_emisor", ""),
+            "nit_receptor":     row.get("nit_receptor", ""),
+            "nombre_receptor":  row.get("nombre_receptor", ""),
+            "total":            float(row.get("total", 0) or 0),
+            "grupo":            row["grupo"],
+            "razon":            razon,
+        })
+    return out
+
+
 def generar_lista_compras_mixtas(df: pd.DataFrame) -> List[dict]:
     """
     Genera lista de CUFEs de COMPRAS RECIBIDAS MIXTAS.
