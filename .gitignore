@@ -33,3 +33,4 @@ downloads_temp/
 
 # Logs
 *.log
+_backups_*/

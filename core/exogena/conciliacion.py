@@ -55,6 +55,19 @@ CONCEPTOS_GMF = {
 
 
 # ================================================================
+# FORMATOS DE SALDO — NO aplican regla de deducibilidad
+# ================================================================
+# El F1001 separa deducible/no deducible porque reporta GASTOS.
+# Los demás formatos reportan SALDOS (cartera, pasivos, declaraciones,
+# inversiones) y se entregan al 100% al acreedor/deudor.
+# Sustento: Res. 000227/2025 art. 1.3.5.6.1 (F1009)
+#           Res. 000227/2025 art. 1.3.5.4.1 (F1008)
+#           Res. 000227/2025 art. 1.3.5.5.1/5.2 (F1005/F1006 son IVA, columnas
+#           específicas: descontable/generado/devoluciones, sin lógica 75/25)
+FORMATOS_DE_SALDO = {'1005', '1006', '1008', '1009', '1011', '1012'}
+
+
+# ================================================================
 # REGLAS DE DETECCIÓN POR NOMBRE
 # ================================================================
 
@@ -620,6 +633,64 @@ def construir_cuadre_balance_vs_formatos(
         reportado = balance  # Default: lo que va al XML = lo del balance
         estado = 'OK'
         motivo = ''
+        
+        # ╔═══════════════════════════════════════════════════════════════════╗
+        # ║ GUARDA: Formatos de SALDO (F1005, F1006, F1008, F1009, F1011,    ║
+        # ║ F1012) reportan 100% del balance. NO aplican regla 75/25 ni      ║
+        # ║ GMF 50% (esas son del F1001 que reporta GASTOS).                 ║
+        # ║ Sustento: Res. 000227/2025 art. 1.3.5.6.1                        ║
+        # ╚═══════════════════════════════════════════════════════════════════╝
+        if str(fmt) in FORMATOS_DE_SALDO:
+            # 100% del saldo, sin separar deducible/no deducible
+            reportado = balance
+            estado = 'OK'
+            motivo = ''  # Sin motivo: cuadra al peso
+            
+            # Aplicar ajustes manuales si hay (pueden cambiar el reportado)
+            for ajuste in ajustes_manuales:
+                if (str(ajuste.get('formato_dian')) == fmt and
+                    int(ajuste.get('concepto_dian', 0) or 0) == cpt):
+                    if ajuste.get('valor_deducible') is not None:
+                        reportado = Decimal(str(ajuste['valor_deducible']))
+                        estado = 'AJUSTE_MANUAL'
+                        motivo = f"Ajuste manual: {ajuste.get('motivo', '')}"
+            
+            diferencia = balance - reportado
+            if abs(diferencia) > Decimal('0.01') and estado == 'OK':
+                estado = 'DIFERENCIA'
+            
+            # Construir fila y continuar (saltar la lógica de SS/GMF)
+            fila = FilaConcepto(
+                formato_dian=fmt,
+                concepto_dian=cpt,
+                descripcion_concepto=descripciones_conceptos.get(cpt, f'Concepto {cpt}'),
+                saldo_balance=balance,
+                valor_reportado=reportado,
+                diferencia=diferencia,
+                cuentas=sorted(list(data['cuentas']))[:5],
+                cantidad_movimientos=data['movimientos'],
+                cantidad_cuentas=len(data['cuentas']),
+                estado=estado,
+                motivo=motivo,
+            )
+            
+            if fmt not in cuadres:
+                cuadres[fmt] = CuadreFormato(
+                    formato_dian=fmt,
+                    nombre_formato=f'Formato {fmt}',
+                )
+            
+            cuadres[fmt].filas.append(fila)
+            cuadres[fmt].total_balance += balance
+            cuadres[fmt].total_reportado += reportado
+            cuadres[fmt].total_diferencia += diferencia
+            
+            continue  # Saltar al siguiente (fmt, cpt)
+        
+        # ────────────────────────────────────────────────────────────────────
+        # A partir de aquí, solo F1001 (GASTOS): aplicar reglas de
+        # deducibilidad de SS, GMF, etc.
+        # ────────────────────────────────────────────────────────────────────
         
         # Aplicar reglas de deducibilidad
         if data['tiene_seguridad_social']:
