@@ -76,7 +76,7 @@ def home_page():
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric("Módulos disponibles", "14")
+        st.metric("Módulos disponibles", "15")
     with col3:
         st.metric("Sesión", "Activa")
 
@@ -109,6 +109,7 @@ def home_page():
                 "_Declaraciones e información tributaria periódica._"
             )
             st.markdown(
+                "- 📑 RADIAN Acuses DIAN\n"
                 "- 📑 Información Exógena\n"
                 "- 📝 Declaración de Renta\n"
                 "- 💸 IVA y reteIVA\n"
@@ -188,6 +189,12 @@ asistente_pila = st.Page(
 )
 
 # ----- Sección: Herramientas Tributarias -----
+trib_radian = st.Page(
+    "app_pages/6_RADIAN_Acuses_DIAN.py",
+    title="RADIAN Acuses DIAN",
+    icon="📑",
+    url_path="radian-acuses",
+)
 trib_exogena = st.Page(
     "app_pages/7_Informacion_Exogena.py",
     title="Información Exógena",
@@ -251,6 +258,7 @@ nav = st.navigation(
             asistente_pila,
         ],
         "📊 Herramientas Tributarias": [
+            trib_radian,
             trib_exogena,
             trib_renta,
             trib_iva,
