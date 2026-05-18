@@ -483,6 +483,9 @@ if st.button("📋 Calcular listas de CUFEs"):
         st.session_state["lista_todas_compras"] = glc.generar_lista_todas_compras_unicas(
             df_token_filt, f_desde, f_hasta, maestro_actual
         )
+        st.session_state["lista_todos_recibidos"] = glc.generar_lista_todos_recibidos(
+            df_token_filt, f_desde, f_hasta
+        )
 
 if "lista_compras_mixtas" in st.session_state:
     lc = st.session_state["lista_compras_mixtas"]
@@ -490,14 +493,50 @@ if "lista_compras_mixtas" in st.session_state:
     ls = st.session_state["lista_stl_completa"]
     lp = st.session_state["lista_proveedores_unicos"]
     lt = st.session_state.get("lista_todas_compras", [])
+    lr = st.session_state.get("lista_todos_recibidos", [])
 
     st.markdown("### Listas disponibles")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Compras MIXTAS", f"{len(lc):,}")
-    c2.metric("Ventas MIXTAS", f"{len(lv):,}")
-    c3.metric("STL completas", f"{len(ls):,}")
-    c4.metric("Proveedores nuevos", f"{len(lp):,}")
-    c5.metric("**Compras p/régimen**", f"{len(lt):,}", help="Todas las compras únicas para detectar autorretenedores")
+    c1, c2, c3 = st.columns(3)
+    c1.metric(
+        "🆕 **TODOS recibidos**",
+        f"{len(lr):,}",
+        help="100% de documentos recibidos del mes: FE, NC, ND, DSE, doc equivalentes. Lista nueva para descargar absolutamente todo lo que entra a contabilidad por compras.",
+    )
+    c2.metric("Compras MIXTAS", f"{len(lc):,}")
+    c3.metric("Ventas MIXTAS", f"{len(lv):,}")
+    c4, c5, c6 = st.columns(3)
+    c4.metric("STL completas", f"{len(ls):,}")
+    c5.metric("Proveedores nuevos", f"{len(lp):,}")
+    c6.metric("Compras p/régimen", f"{len(lt):,}", help="Todas las compras únicas para detectar autorretenedores")
+
+    # Lista 0 (NUEVA — flujo principal): TODOS los recibidos del mes
+    if lr:
+        # Breakdown por tipo de documento para que veas qué viene
+        from collections import Counter
+        tipos_count = Counter(item.get("tipo_documento", "?") for item in lr)
+        tipos_resumen = ", ".join(f"{tipo}: {n}" for tipo, n in tipos_count.most_common())
+        st.caption(f"📊 Desglose por tipo: {tipos_resumen}")
+
+        payload = {
+            "meta": {
+                "rol": "todos_recibidos",
+                "descripcion": "100% de documentos RECIBIDOS del mes (FE, NC, ND, DSE, doc equivalentes). Excluye Application Response y Nómina Individual.",
+                "fecha_desde": str(f_desde),
+                "fecha_hasta": str(f_hasta),
+                "total_cufes": len(lr),
+                "desglose_tipos": dict(tipos_count),
+            },
+            "cufes": [item["cufe"] for item in lr],
+        }
+        st.download_button(
+            f"⬇️ **JSON TODOS Recibidos** ({len(lr)})",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            file_name=f"lista_todos_recibidos_{f_desde}_a_{f_hasta}.json",
+            mime="application/json",
+            use_container_width=True,
+            type="primary",
+            help="Descarga el 100% de XMLs recibidos del mes para procesarlos al detalle (incluye FE, NC, ND, DSE).",
+        )
 
     # Lista 1: Compras MIXTAS
     if lc:
@@ -600,7 +639,7 @@ if "lista_compras_mixtas" in st.session_state:
             help="Descarga TODOS los XML únicos de compras para detectar el régimen real de cada proveedor (O-15 autorretenedor, etc.). Imprescindible para evitar aplicar retef a EPM y similares.",
         )
 
-    total = len(lc) + len(lv) + len(ls) + len(lp) + len(lt)
+    total = len(lc) + len(lv) + len(ls) + len(lp) + len(lt) + len(lr)
     if total > 0:
         st.info(
             f"💡 Total: {total:,} XMLs para descargar con la extensión Chrome "
