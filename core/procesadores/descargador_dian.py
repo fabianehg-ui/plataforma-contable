@@ -27,9 +27,12 @@ EXPONE:
 from __future__ import annotations
 
 import io
+import math
 import re
+import threading
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -288,6 +291,193 @@ def descargar_lote(
     return res
 
 
+# ─── Descarga paralela por bloques de 700 ──────────────────────
+@dataclass
+class ProgresoHilo:
+    """Estado en vivo de un hilo de descarga."""
+    hilo_id: int
+    rango_desde: int       # 1-indexed para mostrar al usuario
+    rango_hasta: int
+    procesados: int = 0
+    exitosos: int = 0
+    fallidos: int = 0
+    estado: str = "pendiente"   # "pendiente" | "descargando" | "ok" | "sesion_expirada" | "error"
+    mensaje: str = ""
+
+
+def descargar_paralelo_por_bloques(
+    token_url: str,
+    cufes: list[str],
+    tam_bloque: int = DEFAULT_BLOCK_SIZE,
+    delay: float = DEFAULT_DELAY,
+    timeout: int = DEFAULT_TIMEOUT,
+    on_progress: Optional[Callable[[list[ProgresoHilo]], None]] = None,
+    parar_todos_si_uno_falla: bool = True,
+) -> tuple[ResultadoDescarga, list[ProgresoHilo]]:
+    """
+    Descarga muchos CUFEs usando N hilos paralelos. El número de hilos se
+    calcula automáticamente: ceil(total / tam_bloque).
+
+    Cada hilo:
+      - Autentica su propia sesión HTTP con el mismo token_url.
+      - Procesa su slice de la lista (no se solapan).
+      - Si detecta sesión expirada, marca un flag global y los demás paran.
+
+    Args:
+        token_url: URL del Token DIAN (la misma para todos los hilos).
+        cufes: lista completa de CUFEs.
+        tam_bloque: docs por hilo (default 700).
+        delay: pausa entre descargas dentro de cada hilo.
+        timeout: timeout por petición.
+        on_progress: callback que recibe la lista actual de ProgresoHilo
+                     cada vez que un hilo avanza.
+        parar_todos_si_uno_falla: si True, sesión expirada en un hilo
+                                  detiene a todos los demás.
+
+    Returns:
+        (ResultadoDescarga consolidado, lista de ProgresoHilo finales)
+    """
+    n_total = len(cufes)
+    if n_total == 0:
+        return ResultadoDescarga(motivo_parada="completo"), []
+
+    n_hilos = math.ceil(n_total / tam_bloque)
+
+    # Distribuir CUFEs en N slices sin solape
+    bloques: list[list[str]] = []
+    progresos: list[ProgresoHilo] = []
+    for i in range(n_hilos):
+        ini = i * tam_bloque
+        fin = min(ini + tam_bloque, n_total)
+        bloques.append(cufes[ini:fin])
+        progresos.append(ProgresoHilo(
+            hilo_id=i + 1,
+            rango_desde=ini + 1,
+            rango_hasta=fin,
+        ))
+
+    # Flag compartido para abortar
+    abortar = threading.Event()
+    lock_progreso = threading.Lock()
+    inicio = time.time()
+
+    def trabajador(hilo_id: int, cufes_slice: list[str]) -> dict:
+        """
+        Trabajador de un hilo. Autentica, descarga, actualiza su ProgresoHilo.
+        Retorna dict con resultados parciales.
+        """
+        progreso = progresos[hilo_id - 1]
+        resultado = {
+            "hilo_id": hilo_id,
+            "exitosos": {},        # cufe → zip_bytes
+            "fallidos": [],
+            "motivo": None,
+        }
+
+        # Autenticar sesión propia
+        try:
+            progreso.estado = "descargando"
+            progreso.mensaje = "Autenticando..."
+            if on_progress:
+                with lock_progreso:
+                    on_progress(list(progresos))
+            sess = autenticar(token_url, timeout=30)
+        except (SesionExpirada, ValueError, requests.RequestException) as e:
+            progreso.estado = "error"
+            progreso.mensaje = f"Error de autenticación: {e}"
+            resultado["motivo"] = "auth_fallida"
+            if on_progress:
+                with lock_progreso:
+                    on_progress(list(progresos))
+            if parar_todos_si_uno_falla:
+                abortar.set()
+            return resultado
+
+        # Descargar uno por uno
+        for idx, cufe in enumerate(cufes_slice):
+            if abortar.is_set():
+                # Otro hilo nos pidió parar
+                resultado["motivo"] = "abortado_por_otro_hilo"
+                break
+
+            if not cufe or not cufe.strip():
+                progreso.procesados += 1
+                continue
+
+            try:
+                zip_bytes = descargar_xml(sess, cufe, timeout=timeout)
+                resultado["exitosos"][cufe] = zip_bytes
+                progreso.exitosos += 1
+                progreso.procesados += 1
+                progreso.mensaje = f"OK {cufe[:16]}..."
+            except SesionExpirada as e:
+                progreso.estado = "sesion_expirada"
+                progreso.mensaje = f"Sesión expiró tras {progreso.exitosos} docs"
+                resultado["fallidos"].append((cufe, f"Sesión expirada: {e}"))
+                resultado["motivo"] = "sesion_expirada"
+                if parar_todos_si_uno_falla:
+                    abortar.set()
+                break
+            except (ValueError, requests.RequestException) as e:
+                resultado["fallidos"].append((cufe, str(e)))
+                progreso.fallidos += 1
+                progreso.procesados += 1
+                progreso.mensaje = f"⚠️ {cufe[:16]}...: {e}"
+                # Errores aislados (timeout, ZIP corrupto): seguimos
+
+            # Notificar progreso cada 10 docs para no saturar
+            if on_progress and progreso.procesados % 10 == 0:
+                with lock_progreso:
+                    on_progress(list(progresos))
+
+            if delay > 0:
+                time.sleep(delay)
+
+        # Notificación final del hilo
+        if progreso.estado == "descargando":
+            progreso.estado = "ok"
+            progreso.mensaje = f"Listo: {progreso.exitosos} ok, {progreso.fallidos} fallidos"
+            if resultado["motivo"] is None:
+                resultado["motivo"] = "completo"
+
+        if on_progress:
+            with lock_progreso:
+                on_progress(list(progresos))
+
+        return resultado
+
+    # ── Ejecutar todos los hilos en paralelo ──
+    res = ResultadoDescarga()
+    motivos_hilos = []
+
+    with ThreadPoolExecutor(max_workers=n_hilos) as executor:
+        futuros = {
+            executor.submit(trabajador, prog.hilo_id, bloques[prog.hilo_id - 1]): prog
+            for prog in progresos
+        }
+        for fut in as_completed(futuros):
+            try:
+                r = fut.result()
+                res.exitosos.update(r["exitosos"])
+                res.fallidos.extend(r["fallidos"])
+                res.procesados += len(r["exitosos"]) + len(r["fallidos"])
+                if r["motivo"]:
+                    motivos_hilos.append(r["motivo"])
+            except Exception as e:
+                res.fallidos.append(("__hilo__", f"Hilo crasheó: {e}"))
+
+    # Decidir motivo global de parada
+    if "sesion_expirada" in motivos_hilos or "auth_fallida" in motivos_hilos:
+        res.motivo_parada = "sesion_expirada"
+    elif all(m == "completo" for m in motivos_hilos):
+        res.motivo_parada = "completo"
+    else:
+        res.motivo_parada = "parcial"
+
+    res.duracion_seg = time.time() - inicio
+    return res, progresos
+
+
 # ─── Consolidar ZIPs descargados en uno solo ─────────────────
 def juntar_zips(zips_por_cufe: dict[str, bytes]) -> bytes:
     """
@@ -334,6 +524,80 @@ def juntar_zips(zips_por_cufe: dict[str, bytes]) -> bytes:
                 continue
 
     return salida.getvalue()
+
+
+# ─── Dictamen: comparar lista Excel vs descargados ────────────
+def generar_dictamen(
+    lista_excel: list[dict],
+    cufes_descargados: set[str],
+    fallidos: list[tuple[str, str]],
+) -> dict:
+    """
+    Compara la lista de documentos esperados (del Excel del Token) contra
+    los que efectivamente se descargaron, produciendo un reporte detallado.
+
+    Args:
+        lista_excel: lista de dicts del Excel del Token (con campos
+                     cufe, folio, prefijo, tipo_documento, nombre_emisor,
+                     total, fecha_emision, ...).
+        cufes_descargados: set de CUFEs que sí se bajaron exitosamente.
+        fallidos: lista de (cufe, razon) de los que fallaron.
+
+    Returns:
+        dict con:
+          totales: {total_esperado, descargados, faltantes, fallidos}
+          tabla_faltantes: list[dict] de los que no llegaron, con razón
+          tabla_descargados: list[dict] de los que sí llegaron
+          desglose_tipos: Counter por tipo_documento de los faltantes
+    """
+    from collections import Counter
+
+    cufes_descargados = set(cufes_descargados)
+    razones_fallidos = dict(fallidos)  # cufe → razón
+
+    faltantes = []
+    descargados = []
+
+    for item in lista_excel:
+        cufe = item.get("cufe", "")
+        if not cufe:
+            continue
+        if cufe in cufes_descargados:
+            descargados.append(item)
+        else:
+            falt = dict(item)
+            falt["razon_fallo"] = razones_fallidos.get(
+                cufe, "No procesado (sesión interrumpida o pendiente)"
+            )
+            faltantes.append(falt)
+
+    total_esperado = len(lista_excel)
+    n_desc = len(descargados)
+    n_falt = len(faltantes)
+    n_fallidos = len(fallidos)
+
+    # Sumas de valores para dictamen económico
+    sum_esperado = sum(float(it.get("total", 0) or 0) for it in lista_excel)
+    sum_descargado = sum(float(it.get("total", 0) or 0) for it in descargados)
+    sum_faltante = sum(float(it.get("total", 0) or 0) for it in faltantes)
+
+    desglose_tipos_faltantes = Counter(it.get("tipo_documento", "?") for it in faltantes)
+
+    return {
+        "totales": {
+            "total_esperado":  total_esperado,
+            "descargados":     n_desc,
+            "faltantes":       n_falt,
+            "fallidos":        n_fallidos,
+            "pct_completado":  (n_desc / total_esperado * 100) if total_esperado else 0,
+            "sum_esperado":    sum_esperado,
+            "sum_descargado":  sum_descargado,
+            "sum_faltante":    sum_faltante,
+        },
+        "tabla_faltantes":   faltantes,
+        "tabla_descargados": descargados,
+        "desglose_tipos_faltantes": dict(desglose_tipos_faltantes),
+    }
 
 
 # ─── Helper: descargar TODO con renovación interactiva ────────
