@@ -539,3 +539,423 @@ def procesar_zip_para_maestro(zip_bytes: bytes, maestro: dict) -> dict:
         "errores": errores,
         "log": log,
     }
+
+
+# ─── Procesador de COMPRAS MIXTAS → plano contable detallado ────
+# Constantes contables compras (de procesador_compras_excel_token.py)
+COMPROBANTE_COMPRAS = "20"
+CC_COMPRAS = "001001"
+CUENTA_PROVEEDORES_COM = "22050505"
+CUENTAS_IVA_DESCONTABLE_COM = {
+    "19%":  "24081003",
+    "5%":   "24081003",
+    "16%":  "24081003",
+}
+CUENTA_INC_COMPRAS_PAGADO = "71050205"
+CUENTA_GASTO_FALLBACK_COM = "73959501"
+
+
+def procesar_zip_compras_mixtas(
+    zip_bytes: bytes,
+    ruta_mapeo_historico: str,
+    ruta_tabla_retenciones: str,
+    ruta_mapeo_concepto: str,
+    ruta_maestro_terceros: Optional[str] = None,
+) -> ResultadoXMLs:
+    """
+    Procesa ZIP de XMLs de compras MIXTAS y genera plano contable detallado
+    con IVA discriminado real por línea, aplicando retenciones según régimen.
+
+    Args:
+        zip_bytes: bytes del ZIP plano con XMLs
+        ruta_mapeo_historico: ruta a mapeo_compras_historico.json (NIT→cuenta)
+        ruta_tabla_retenciones: ruta a tabla_retenciones.json
+        ruta_mapeo_concepto: ruta a mapeo_cuenta_a_concepto_retencion.json
+        ruta_maestro_terceros: ruta opcional a maestro_terceros.json (para régimen)
+
+    Returns:
+        ResultadoXMLs con plano contable
+    """
+    from . import maestro_terceros as mt
+    from .motor_retenciones import MotorRetenciones
+
+    res = ResultadoXMLs()
+
+    # Cargar configuración
+    with open(ruta_mapeo_historico, encoding="utf-8") as f:
+        mapeo_hist_raw = json.load(f)
+    # Convertir mapeo_compras_historico a dict NIT→{cuenta_gasto, cuenta_nombre}
+    mapeo_nit_cuenta = {}
+    for entry in mapeo_hist_raw.get("mapeo", []):
+        nit = entry.get("nit", "").strip()
+        if nit:
+            mapeo_nit_cuenta[nit] = {
+                "cuenta_gasto": entry.get("cuenta_gasto"),
+                "cuenta_nombre": entry.get("cuenta_nombre"),
+            }
+
+    motor = MotorRetenciones(ruta_tabla_retenciones, ruta_mapeo_concepto)
+    maestro = mt.cargar_maestro_terceros(ruta_maestro_terceros) if ruta_maestro_terceros else {"terceros": {}}
+
+    # Parsear todos los XMLs y filtrar solo COMPRAS (recibidas)
+    NIT_JIPER = "901038325"
+    for nombre, xml_str in iter_xmls_de_zip(zip_bytes):
+        try:
+            factura = parsear_factura(xml_str)
+            if factura is None:
+                res.errores.append(f"{nombre}: no se pudo parsear")
+                continue
+            # Solo recibidas (JIPER es el receptor, no el emisor)
+            if factura.nit_receptor != NIT_JIPER:
+                continue
+            # Evitar duplicados por CUFE
+            if any(f.cufe == factura.cufe for f in res.facturas):
+                continue
+            res.facturas.append(factura)
+        except Exception as e:
+            res.errores.append(f"{nombre}: {e}")
+
+    # Generar plano
+    import json as _json
+    filas = []
+    for fac in res.facturas:
+        filas.extend(_generar_lineas_compra_mixta(
+            fac, mapeo_nit_cuenta, motor, maestro
+        ))
+
+    if filas:
+        res.plano_df = pd.DataFrame(filas, columns=COLUMNAS_PLANO)
+        res.plano_lineas = len(filas)
+        from .numerador_comprobantes import aplicar_numeracion
+        res.plano_df = aplicar_numeracion(res.plano_df)
+    else:
+        res.plano_df = pd.DataFrame(columns=COLUMNAS_PLANO)
+
+    return res
+
+
+def _generar_lineas_compra_mixta(fac, mapeo_nit_cuenta, motor, maestro):
+    """Genera líneas contables para una compra MIXTA desde XML."""
+    from . import maestro_terceros as mt
+
+    out = []
+    fecha_str = fac.fecha.strftime("%m/%d/%Y")
+    detalle = f"COMPRA {fac.nombre_emisor[:30]} ({fac.folio})"
+
+    # Buscar cuenta gasto del proveedor
+    info_map = mapeo_nit_cuenta.get(fac.nit_emisor, {})
+    cuenta_gasto = info_map.get("cuenta_gasto") or CUENTA_GASTO_FALLBACK_COM
+
+    # Base sin IVA
+    base_total = sum(fac.bases_por_tarifa.values())
+
+    # Calcular retenciones según régimen
+    regimen = mt.regimen_proveedor(maestro, fac.nit_emisor, default="R-99-PN")
+    res_ret = motor.calcular(
+        fecha_factura=fac.fecha,
+        base_gravable=base_total,
+        iva=fac.total_iva,
+        cuenta_gasto=cuenta_gasto,
+        regimen_proveedor=regimen,
+        declarante=True,
+    )
+
+    # Db cuenta gasto (por cada tarifa de IVA con base > 0)
+    for tarifa, base in fac.bases_por_tarifa.items():
+        if base <= 0.5:
+            continue
+        out.append({
+            "CUENTA": cuenta_gasto,
+            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_emisor,
+            "DETALLE": f"{detalle} [base {tarifa}]",
+            "TR": TR_DEBITO,
+            "VALOR": round(base, 0),
+            "BASE": "",
+            "CENTRO DE COSTO": CC_COMPRAS,
+        })
+
+    # Db IVA descontable por tarifa
+    for tarifa, iva_tarifa in fac.iva_por_tarifa.items():
+        if iva_tarifa <= 0.5:
+            continue
+        cuenta_iva = CUENTAS_IVA_DESCONTABLE_COM.get(tarifa, "24081003")
+        base_tarifa = fac.bases_por_tarifa.get(tarifa, 0)
+        out.append({
+            "CUENTA": cuenta_iva,
+            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_emisor,
+            "DETALLE": f"IVA {tarifa} DESC - {detalle}",
+            "TR": TR_DEBITO,
+            "VALOR": round(iva_tarifa, 0),
+            "BASE": round(base_tarifa, 0),
+            "CENTRO DE COSTO": CC_COMPRAS,
+        })
+
+    # Db INC pagado
+    if fac.inc_total > 0.5:
+        out.append({
+            "CUENTA": CUENTA_INC_COMPRAS_PAGADO,
+            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_emisor,
+            "DETALLE": f"INC pagado - {detalle}",
+            "TR": TR_DEBITO,
+            "VALOR": round(fac.inc_total, 0),
+            "BASE": "",
+            "CENTRO DE COSTO": CC_COMPRAS,
+        })
+
+    # Total Cr proveedor = total factura - retenciones
+    cr_total = fac.total_factura
+    if res_ret.aplica_retefuente:
+        cr_total -= res_ret.valor_retefuente
+        out.append({
+            "CUENTA": res_ret.cuenta_retefuente,
+            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_emisor,
+            "DETALLE": f"Retef {res_ret.concepto} - {detalle}",
+            "TR": TR_CREDITO,
+            "VALOR": round(res_ret.valor_retefuente, 0),
+            "BASE": round(base_total, 0),
+            "CENTRO DE COSTO": CC_COMPRAS,
+        })
+    if res_ret.aplica_reteiva:
+        cr_total -= res_ret.valor_reteiva
+        out.append({
+            "CUENTA": res_ret.cuenta_reteiva,
+            "COMPROBANTE": COMPROBANTE_COMPRAS,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_emisor,
+            "DETALLE": f"ReteIVA 15% - {detalle}",
+            "TR": TR_CREDITO,
+            "VALOR": round(res_ret.valor_reteiva, 0),
+            "BASE": round(fac.total_iva, 0),
+            "CENTRO DE COSTO": CC_COMPRAS,
+        })
+
+    # Cr proveedor (lo que efectivamente se paga)
+    out.append({
+        "CUENTA": CUENTA_PROVEEDORES_COM,
+        "COMPROBANTE": COMPROBANTE_COMPRAS,
+        "FECHA": fecha_str,
+        "DOCUMENTO": fac.folio,
+        "DOC REFERENCIA": "",
+        "NIT": fac.nit_emisor,
+        "DETALLE": detalle,
+        "TR": TR_CREDITO,
+        "VALOR": round(cr_total, 0),
+        "BASE": "",
+        "CENTRO DE COSTO": CC_COMPRAS,
+    })
+
+    return out
+
+
+# ─── Procesador de VENTAS MIXTAS → plano contable ───────────────
+COMPROBANTE_VENTAS_MIX = "10"   # comprobante de ventas (ajustar si es otro)
+CC_VENTAS_MIX = "001001"
+CUENTA_CXC_VENTAS_MIX = "13050505"
+CUENTAS_INGRESOS_VENTAS_MIX_POR_TARIFA = {
+    "0%":   "41200902",
+    "5%":   "41200905",
+    "19%":  "41200906",
+    "16%":  "41200906",
+    "INC8%":"41401501",
+}
+
+
+def procesar_zip_ventas_mixtas(zip_bytes: bytes) -> ResultadoXMLs:
+    """
+    Procesa ZIP de XMLs de ventas MIXTAS emitidas por JIPER → plano contable.
+    """
+    res = ResultadoXMLs()
+    NIT_JIPER = "901038325"
+
+    for nombre, xml_str in iter_xmls_de_zip(zip_bytes):
+        try:
+            factura = parsear_factura(xml_str)
+            if factura is None:
+                res.errores.append(f"{nombre}: no se pudo parsear")
+                continue
+            # Solo emitidas por JIPER (JIPER es el emisor)
+            if factura.nit_emisor != NIT_JIPER:
+                continue
+            # Excluir STL (van por procesar_zip_stl)
+            if factura.prefijo.upper().startswith("STL"):
+                continue
+            # Evitar duplicados
+            if any(f.cufe == factura.cufe for f in res.facturas):
+                continue
+            res.facturas.append(factura)
+        except Exception as e:
+            res.errores.append(f"{nombre}: {e}")
+
+    # Generar plano
+    filas = []
+    for fac in res.facturas:
+        filas.extend(_generar_lineas_venta_mixta(fac))
+
+    if filas:
+        res.plano_df = pd.DataFrame(filas, columns=COLUMNAS_PLANO)
+        res.plano_lineas = len(filas)
+        from .numerador_comprobantes import aplicar_numeracion
+        res.plano_df = aplicar_numeracion(res.plano_df)
+    else:
+        res.plano_df = pd.DataFrame(columns=COLUMNAS_PLANO)
+
+    return res
+
+
+def _generar_lineas_venta_mixta(fac):
+    """Líneas contables para una venta MIXTA emitida (no STL)."""
+    out = []
+    fecha_str = fac.fecha.strftime("%m/%d/%Y")
+    detalle = f"VENTA {fac.nombre_receptor[:30]} ({fac.folio})"
+
+    # Db CxC al cliente
+    out.append({
+        "CUENTA": CUENTA_CXC_VENTAS_MIX,
+        "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+        "FECHA": fecha_str,
+        "DOCUMENTO": fac.folio,
+        "DOC REFERENCIA": "",
+        "NIT": fac.nit_receptor,
+        "DETALLE": detalle,
+        "TR": TR_DEBITO,
+        "VALOR": round(fac.total_factura, 0),
+        "BASE": "",
+        "CENTRO DE COSTO": CC_VENTAS_MIX,
+    })
+
+    # Cr ingresos por tarifa
+    for tarifa, base in fac.bases_por_tarifa.items():
+        if base <= 0.5:
+            continue
+        cuenta_ing = CUENTAS_INGRESOS_VENTAS_MIX_POR_TARIFA.get(tarifa, "41200902")
+        out.append({
+            "CUENTA": cuenta_ing,
+            "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_receptor,
+            "DETALLE": f"VENTA {tarifa} - {detalle}",
+            "TR": TR_CREDITO,
+            "VALOR": round(base, 0),
+            "BASE": "",
+            "CENTRO DE COSTO": CC_VENTAS_MIX,
+        })
+
+        # Cr IVA por tarifa
+        iva = fac.iva_por_tarifa.get(tarifa, 0)
+        if iva > 0.5:
+            cuenta_iva = CUENTA_IVA_19_GENERADO if tarifa == "19%" else CUENTA_IVA_5_GENERADO
+            out.append({
+                "CUENTA": cuenta_iva,
+                "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+                "FECHA": fecha_str,
+                "DOCUMENTO": fac.folio,
+                "DOC REFERENCIA": "",
+                "NIT": fac.nit_receptor,
+                "DETALLE": f"IVA {tarifa} GEN - {detalle}",
+                "TR": TR_CREDITO,
+                "VALOR": round(iva, 0),
+                "BASE": round(base, 0),
+                "CENTRO DE COSTO": CC_VENTAS_MIX,
+            })
+
+    if fac.inc_total > 0.5:
+        out.append({
+            "CUENTA": CUENTA_INC_GENERADO,
+            "COMPROBANTE": COMPROBANTE_VENTAS_MIX,
+            "FECHA": fecha_str,
+            "DOCUMENTO": fac.folio,
+            "DOC REFERENCIA": "",
+            "NIT": fac.nit_receptor,
+            "DETALLE": f"INC GEN - {detalle}",
+            "TR": TR_CREDITO,
+            "VALOR": round(fac.inc_total, 0),
+            "BASE": "",
+            "CENTRO DE COSTO": CC_VENTAS_MIX,
+        })
+
+    return out
+
+
+# ─── Consolidador de planos del mes ─────────────────────────────
+def consolidar_planos(
+    planos_ventas: list,
+    planos_compras: list,
+) -> dict:
+    """
+    Consolida múltiples planos en dos finales (ventas y compras) con
+    deduplicación por (COMPROBANTE, DOCUMENTO, DOC REFERENCIA, NIT).
+
+    REGLA DE DEDUPLICACIÓN:
+        Si un documento aparece en varios planos, gana el ÚLTIMO de la lista
+        (los XMLs reemplazan al Token porque tienen IVA discriminado real).
+
+    Args:
+        planos_ventas: lista de DataFrames de ventas en orden de prioridad
+                       (el último gana sobre el primero)
+        planos_compras: igual pero para compras
+
+    Returns:
+        dict con keys 'ventas' y 'compras' → DataFrames consolidados
+    """
+    def _consolidar(planos):
+        if not planos:
+            return pd.DataFrame(columns=COLUMNAS_PLANO)
+
+        # Filtrar None / vacíos
+        planos = [p for p in planos if p is not None and len(p) > 0]
+        if not planos:
+            return pd.DataFrame(columns=COLUMNAS_PLANO)
+
+        # Acumulamos en orden inverso para que el último gane
+        # (primero los más prioritarios = XMLs, después el Token)
+        docs_vistos = set()
+        partes = []
+
+        # Iterar AL REVÉS: prioridad alta primero
+        for plano in reversed(planos):
+            p = plano.copy()
+            # Clave única por documento: (COMPROBANTE, DOC REFERENCIA o DOCUMENTO, NIT)
+            # Usamos DOC REFERENCIA si existe; si no, DOCUMENTO
+            p["_clave"] = p.apply(
+                lambda r: (
+                    str(r["COMPROBANTE"]).strip(),
+                    str(r["DOC REFERENCIA"]).strip() or str(r["DOCUMENTO"]).strip(),
+                    str(r["NIT"]).strip(),
+                ),
+                axis=1
+            )
+            # Filtrar filas cuya clave ya fue vista (de un plano de mayor prioridad)
+            mask_nuevos = ~p["_clave"].isin(docs_vistos)
+            p_nuevos = p[mask_nuevos].drop(columns=["_clave"])
+            partes.append(p_nuevos)
+            # Marcar todas estas claves como vistas
+            docs_vistos.update(p[mask_nuevos]["_clave"].tolist())
+
+        # Concatenar (los más prioritarios quedan al principio si invertimos)
+        partes.reverse()
+        return pd.concat(partes, ignore_index=True)
+
+    return {
+        "ventas": _consolidar(planos_ventas),
+        "compras": _consolidar(planos_compras),
+    }
