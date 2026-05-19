@@ -48,6 +48,7 @@ CUENTAS_IVA_VENTAS = {
 # Cuentas estándar
 CUENTA_OTROS_IMP_GENERICO = "24959501"
 CUENTA_DEVOLUCION_VENTAS = "41754001"   # cuenta de devoluciones para NCs separadas
+CUENTA_PROPINAS_POS = "28150505"        # PUC JIPER — pasivo PROPINAS
 
 # Columnas del plano
 COLUMNAS_PLANO = [
@@ -490,18 +491,15 @@ def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
     """
     Genera un asiento consolidado por (día × prefijo) con BRUTO + NC SEPARADA.
 
-    Líneas:
-       Db CAJA           = (base+inc+iva+otros)
+    Líneas (FE / BRUTO):
+       Db CAJA           = (base + inc + iva + otros + propina)
        Cr BASE V         = base
        Cr ICO (24800505) = inc
        Cr IVA            = iva (si > 0)
        Cr OTROS          = otros (si > 0)
+       Cr PROPINAS       = propina (si > $2)   [cuenta 28150505 — PUC JIPER]
 
-       Si hay NCs:
-       Db DEVOLUCION VENTAS  = nc_base   (resta de base)
-       Db CTA INC            = nc_inc    (resta de INC pagado)
-       Db CTA IVA            = nc_iva    (resta de IVA, si > 0)
-       Cr CAJA               = (nc_total) - regresa al cliente
+    El cuadre Db = Cr está garantizado por construcción.
     """
     out = []
     fecha_str = g["fecha"].strftime("%m/%d/%Y")
@@ -511,9 +509,16 @@ def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
 
     # ── BRUTO (si hay facturas) ──
     if g["n_facturas"] > 0:
-        total_bruto_contable = round(g["base"] + g["inc"] + g["iva"] + g["otros"], 0)
+        propina = round(g.get("propina", 0), 0)
+        # Tolerancia: propinas ≤ $2 son redondeo, no se asientan
+        if propina <= TOLERANCIA:
+            propina = 0
 
-        # Db Caja
+        total_bruto_contable = round(
+            g["base"] + g["inc"] + g["iva"] + g["otros"] + propina, 0
+        )
+
+        # Db Caja (incluye propina)
         out.append({
             "CUENTA": g["cuenta_caja"], "COMPROBANTE": comp, "FECHA": fecha_str,
             "DOCUMENTO": doc, "DOC REFERENCIA": "",
@@ -558,6 +563,16 @@ def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
                 "NIT": NIT_GENERICO_POS, "DETALLE": f"OTROS - {detalle_base}",
                 "TR": TR_CREDITO, "VALOR": round(g["otros"], 0),
                 "BASE": round(g["base"], 0),
+                "CENTRO DE COSTO": g["cc"],
+            })
+        # Cr Propinas (cuenta 28150505)
+        if propina > 0:
+            out.append({
+                "CUENTA": CUENTA_PROPINAS_POS, "COMPROBANTE": comp,
+                "FECHA": fecha_str, "DOCUMENTO": doc, "DOC REFERENCIA": "",
+                "NIT": NIT_GENERICO_POS,
+                "DETALLE": f"PROPINA VENTAS {g['prefijo']} - {detalle_base}",
+                "TR": TR_CREDITO, "VALOR": propina, "BASE": "",
                 "CENTRO DE COSTO": g["cc"],
             })
 
