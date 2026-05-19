@@ -15,12 +15,21 @@ Hojas esperadas:
 DATOS PUNTO debe tener estas columnas (obligatorias):
     COMPROBANTE | NOMBRE EN REPORTE | SEDE | CC | CUENTA DE CAJA | CTA BASE V | CTA ICO | CLASE DE SEDE
 
-Asiento generado (3 líneas por día/sucursal):
-    Db CUENTA DE CAJA    = Total Final
-    Cr CTA BASE V        = Neto (subtotal sin IC)
-    Cr CTA ICO           = IC (Final - Neto)
+Columnas opcionales en DATOS PUNTO:
+    CTA PROPINAS — si no viene, se usa CUENTA_PROPINAS_DEFAULT (28150505).
 
-El cuadre Db = Cr es exacto por construcción.
+Asiento generado (3 o 4 líneas por día/sucursal):
+    Db CUENTA DE CAJA    = Total Final
+    Cr CTA BASE V        = base_inc (= INC/0.08 si hay propina, si no = Neto)
+    Cr CTA ICO           = Impuesto al Consumo
+    Cr CTA PROPINAS      = Final - base_inc - INC   (solo si > 0)
+
+Cuando NO hay propinas (caso clásico): base_inc = Neto, así que el asiento
+queda de 3 líneas y se comporta exactamente como antes.
+
+Cuando hay propinas:
+    base_inc + INC + propina = (INC/0.08) + INC + (Final − INC/0.08 − INC) = Final
+por lo que el cuadre Db = Cr está garantizado por construcción.
 """
 from __future__ import annotations
 import io
@@ -40,6 +49,18 @@ from openpyxl import load_workbook
 
 NIT_GENERICO_POS = "222222222"
 DETALLE_PREFIJO = "VENTAS POS "
+
+# Propinas — fórmula del usuario
+#   Si en el reporte viene 'impuestos' (INC del POS) > 0:
+#     base_inc  = inc / 0.08         (base teórica del impuesto al consumo)
+#     propina   = final - base_inc - inc
+#   La propina se acredita aparte; el cuadre Db=Cr se mantiene porque
+#     base_inc + inc + propina = base_inc + inc + (final - base_inc - inc) = final
+# Solo se calcula propina cuando inc > 0 (sin INC no hay base sobre la cual
+# despejar y la diferencia podría ser solo redondeo).
+TARIFA_INC_POS = 0.08
+TOLERANCIA_PROPINA_PESOS = 2   # diferencias <=$2 se tratan como redondeo, no propina
+CUENTA_PROPINAS_DEFAULT = "28150505"   # PUC JIPER — pasivo "PROPINAS"
 
 # Columnas finales del plano (orden exacto de salida)
 COLUMNAS_PLANO = [
@@ -200,6 +221,7 @@ class Sucursal:
     prefijo_token: str = ""       # Prefijo DIAN de facturación electrónica (ej: IND, OVI, VIV)
     prefijo_token_nc: str = ""    # Prefijo DIAN de notas crédito de esta sucursal (ej: NCI, NCVI)
     cta_devoluciones: str = ""    # Cuenta del PUC para devoluciones POS (ej: 41754001)
+    cta_propinas: str = ""        # Cuenta para propinas POS (ej: 28150505). Si vacía, usa default global.
 
     @property
     def clave_busqueda(self) -> str:
@@ -243,6 +265,15 @@ def _leer_datos_punto(wb) -> List[Sucursal]:
     except ValueError:
         pass
 
+    # CTA PROPINAS es opcional: si no viene, usa CUENTA_PROPINAS_DEFAULT
+    idx_propinas = None
+    for nombre_col in ("CTA PROPINAS", "CTA PROPINA", "CUENTA PROPINAS", "CUENTA PROPINA"):
+        try:
+            idx_propinas = encabezado.index(nombre_col)
+            break
+        except ValueError:
+            continue
+
     sucursales: List[Sucursal] = []
     for fila in filas[1:]:
         if not fila or not fila[idx["NOMBRE EN REPORTE"]]:
@@ -251,6 +282,9 @@ def _leer_datos_punto(wb) -> List[Sucursal]:
             clase = ""
             if idx_clase is not None and idx_clase < len(fila) and fila[idx_clase]:
                 clase = str(fila[idx_clase]).strip()
+            cta_prop = ""
+            if idx_propinas is not None and idx_propinas < len(fila) and fila[idx_propinas]:
+                cta_prop = _formato_cuenta(fila[idx_propinas])
             s = Sucursal(
                 comprobante=str(fila[idx["COMPROBANTE"]]).strip(),
                 nombre_reporte=str(fila[idx["NOMBRE EN REPORTE"]]).strip(),
@@ -260,6 +294,7 @@ def _leer_datos_punto(wb) -> List[Sucursal]:
                 cta_base_v=_formato_cuenta(fila[idx["CTA BASE V"]]),
                 cta_ico=_formato_cuenta(fila[idx["CTA ICO"]]),
                 clase=clase,
+                cta_propinas=cta_prop,
             )
             sucursales.append(s)
         except (ValueError, IndexError):
@@ -652,8 +687,32 @@ def _procesar_hoja(
             impuestos = info["impuestos"]
             final = info["final"]
 
-            if neto + impuestos != final:
-                impuestos = final - neto
+            # ── Desglose propinas ─────────────────────────────────
+            # Fórmula del usuario (solo aplica cuando hay INC reportado):
+            #   base_inc = inc / 0.08
+            #   propina  = final - base_inc - inc
+            # Si propina <= TOLERANCIA → no hay propinas (diferencia es solo
+            # redondeo o reporte sin propinas). Se mantiene la lógica clásica.
+            propina = 0
+            base_inc = neto  # default: neto reportado
+            if impuestos > 0:
+                base_inc_calc = int(round(impuestos / TARIFA_INC_POS))
+                propina_calc = final - base_inc_calc - impuestos
+                if propina_calc > TOLERANCIA_PROPINA_PESOS:
+                    # Sí hay propina: usar base teórica derivada del INC
+                    base_inc = base_inc_calc
+                    propina = propina_calc
+                else:
+                    # No hay propina significativa: mantener neto reportado
+                    # y reajustar impuestos para cuadrar (lógica clásica)
+                    if neto + impuestos != final:
+                        impuestos = final - neto
+                    base_inc = neto
+            else:
+                # Sin INC reportado: lógica clásica (cuadre forzado)
+                if neto + impuestos != final:
+                    impuestos = final - neto
+                base_inc = neto
 
             fecha_str = _formato_fecha_plano(f)
             documento = str(f.day)
@@ -665,6 +724,9 @@ def _procesar_hoja(
             detalle = f"{DETALLE_PREFIJO}{nombre_para_detalle}".upper()
             comp = suc.comprobante
 
+            # Cuenta de propinas: de la sucursal o default global
+            cta_prop = suc.cta_propinas or CUENTA_PROPINAS_DEFAULT
+
             filas_plano.append({
                 "CUENTA": suc.cuenta_caja, "COMPROBANTE": comp,
                 "FECHA": fecha_str, "DOCUMENTO": documento,
@@ -673,13 +735,13 @@ def _procesar_hoja(
                 "VALOR": final, "BASE": 0,
                 "CENTRO DE COSTO": suc.cc,
             })
-            if neto > 0:
+            if base_inc > 0:
                 filas_plano.append({
                     "CUENTA": suc.cta_base_v, "COMPROBANTE": comp,
                     "FECHA": fecha_str, "DOCUMENTO": documento,
                     "DOC REFERENCIA": "", "NIT": NIT_GENERICO_POS,
                     "DETALLE": detalle, "TR": "2",
-                    "VALOR": neto, "BASE": 0,
+                    "VALOR": base_inc, "BASE": 0,
                     "CENTRO DE COSTO": suc.cc,
                 })
             if impuestos > 0:
@@ -688,18 +750,29 @@ def _procesar_hoja(
                     "FECHA": fecha_str, "DOCUMENTO": documento,
                     "DOC REFERENCIA": "", "NIT": NIT_GENERICO_POS,
                     "DETALLE": detalle, "TR": "2",
-                    "VALOR": impuestos, "BASE": neto,
+                    "VALOR": impuestos, "BASE": base_inc,
+                    "CENTRO DE COSTO": suc.cc,
+                })
+            if propina > 0:
+                filas_plano.append({
+                    "CUENTA": cta_prop, "COMPROBANTE": comp,
+                    "FECHA": fecha_str, "DOCUMENTO": documento,
+                    "DOC REFERENCIA": "", "NIT": NIT_GENERICO_POS,
+                    "DETALLE": detalle, "TR": "2",
+                    "VALOR": propina, "BASE": 0,
                     "CENTRO DE COSTO": suc.cc,
                 })
 
     n_lineas = len(filas_plano)
-    n_asientos = n_lineas // 3 if n_lineas > 0 else 0
+    # Nota: cada asiento tiene 3 o 4 líneas (3 si no hay propina, 4 si la hay).
+    # Aproximamos por número de Db (TR=1), que es exactamente 1 por asiento.
     if n_lineas > 0:
         df_tmp = pd.DataFrame(filas_plano, columns=COLUMNAS_PLANO)
         total_db = int(df_tmp[df_tmp["TR"] == "1"]["VALOR"].astype(int).sum())
         total_cr = int(df_tmp[df_tmp["TR"] == "2"]["VALOR"].astype(int).sum())
+        n_asientos = int((df_tmp["TR"] == "1").sum())
         log.append(
-            f"  ✓ '{nombre_hoja}': {len(secciones)} secciones, ~{n_asientos} asientos. "
+            f"  ✓ '{nombre_hoja}': {len(secciones)} secciones, {n_asientos} asientos. "
             f"Db=${total_db:,} Cr=${total_cr:,}".replace(",", ".")
         )
     else:
@@ -975,6 +1048,7 @@ def cargar_datos_punto_embebido() -> List[Sucursal]:
             prefijo_token=str(item.get("prefijo_token", "")).strip().upper(),
             prefijo_token_nc=str(item.get("prefijo_token_nc", "")).strip().upper(),
             cta_devoluciones=_formato_cuenta(item.get("cta_devoluciones", "")),
+            cta_propinas=_formato_cuenta(item.get("cta_propinas", "")),
         ))
 
     if not sucursales:
@@ -997,10 +1071,11 @@ def datos_punto_embebido_a_xlsx() -> bytes:
     ws = wb.active
     ws.title = "DATOS PUNTO"
 
-    # Encabezado (mismo orden que el Excel original)
+    # Encabezado (incluye CTA PROPINAS opcional)
     ws.append([
         "COMPROBANTE", "NOMBRE EN REPORTE", "SEDE", "CC",
         "CUENTA DE CAJA", "CTA BASE V", "CTA ICO", "CLASE DE SEDE",
+        "CTA PROPINAS",
     ])
 
     for s in sucursales:
@@ -1013,6 +1088,7 @@ def datos_punto_embebido_a_xlsx() -> bytes:
             s.cta_base_v,
             s.cta_ico,
             s.clase,
+            s.cta_propinas or CUENTA_PROPINAS_DEFAULT,
         ])
 
     bio = io.BytesIO()
@@ -1040,6 +1116,7 @@ def info_datos_punto_embebido() -> dict:
                 "cuenta_caja": s.cuenta_caja,
                 "cta_base_v": s.cta_base_v,
                 "cta_ico": s.cta_ico,
+                "cta_propinas": s.cta_propinas or CUENTA_PROPINAS_DEFAULT,
                 "comprobante": s.comprobante,
             }
             for s in sucursales

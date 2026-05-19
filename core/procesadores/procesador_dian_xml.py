@@ -183,6 +183,17 @@ class DocumentoDIAN:
     pendiente_revision: bool = False
     razon_pendiente: str = ""
 
+    # Datos extendidos del emisor (para exportar a Siigo NITs).
+    # NO afectan la lógica contable; solo alimentan el plano de terceros nuevos.
+    # Se ubican al final del dataclass para no romper la firma posicional
+    # del constructor (los campos con default deben ir después de los obligatorios).
+    direccion_emisor: str = ""
+    ciudad_emisor: str = ""
+    codigo_ciudad_emisor: str = ""   # código DANE municipio (5 o 6 dígitos)
+    email_emisor: str = ""
+    telefono_emisor: str = ""
+    actividad_economica_emisor: str = ""   # código CIIU si viene en el XML
+
 
 @dataclass
 class LineaPlano:
@@ -367,6 +378,12 @@ def parsear_xml_dian(xml_bytes: bytes, archivo_origen: str = "") -> DocumentoDIA
     nombre_emisor = ""
     tipo_persona_emisor = ""
     regimen_emisor = ""
+    direccion_emisor = ""
+    ciudad_emisor = ""
+    codigo_ciudad_emisor = ""
+    email_emisor = ""
+    telefono_emisor = ""
+    actividad_economica_emisor = ""
     if sup is not None:
         nit_emisor = _texto(_find(sup, "cac:PartyTaxScheme/cbc:CompanyID"))
         nombre_emisor = _texto(_find(sup, "cac:PartyTaxScheme/cbc:RegistrationName"))
@@ -376,6 +393,33 @@ def parsear_xml_dian(xml_bytes: bytes, archivo_origen: str = "") -> DocumentoDIA
         # Régimen: 48 = responsable IVA, 49 = no responsable
         # (algunas FE lo traen en cbc:AdditionalAccountID dentro de Party)
         regimen_emisor = _texto(_find(sup, "cbc:AdditionalAccountID"))
+
+        # ── Datos extendidos para Siigo NITs ────────────────────────
+        # Dirección física: PartyTaxScheme/RegistrationAddress es la oficial
+        # (la que reporta la empresa al RUT). Si no, usar PhysicalLocation/Address.
+        addr_tax = _find(sup, "cac:PartyTaxScheme/cac:RegistrationAddress")
+        addr_phys = _find(sup, "cac:PhysicalLocation/cac:Address")
+        addr = addr_tax if addr_tax is not None else addr_phys
+
+        if addr is not None:
+            # Construir dirección de línea: AddressLine/Line + Department/CityName
+            linea = _texto(_find(addr, "cac:AddressLine/cbc:Line"))
+            ciudad_emisor = _texto(_find(addr, "cbc:CityName"))
+            codigo_ciudad_emisor = _texto(_find(addr, "cbc:ID"))  # código DANE
+            direccion_emisor = linea or _texto(_find(addr, "cbc:StreetName"))
+
+        # Contacto: email y teléfono
+        contact = _find(sup, "cac:Contact")
+        if contact is not None:
+            email_emisor = _texto(_find(contact, "cbc:ElectronicMail"))
+            telefono_emisor = _texto(_find(contact, "cbc:Telephone"))
+
+        # Actividad económica (código CIIU) — puede venir en distintos lugares:
+        # 1. PartyLegalEntity/CorporateRegistrationScheme/Name (común)
+        # 2. PartyTaxScheme/TaxScheme/Name (alterno)
+        actividad_economica_emisor = _texto(
+            _find(sup, "cac:PartyLegalEntity/cac:CorporateRegistrationScheme/cbc:Name")
+        )
 
     # Receptor (AccountingCustomerParty)
     cust = _find(root, "cac:AccountingCustomerParty/cac:Party")
@@ -461,6 +505,12 @@ def parsear_xml_dian(xml_bytes: bytes, archivo_origen: str = "") -> DocumentoDIA
         regimen_emisor=regimen_emisor,
         nit_receptor=nit_receptor,
         nombre_receptor=nombre_receptor,
+        direccion_emisor=direccion_emisor,
+        ciudad_emisor=ciudad_emisor,
+        codigo_ciudad_emisor=codigo_ciudad_emisor,
+        email_emisor=email_emisor,
+        telefono_emisor=telefono_emisor,
+        actividad_economica_emisor=actividad_economica_emisor,
         moneda=moneda,
         valor_bruto=valor_bruto,
         descuento_total=desc_total,

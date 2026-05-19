@@ -233,9 +233,13 @@ def construir_fila_siigo(
     celular: str = "",
     regimen: str = "",
     actividad_economica: str = "",
+    codigo_ciudad: str = "",
 ) -> dict:
     """
     Construye una fila con las 20 columnas del formato Siigo NITs.
+
+    `codigo_ciudad`: si se pasa el código DANE directamente (extraído del XML),
+    se usa con prioridad sobre la búsqueda heurística por nombre de ciudad.
     """
     nit_clean = normalizar_nit(nit)
     es_pn = es_persona_natural(nombre, regimen, nit_clean)
@@ -256,7 +260,15 @@ def construir_fila_siigo(
     #   C = Cédula (persona natural)
     tipo_doc = "C" if es_pn else "A"
 
-    mpio_cod = codigo_municipio(ciudad)
+    # Código DANE: priorizar el del XML (confiable) sobre la heurística por nombre
+    mpio_cod = ""
+    if codigo_ciudad:
+        # Limpiar: solo dígitos, dejar tal cual (5 o 6 caracteres válidos)
+        cod_limpio = re.sub(r"\D", "", str(codigo_ciudad))
+        if cod_limpio:
+            mpio_cod = cod_limpio
+    if not mpio_cod:
+        mpio_cod = codigo_municipio(ciudad)
 
     return {
         "NIT":                nit_clean,
@@ -313,6 +325,7 @@ def exportar_nits_desde_maestro(
             celular=datos.get("celular", "") or datos.get("telefono", ""),
             regimen=datos.get("tax_level_principal", ""),
             actividad_economica=datos.get("actividad_economica", ""),
+            codigo_ciudad=datos.get("codigo_ciudad", ""),
         )
         filas.append(fila)
 
