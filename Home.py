@@ -1,17 +1,14 @@
 """
-Plataforma Contable Web - Punto de entrada simplificado.
+Plataforma Contable Web - Punto de entrada con navegación agrupada
 
-SIMPLIFICACIÓN v0.4 (mayo 2026):
-    El menú visible está reducido a 2 módulos operativos:
-      1. 🧾 Ventas POS          → app_pages/4b_Ingresos_POS.py
-      2. 📥 Descargador XML DIAN → app_pages/5b_Descargador_XML.py (NUEVO)
+Usa st.navigation() (Streamlit 1.36+) para agrupar las páginas en 3 secciones:
+    - 🤖 Asistente Contable: módulos de procesamiento contable diario
+    - 📊 Herramientas Tributarias: declaraciones e información tributaria
+    - ⚙️ Sistema: configuración y panel de administración
 
-    El resto de páginas (Caja Menor, Compras, Nómina, RADIAN, Exógena, Renta,
-    IVA, Retención, Saludables, Provisiones, Ventas C13, PILA, Token DIAN
-    standalone, etc.) NO se incluyen en la navegación pero los archivos siguen
-    en `app_pages/` para reactivación futura.
-
-    Para reactivar alguna: agregarla a la sección de `nav` abajo.
+Las páginas viven en pages/ con prefijos numéricos (1_, 2_, etc.).
+Los nombres son ASCII para evitar problemas con GitHub web upload.
+Los emojis los pone st.Page() vía el parámetro icon=, no el filename.
 """
 import sys
 from pathlib import Path
@@ -25,7 +22,7 @@ from auth.login import login_form, is_authenticated, current_user
 
 
 # ============================================================
-# Configuración global
+# Configuración global de la app (única llamada en todo el proyecto)
 # ============================================================
 
 st.set_page_config(
@@ -37,7 +34,7 @@ st.set_page_config(
 
 
 # ============================================================
-# Login obligatorio
+# Si no hay sesión, mostrar login y detener
 # ============================================================
 
 if not is_authenticated():
@@ -46,11 +43,11 @@ if not is_authenticated():
 
 
 # ============================================================
-# Página de inicio (versión simplificada)
+# Página de inicio (dashboard de bienvenida)
 # ============================================================
 
 def home_page():
-    """Dashboard de bienvenida con las 2 tarjetas activas."""
+    """Dashboard de bienvenida con tarjetas de cada sección."""
     from auth.login import sidebar_user_info
     from auth.empresas import (
         seleccionar_empresa_sidebar,
@@ -68,54 +65,77 @@ def home_page():
     empresas = empresas_del_usuario()
     if not empresas:
         st.warning(
-            "🏢 No tienes empresas asignadas todavía. "
-            "Contacta al administrador."
+            "🏢 No tienes empresas asignadas todavía.\n\n"
+            "Si eres administrador, ve a **Configuración** o al **Panel Admin** "
+            "para crear tu primera empresa. Si no, contacta a tu administrador."
         )
         return
 
-    col1, col2 = st.columns(2)
+    # Métricas superiores
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric("Módulos activos", "2")
+        st.metric("Módulos disponibles", "15")
+    with col3:
+        st.metric("Sesión", "Activa")
 
-    st.markdown("### 📦 Módulos activos")
+    st.markdown("### 📦 Secciones de la plataforma")
 
     col_a, col_b = st.columns(2)
 
     with col_a:
         with st.container(border=True):
-            st.markdown("#### 🧾 Ventas POS")
+            st.markdown("#### 🤖 Asistente Contable")
             st.markdown(
-                "Sube los reportes POS del mes (CHILI, L3AF, HENKO) y "
-                "genera el plano contable de ingresos por día por sucursal. "
-                "Incluye desglose automático de propinas vía la fórmula "
-                "del impuesto al consumo (INC ÷ 8%)."
+                "_Procesamiento contable diario y mensual._"
+            )
+            st.markdown(
+                "- 💵 Caja Menor\n"
+                "- 🛒 Compras DIAN\n"
+                "- 📊 Compras y Egresos\n"
+                "- 💼 Nómina\n"
+                "- 📝 Provisiones\n"
+                "- 🛍️ Ventas C13\n"
+                "- 🧾 Ingresos POS\n"
+                "- 📎 PILA\n"
+                "- 📥 DIAN XML"
             )
 
     with col_b:
         with st.container(border=True):
-            st.markdown("#### 📥 Descargador XML DIAN")
+            st.markdown("#### 📊 Herramientas Tributarias")
             st.markdown(
-                "Sube el Excel del Token DIAN como referencia, elige los "
-                "tipos de documentos a descargar (FE, NC, ND, DSE) para "
-                "recibidos y los prefijos para emitidos, descarga directo "
-                "desde DIAN y procesa los XMLs al plano contable + plano "
-                "de terceros nuevos para Siigo."
+                "_Declaraciones e información tributaria periódica._"
             )
+            st.markdown(
+                "- 📑 RADIAN Acuses DIAN\n"
+                "- 📑 Información Exógena\n"
+                "- 📝 Declaración de Renta\n"
+                "- 💸 IVA y reteIVA\n"
+                "- 🧾 Retención en la Fuente\n"
+                "- 🥤 Impuestos Saludables (INC, IBUA, ICUI)"
+            )
+
+    st.markdown("### ⚙️ Sistema")
+    st.markdown(
+        "- 🛡️ **Panel Admin** — gestión de superadmin (solo superadmins)\n"
+        "- ⚙️ **Configuración** — empresas, archivos, usuarios, módulos"
+    )
 
     st.markdown("---")
     st.info(
-        "ℹ️ El resto de módulos (Caja Menor, Nómina, Tributarios, etc.) "
-        "están temporalmente ocultos pero conservados en el repo. "
-        "Para reactivarlos, editar `Home.py`."
+        "🛡️ Tu sesión está protegida por autenticación Supabase. "
+        "Todos los archivos que subes quedan asociados solo a la empresa activa "
+        "y no son visibles para usuarios de otras empresas."
     )
 
 
 # ============================================================
-# Definir las 2 páginas VISIBLES
+# Definir las páginas con st.Page + st.navigation
 # ============================================================
 
+# Página de inicio
 pagina_inicio = st.Page(
     home_page,
     title="Inicio",
@@ -124,33 +144,142 @@ pagina_inicio = st.Page(
     url_path="inicio",
 )
 
+# ----- Sección: Asistente Contable -----
+asistente_caja = st.Page(
+    "app_pages/1_Caja_Menor.py",
+    title="Caja Menor",
+    icon="💵",
+    url_path="caja-menor",
+)
+asistente_token_dian = st.Page(
+    "app_pages/2_Procesar_Token_DIAN.py",
+    title="Procesar Token DIAN",
+    icon="📥",
+    url_path="procesar-token-dian",
+)
+asistente_nomina = st.Page(
+    "app_pages/3_Nomina.py",
+    title="Nómina",
+    icon="💼",
+    url_path="nomina",
+)
+asistente_prov = st.Page(
+    "app_pages/4_Provisiones.py",
+    title="Provisiones",
+    icon="📝",
+    url_path="provisiones",
+)
+asistente_ventas_c13 = st.Page(
+    "app_pages/4a_Ventas_C13.py",
+    title="Ventas C13",
+    icon="🛍️",
+    url_path="ventas-c13",
+)
 asistente_pos = st.Page(
     "app_pages/4b_Ingresos_POS.py",
     title="Ventas POS",
     icon="🧾",
     url_path="ventas-pos",
 )
-asistente_xml = st.Page(
+asistente_pila = st.Page(
+    "app_pages/5_PILA.py",
+    title="PILA",
+    icon="📎",
+    url_path="pila",
+)
+asistente_xml_descargador = st.Page(
     "app_pages/5b_Descargador_XML.py",
     title="Descargador XML DIAN",
     icon="📥",
     url_path="descargador-xml",
 )
 
+# ----- Sección: Herramientas Tributarias -----
+trib_radian = st.Page(
+    "app_pages/6_RADIAN_Acuses_DIAN.py",
+    title="RADIAN Acuses DIAN",
+    icon="📑",
+    url_path="radian-acuses",
+)
+trib_exogena = st.Page(
+    "app_pages/7_Informacion_Exogena.py",
+    title="Información Exógena",
+    icon="📑",
+    url_path="exogena",
+)
+trib_renta = st.Page(
+    "app_pages/8_Declaracion_Renta.py",
+    title="Declaración de Renta",
+    icon="📝",
+    url_path="renta",
+)
+trib_iva = st.Page(
+    "app_pages/9_IVA.py",
+    title="IVA y reteIVA",
+    icon="💸",
+    url_path="iva",
+)
+trib_retencion = st.Page(
+    "app_pages/10_Retencion_Fuente.py",
+    title="Retención en la Fuente",
+    icon="🧾",
+    url_path="retencion",
+)
+trib_saludables = st.Page(
+    "app_pages/11_Impuestos_Saludables.py",
+    title="Impuestos Saludables",
+    icon="🥤",
+    url_path="saludables",
+)
+
+# ----- Sección: Sistema -----
+sistema_panel_admin = st.Page(
+    "app_pages/0_Panel_Admin.py",
+    title="Panel Admin",
+    icon="🛡️",
+    url_path="panel-admin",
+)
+sistema_config = st.Page(
+    "app_pages/6_Configuracion.py",
+    title="Configuración",
+    icon="⚙️",
+    url_path="configuracion",
+)
+
 
 # ============================================================
-# Navegación: solo 2 módulos activos en el sidebar
+# Navegación agrupada
 # ============================================================
 
 nav = st.navigation(
     {
         "": [pagina_inicio],
         "🤖 Asistente Contable": [
+            asistente_caja,
+            asistente_token_dian,
+            asistente_nomina,
+            asistente_prov,
+            asistente_ventas_c13,
             asistente_pos,
-            asistente_xml,
+            asistente_pila,
+            asistente_xml_descargador,
+        ],
+        "📊 Herramientas Tributarias": [
+            trib_radian,
+            trib_exogena,
+            trib_renta,
+            trib_iva,
+            trib_retencion,
+            trib_saludables,
+        ],
+        "⚙️ Sistema": [
+            sistema_panel_admin,
+            sistema_config,
         ],
     },
     position="sidebar",
 )
 
+
+# Ejecutar la página seleccionada
 nav.run()
