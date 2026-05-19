@@ -1,141 +1,138 @@
-# Parche v8 — JIPER + PT DIAN Multi-tenant (mayo 2026)
+# Parche v9 — JIPER + DIAN PT + DIAN FE (mayo 2026)
 
-Acumula todo el trabajo previo + sistema multi-tenant completo.
+Sesión muy extensa que acumuló:
+- Trabajo previo (POS, descargador XML, multi-empresa, propinas, plano cronológico)
+- Módulo `core/dian_pt/` para eventos RADIAN (3.497 líneas)
+- Módulo `core/dian_fe/` para facturas electrónicas (1.517 líneas) **🆕**
 
-## 🆕 Nuevo en este turno: Multi-tenant
+## 🆕 Nuevo en este turno: `core/dian_fe/`
 
-3 archivos nuevos en `core/dian_pt/`:
+Base de código para emitir Facturas Electrónicas de Venta DIAN.
 
-### `vault.py` (440 líneas)
-Almacén cifrado AES-256-GCM de credenciales DIAN por cliente.
-- PBKDF2-HMAC-SHA256 con 300k iteraciones.
-- Salt único por cliente, nonce único por operación.
-- Verifica que NIT del cert coincida con NIT declarado.
-- Sobreescritura con basura antes de eliminar (defensa básica).
-
-### `auditoria.py` (353 líneas)
-Logs JSONL mensuales de todas las operaciones DIAN.
-- Hash SHA-256 del XML enviado (no guarda el XML completo, datos sensibles).
-- Consulta filtrada por cliente, tipo, fecha.
-- Resumen estadístico mensual por cliente.
-- Retención automática NO (DIAN exige 5 años, configurar archivado externo).
-
-### `servicio_multi_tenant.py` (448 líneas)
-Orquestador que une vault + auditoría + módulo dian_pt.
-API simple para la UI:
-```python
-servicio = ServicioDIAN(master_password="...")
-servicio.registrar_cliente(nit="...", p12_bytes=..., ...)
-resultado = servicio.enviar_evento(nit_cliente="...", tipo_evento="030", ...)
-```
-- Carga creds del vault solo cuando se necesita (no en memoria persistente).
-- Auditoría automática de cada operación.
-- Calcula DV con algoritmo oficial DIAN.
-- Maneja consecutivos por cliente.
-
-## Modelo conceptual
-
-```
-Cliente JIPER ─┐
-               │
-Cliente B ─────┼─→ Tu Plataforma (puente) ──→ DIAN
-               │   - Vault cifrado AES-256
-Cliente C ─────┘   - Cada cliente con SU certificado
-                   - Plataforma solo facilita, no es PT
-```
-
-Tu plataforma es **software puente**, NO Proveedor Tecnológico.
-Cada cliente:
-1. Compra su certificado .p12.
-2. Hace su trámite ante DIAN (recibe Software ID + PIN + Clave técnica).
-3. Sube sus 5 credenciales a tu plataforma.
-4. La plataforma firma con SU certificado y envía a DIAN en su nombre.
-
-**Ventajas vs Modo PT:**
-- Sin habilitación de tu empresa ante DIAN.
-- Sin pólizas obligatorias.
-- Sin SLA 99.5%.
-- Tú no eres responsable solidario.
-
-## Estado del módulo `core/dian_pt/`
+### Archivos nuevos
 
 | Archivo | Líneas | Función |
 |---|---|---|
-| `__init__.py` | 177 | API pública |
-| `certificado.py` | 284 | Cargar .p12 |
-| `cude_calculator.py` | 209 | Hash SHA-384 DIAN |
-| `xml_evento_radian.py` | 575 | XML UBL 2.1 |
-| `firmador_xades.py` | 479 | Firma XAdES-EPES |
-| `cliente_dian_soap.py` | 532 | Cliente SOAP+WSSecurity |
-| **`vault.py`** | **440** | **🆕 Vault cifrado** |
-| **`auditoria.py`** | **353** | **🆕 Logs JSONL** |
-| **`servicio_multi_tenant.py`** | **448** | **🆕 Orquestador** |
-| **Total** | **3,497** | |
+| `__init__.py` | 112 | API pública del módulo |
+| `modelos.py` | 498 | Dataclasses: Factura, LineaFactura, ParteFE, Resolucion, ImpuestoLinea, etc. |
+| `cufe_calculator.py` | 326 | Hash SHA-384 del CUFE según fórmula DIAN |
+| `xml_factura.py` | 581 | Generador XML UBL 2.1 completo |
+| `README.md` | ~200 | Documentación técnica |
 
-## Validaciones de esta sesión
+### Lo que cubre
 
-- ✅ Vault: guardar/cargar/eliminar, multi-tenant, password incorrecta detectada, NIT mismatch detectado.
-- ✅ Auditor: registro JSONL, consulta filtrada, resumen estadístico.
-- ✅ Orquestador: registro de cliente, pipeline completo (vault→CUDE→XML→firma→envelope), auditoría automática.
-- ✅ 51 tests previos pasan, 0 regresiones.
+✅ Modelos de datos para factura JIPER (responsable IVA + INC 8% restaurante)
+✅ Cálculo del CUFE con formato decimal correcto
+✅ Generación XML UBL 2.1 con todas las extensiones DIAN:
+  - UBLExtensions con DianExtensions
+  - InvoiceControl (resolución, prefijo SETP, rango)
+  - InvoiceSource, SoftwareProvider, AuthorizationProvider
+  - SoftwareSecurityCode (SHA-384 del SoftwareID + PIN + CUFE) ← calculado automáticamente
+  - QRCode con URL pública DIAN
+  - AccountingSupplierParty / AccountingCustomerParty completos
+  - TaxTotal, LegalMonetaryTotal, InvoiceLine
+  - Placeholder firma XAdES (lo llena el firmador)
 
-## Lo que TODAVÍA falta para producción
+### Lo que NO cubre todavía
 
-❌ UI Streamlit para registrar/listar/usar clientes.
-❌ Persistencia de consecutivos en SQLite (ahora son en memoria).
-❌ Página de auditoría para revisar envíos pasados.
-❌ Pruebas reales contra ambiente de habilitación DIAN.
-❌ Actualizar hash de política de firma DIAN al vigente.
-❌ Acompañamiento del consultor DIAN para pasar habilitación cliente por cliente.
+❌ Notas Crédito (el set pide 10 — falta `xml_nota_credito.py`)
+❌ Notas Débito (el set pide 10 — falta `xml_nota_debito.py`)
+❌ Cliente SOAP método `SendBillSync` para facturas (el actual es para eventos)
+❌ Retenciones (renta, IVA, ICA)
+❌ Descuentos globales complejos
+❌ Múltiples IVAs en una misma factura
+❌ Validación contra XSD oficial DIAN
 
-## Próximos pasos sugeridos
+### Datos JIPER ya configurados
 
-1. **Antes que nada**: que JIPER se habilite como autofacturador en DIAN
-   (es ELLOS quien tramita, no tu plataforma).
-2. JIPER recibe sus 5 credenciales DIAN (Software ID, PIN, Clave técnica + RUT con DV + Certificado).
-3. Usas el servicio para registrar JIPER en el vault.
-4. Primer envío al ambiente de habilitación.
-5. Iteras con DIAN hasta que acepte (semanas).
-6. Replicar el proceso para cada cliente nuevo.
+| Dato | Valor |
+|---|---|
+| NIT / DV | 901038325 / 1 |
+| Razón social | JIPER SAS |
+| Régimen | Responsable IVA (O-13) |
+| CIIU | 5611 (restaurantes) |
+| Software ID | aa20f88a-390b-4b48-8e2b-60560f126a36 |
+| PIN del SW | 86818 |
+| Clave técnica | fc8eac422eba16e22ffd8c6f94b3f40a6e38162c |
+| Resolución | 18760000001 SETP 990000000-995000000 |
+| TestSetId (vigente) | fa0e4d06-89cf-4b88-ad9f-542bef612d32 |
 
-## Uso desde código (sin UI todavía)
+## Pipeline funcionando (test end-to-end)
 
 ```python
-from core.dian_pt import ServicioDIAN
-from datetime import datetime, timezone, timedelta
+from core.dian_fe import Factura, LineaFactura, ParteFE, Resolucion, MedioPago, ImpuestoLinea
+from core.dian_fe import calcular_cufe_desde_factura, generar_xml_factura
+from core.dian_pt import cargar_p12, firmar_xml
 
-# Master password se configura en variable de entorno
-import os
-servicio = ServicioDIAN(master_password=os.environ["DIAN_MASTER_PWD"])
+# 1) Construir factura con datos JIPER
+factura = Factura(folio=990000001, ...)
+factura.calcular_totales()
+factura.cufe = calcular_cufe_desde_factura(factura, ambiente="habilitacion")
 
-# Registrar cliente (una sola vez)
-with open("jiper.p12", "rb") as f:
-    p12 = f.read()
+# 2) Generar XML
+xml = generar_xml_factura(factura)
+# ✅ XML UBL 2.1 de ~9KB, 16/16 validaciones críticas
 
-servicio.registrar_cliente(
-    nit="901038325",
-    razon_social="JIPER SAS",
-    p12_bytes=p12,
-    p12_password=os.environ["JIPER_P12_PWD"],
-    software_id="...",  # DIAN lo da
-    software_security_code="...",  # DIAN lo da
-    clave_tecnica="...",  # DIAN la da
-    ambiente="habilitacion",
-)
+# 3) Firmar (reusa el firmador del módulo dian_pt)
+cert = cargar_p12("jiper.p12", "pass")
+xml_firmado = firmar_xml(xml, cert)
+# ✅ XML firmado de ~13KB, firma XAdES-EPES criptográficamente válida
 
-# Enviar acuse 030
-tz = timezone(timedelta(hours=-5))
-resultado = servicio.enviar_evento(
-    nit_cliente="901038325",
-    tipo_evento="030",
-    cufe_factura="<CUFE del proveedor>",
-    numero_factura="FE-12345",
-    fecha_factura=datetime(2026, 3, 15, tzinfo=tz),
-    monto_factura=1500000,
-    nit_proveedor="800111222",
-    dv_proveedor="3",
-    razon_social_proveedor="PROVEEDOR SAS",
-)
-
-print(f"Track ID: {resultado.track_id}")
+# 4) Enviar: PENDIENTE — extender cliente SOAP con SendBillSync para facturas
 ```
+
+## Resumen final del trabajo DIAN
+
+```
+core/dian_pt/                       3.497 líneas (eventos RADIAN)
+  ├── certificado.py
+  ├── cude_calculator.py
+  ├── xml_evento_radian.py
+  ├── firmador_xades.py             ← reutilizado por dian_fe
+  ├── cliente_dian_soap.py          ← extensión pendiente para facturas
+  ├── vault.py
+  ├── auditoria.py
+  └── servicio_multi_tenant.py
+
+core/dian_fe/                       1.517 líneas (facturas) 🆕
+  ├── modelos.py
+  ├── cufe_calculator.py
+  └── xml_factura.py
+
+Total módulos DIAN:                 5.014 líneas
+```
+
+## Próximos pasos (próxima sesión)
+
+### Antes de la próxima sesión, tú prepara:
+1. Descargar **Anexo Técnico DIAN versión vigente** (PDF, ~300 páginas).
+   https://www.dian.gov.co/impuestos/factura-electronica/factura-electronica/Paginas/anexos-tecnicos.aspx
+2. En el portal DIAN, ver si aparece la **lista de los 50 escenarios** específicos del set.
+3. Tener el **.p12 real** de JIPER listo (Andes/Certicámara/GSE).
+
+### En la próxima sesión:
+1. Validar CUFE contra ejemplo del Anexo Técnico vigente (puede requerir ajuste).
+2. Extender `cliente_dian_soap.py` con método `enviar_factura()` (SendBillSync).
+3. Construir generador de Notas Crédito (`xml_nota_credito.py` ~600 líneas).
+4. Construir generador de Notas Débito (`xml_nota_debito.py` ~600 líneas).
+5. UI Streamlit para registrar credenciales y emitir documentos.
+6. Primer envío real al ambiente de habilitación.
+7. Iterar contra errores DIAN.
+
+## Validación de esta sesión
+
+- ✅ 51 tests previos pasan (0 regresiones)
+- ✅ Pipeline FE end-to-end: modelos → CUFE → XML → firma → OK
+- ✅ Test caso JIPER: 2 platos + 1 limonada = $66.000 base + INC 8% = $71.280 total
+- ✅ XML de 9.360 bytes con 16/16 validaciones críticas
+- ✅ Firma XAdES de 13.753 bytes criptográficamente válida
+
+## ⚠️ Disclaimer importante
+
+Este código es **BASE para iteración contra DIAN**, NO producto terminado.
+- El CUFE probablemente requiere ajuste fino contra el ejemplo del Anexo Técnico vigente.
+- El XML probablemente fallará en el primer envío con códigos como FAJ60-69 que indican qué campo ajustar.
+- La firma puede requerir actualizar el hash de política DIAN.
+- El SOAP requiere extensión para `SendBillSync`.
+
+Esperá rechazos de DIAN en los primeros envíos. Cada rechazo te dirá qué archivo ajustar.
