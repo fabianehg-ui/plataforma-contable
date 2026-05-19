@@ -736,13 +736,19 @@ def aplicar_mapeo(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN:
     automáticamente Y NO marca como pendiente_revision (la asignación es correcta).
     """
     mapeo_full = bundle_empresa["mapeo"]
+    empresa = bundle_empresa.get("empresa", {})
+    # Default robusto: si empresa.json define cc_default lo usa; si no, ADMIN.
+    cc_def = (
+        empresa.get("centro_costo_default")
+        or empresa.get("cc_default")
+        or "ADMIN"
+    )
     fallback = mapeo_full.get("_fallback_global", {
-        "cuenta": "519095",
-        "centro_costo": "ADMIN",
+        "cuenta": empresa.get("cuenta_pendiente_revision", "519095"),
+        "centro_costo": cc_def,
         "concepto": "PENDIENTE DE MAPEO",
     })
     catalogo = mapeo_full.get("mapeo", {})
-    empresa = bundle_empresa.get("empresa", {})
     auto_insumos = empresa.get("auto_insumos_alimenticios", {})  # {"activo": true, "cuenta": "143505", "centro_costo": "PROD"}
 
     nit = re.sub(r"[^0-9]", "", doc.nit_emisor or "")
@@ -754,7 +760,7 @@ def aplicar_mapeo(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN:
         if (auto_insumos.get("activo")
                 and _es_insumo_alimenticio(doc.nombre_emisor, descripciones)):
             cuenta_ins = auto_insumos.get("cuenta", "143505")
-            cc_ins = auto_insumos.get("centro_costo", empresa.get("centro_costo_default", "ADMIN"))
+            cc_ins = auto_insumos.get("centro_costo", cc_def)
             concepto_ins = auto_insumos.get("concepto", "Materia prima - alimentos (auto)")
             for it in doc.items:
                 it.cuenta = cuenta_ins
@@ -996,7 +1002,7 @@ class GeneradorPlano:
             lineas.append(LineaPlano(
                 fecha=fecha_plano, comprobante=comp, consecutivo=consecutivo,
                 cuenta=cuenta,
-                centro_costo=self.empresa.get("centro_costo_default", "ADMIN"),
+                centro_costo=(self.empresa.get("centro_costo_default") or self.empresa.get("cc_default", "ADMIN")),
                 nit_tercero=doc.nit_emisor,
                 descripcion=etiqueta,
                 documento_referencia=doc_ref,
@@ -1004,17 +1010,23 @@ class GeneradorPlano:
                 credito=v if not es_nc else Decimal(0),
             ))
 
-        # 4) Contrapartida = cuenta por pagar (22050501 estándar)
-        # Db = neto + IVA, Cr = retenciones; el saldo va a cuenta por pagar
+        # 4) Contrapartida = cuenta por pagar (toma de empresa.json si existe,
+        #    si no usa el default histórico 22050501)
         total_db = sum((l.debito for l in lineas), Decimal(0))
         total_cr = sum((l.credito for l in lineas), Decimal(0))
         contrapartida = total_db - total_cr
 
+        cuenta_contrapartida = (
+            self.empresa.get("cuentas_proveedores", {}).get("default")
+            or "22050501"
+        )
+
         if contrapartida != 0:
             lineas.append(LineaPlano(
                 fecha=fecha_plano, comprobante=comp, consecutivo=consecutivo,
-                cuenta="22050501",
-                centro_costo=self.empresa.get("centro_costo_default", "ADMIN"),
+                cuenta=cuenta_contrapartida,
+                centro_costo=self.empresa.get("centro_costo_default")
+                    or self.empresa.get("cc_default", "ADMIN"),
                 nit_tercero=doc.nit_emisor,
                 descripcion=doc.nombre_emisor[:60],
                 documento_referencia=doc_ref,
@@ -1042,7 +1054,7 @@ class GeneradorPlano:
     def _cc_dominante_bienes(self, items: list[ItemFactura]) -> str:
         bienes = [it for it in items if not it.es_servicio]
         if not bienes:
-            return self.empresa.get("centro_costo_default", "ADMIN")
+            return (self.empresa.get("centro_costo_default") or self.empresa.get("cc_default", "ADMIN"))
         return max(set(it.centro_costo for it in bienes), key=lambda cc: sum(
             (it.valor_neto for it in bienes if it.centro_costo == cc), Decimal(0)
         ))
@@ -1050,7 +1062,7 @@ class GeneradorPlano:
     def _cc_dominante_servicios(self, items: list[ItemFactura]) -> str:
         servs = [it for it in items if it.es_servicio]
         if not servs:
-            return self.empresa.get("centro_costo_default", "ADMIN")
+            return (self.empresa.get("centro_costo_default") or self.empresa.get("cc_default", "ADMIN"))
         return max(set(it.centro_costo for it in servs), key=lambda cc: sum(
             (it.valor_neto for it in servs if it.centro_costo == cc), Decimal(0)
         ))

@@ -1,0 +1,11 @@
+{
+  "_descripcion": "Palabras clave que aparecen en notas (cbc:Note) o descripciones de ítems del XML para detectar el centro de costo correcto. Tiene PRIORIDAD MÁXIMA sobre la dirección de entrega.",
+  "_orden_evaluacion": [
+    "Las reglas se evalúan EN ORDEN. La primera que matchee gana.",
+    "Si una nota dice varias cosas, gana la regla más específica (con más palabras clave) primero.",
+    "Si ninguna regla matchea, se cae al siguiente nivel (dirección de entrega → NIT default → empresa default)."
+  ],
+  "_normalizacion": "Antes de comparar: UPPER, sin acentos, sin puntuación. Por eso 'CLÍNICA' = 'CLINICA'.",
+
+  "reglas_por_prioridad": []
+}
