@@ -1,16 +1,26 @@
 """
 app_pages/4b_Ingresos_POS.py
 
-Módulo Ventas POS — versión simplificada.
+Módulo Ventas POS — dos modos de generar el plano:
 
-Flujo:
-  1️⃣ Subir los 4 reportes POS por separado (CHILI, L3AF, HENKO Milagros, HENKO Remedios)
-  2️⃣ Procesar → plano contable
-  3️⃣ Descargar plano (TXT/XLSX)
-  4️⃣ [OPCIONAL] Conciliar contra Excel del Token DIAN → reporte de auditoría
+  📊 Modo A — REPORTES POS (flujo original):
+     1️⃣ Subir los 4 reportes POS (CHILI, L3AF, HENKO Milagros, HENKO Remedios)
+     2️⃣ Procesar → plano contable con propinas (Cr 28150505) y CC por sucursal
+     3️⃣ Descargar plano (TXT/XLSX)
+     4️⃣ [OPCIONAL] Conciliar contra Excel del Token DIAN → auditoría
 
-El maestro de sucursales (DATOS PUNTO) se lee de `core/data/datos_punto.json`
-del repo. No es necesario incluir hoja DATOS PUNTO en los Excel.
+  💾 Modo B — EXCEL DEL TOKEN DIAN:
+     1️⃣ Subir el Excel del Token DIAN
+     2️⃣ Procesar → plano contable consolidado por (día × prefijo) con
+        mapeo de centros de costo desde mapeo_prefijos_token.json y
+        propinas asentadas a la cuenta 28150505
+     3️⃣ Descargar plano (TSV/Excel)
+
+Ambos modos respetan el mismo mapeo de cuentas/CC y la misma fórmula de
+propinas (INC ÷ 8% como base, propina = total − base − INC).
+
+El maestro de sucursales (DATOS PUNTO) se lee de `core/data/datos_punto.json`.
+El mapeo Token de prefijos se lee de `mapeo_prefijos_token.json`.
 """
 from __future__ import annotations
 
@@ -112,6 +122,222 @@ with st.expander(
     )
 
 st.markdown("---")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# SELECTOR DE FUENTE — Reportes POS o Excel del Token DIAN
+# ════════════════════════════════════════════════════════════════════════
+modo_fuente = st.radio(
+    "Elige la fuente de datos para generar el plano:",
+    options=[
+        "📊 Reportes POS (CHILI, L3AF, HENKO)",
+        "💾 Excel del Token DIAN",
+    ],
+    horizontal=True,
+    key="pos_modo_fuente",
+    help=(
+        "Reportes POS: usa los reportes que generan los sistemas de los puntos. "
+        "Excel del Token: usa el Excel exportado del portal DIAN; el procesador "
+        "consolida por día×prefijo con el mapeo de prefijos del repo y asienta "
+        "propinas a la cuenta 28150505."
+    ),
+)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# MODO B — EXCEL DEL TOKEN DIAN
+# ════════════════════════════════════════════════════════════════════════
+if modo_fuente == "💾 Excel del Token DIAN":
+    st.markdown("## 1️⃣ Sube el Excel del Token DIAN")
+    st.caption(
+        "Es el Excel exportado del portal DIAN con todas las ventas emitidas. "
+        "El procesador detecta cada prefijo y lo mapea a su sucursal/CC/cuentas "
+        "usando `mapeo_prefijos_token.json`."
+    )
+
+    archivo_token_pos = st.file_uploader(
+        "Excel del Token (.xlsx)",
+        type=["xlsx"],
+        key="up_token_pos_mode",
+    )
+
+    if archivo_token_pos is None:
+        st.info("📂 Sube el Excel del Token para continuar.")
+        st.stop()
+
+    # Cargar lector + procesador del Token (diferido para no impactar modo A)
+    from core.procesadores import lector_excel_token as _lex_tok
+    from core.procesadores import procesador_ventas_excel_token_v2 as _pve2
+
+    RUTA_MAPEO_PREF = ROOT / "mapeo_prefijos_token.json"
+    RUTA_MAPEO_DSE = ROOT / "mapeo_dse_conceptos.json"
+
+    if not RUTA_MAPEO_PREF.exists():
+        st.error(
+            f"❌ Falta `mapeo_prefijos_token.json` en la raíz del repo. "
+            f"Sin ese archivo no se pueden mapear los prefijos a sucursal/CC."
+        )
+        st.stop()
+
+    # Leer Excel
+    try:
+        with st.spinner("Leyendo Excel del Token..."):
+            df_token = _lex_tok.leer_excel_token(archivo_token_pos)
+    except Exception as e:
+        st.error(f"❌ Error leyendo Excel: {e}")
+        st.stop()
+
+    st.success(f"✅ Excel leído: {len(df_token):,} documentos.")
+
+    # Filtro de fechas
+    fechas_validas = df_token["fecha_emision"].dropna()
+    if len(fechas_validas) == 0:
+        st.error("El Excel no tiene fechas válidas.")
+        st.stop()
+
+    f_min = fechas_validas.min().date()
+    f_max = fechas_validas.max().date()
+    col_fa, col_fb = st.columns(2)
+    with col_fa:
+        f_desde = st.date_input(
+            "Desde", value=f_min, min_value=f_min, max_value=f_max,
+            format="YYYY-MM-DD", key="pos_tok_fdesde",
+        )
+    with col_fb:
+        f_hasta = st.date_input(
+            "Hasta", value=f_max, min_value=f_min, max_value=f_max,
+            format="YYYY-MM-DD", key="pos_tok_fhasta",
+        )
+
+    df_token_filt = _lex_tok.filtrar_por_rango(df_token, f_desde, f_hasta)
+    st.caption(f"📅 En rango: **{len(df_token_filt):,} docs**")
+
+    st.markdown("## 2️⃣ Generar plano POS desde Token")
+    if st.button(
+        "⚙️ Procesar Token (POS + STL + DSE)",
+        type="primary",
+        use_container_width=True,
+        key="btn_pos_tok_proc",
+    ):
+        with st.spinner("Procesando..."):
+            try:
+                res = _pve2.procesar_ventas_v2(
+                    df_token_filt,
+                    str(RUTA_MAPEO_PREF),
+                    str(RUTA_MAPEO_DSE) if RUTA_MAPEO_DSE.exists() else None,
+                )
+                st.session_state["pos_tok_res"] = res
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+                import traceback
+                with st.expander("Detalle"):
+                    st.code(traceback.format_exc())
+
+    if "pos_tok_res" in st.session_state:
+        rv = st.session_state["pos_tok_res"]
+        resu = rv.resumen()
+
+        st.markdown("### 📊 Resumen del procesamiento")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Asientos POS", f"{resu['asientos_pos']:,}")
+        c2.metric("STL detalladas", f"{resu['stl_detalladas']:,}")
+        c3.metric("DSE procesados", f"{resu['dse_procesados']:,}")
+        c4.metric("Líneas plano", f"{resu['lineas_plano']:,}")
+
+        c5, c6, c7, c8 = st.columns(4)
+        c5.metric("Base POS", f"${resu['total_base_pos']:,.0f}")
+        c6.metric("INC 8%", f"${resu['total_inc_pos']:,.0f}")
+        c7.metric("Propinas POS", f"${resu['total_propina_pos']:,.0f}")
+        c8.metric("Total DSE", f"${resu['total_dse']:,.0f}")
+
+        st.caption(
+            f"Base STL: ${resu['total_base_stl']:,.0f} · "
+            f"NCs POS: ${resu['total_nc_base_pos']:,.0f} · "
+            f"MIXTAS: {resu['mixtas']}"
+        )
+
+        # DSE sin concepto mapeado
+        if resu.get("dse_sin_concepto", 0) > 0:
+            with st.expander(
+                f"⚠️ {resu['dse_sin_concepto']} DSE sin concepto mapeado",
+                expanded=False,
+            ):
+                st.caption("Agrega estos NITs a `mapeo_dse_conceptos.json`.")
+                nits = {}
+                for f in rv.sin_concepto_dse:
+                    k = (f.nit_receptor, f.nombre_receptor)
+                    nits[k] = nits.get(k, 0) + 1
+                df_no = pd.DataFrame([
+                    {"NIT": nit, "Nombre": n, "Docs": c}
+                    for (nit, n), c in sorted(nits.items(), key=lambda x: -x[1])
+                ])
+                st.dataframe(df_no, use_container_width=True, hide_index=True)
+
+        # Descargar plano + validar cuadre
+        st.markdown("### 3️⃣ Descargar plano")
+        if rv.plano_df is not None and len(rv.plano_df) > 0:
+            plano = rv.plano_df.copy()
+            plano["V"] = pd.to_numeric(
+                plano["VALOR"].astype(str).str.replace(",", "."),
+                errors="coerce",
+            ).fillna(0)
+            deb = plano[plano["TR"] == "1"]["V"].sum()
+            cre = plano[plano["TR"] == "2"]["V"].sum()
+            diff = abs(deb - cre)
+            if diff < 100:
+                st.success(
+                    f"✅ Plano cuadra: Db ${deb:,.0f} = Cr ${cre:,.0f} "
+                    f"(dif ${diff:,.0f} de redondeo)"
+                )
+            else:
+                st.error(f"⚠️ Plano NO cuadra: dif ${diff:,.0f}")
+
+            tsv_bytes = rv.plano_df.to_csv(
+                sep="\t", index=False
+            ).encode("utf-8-sig")
+            buf = io.BytesIO()
+            rv.plano_df.to_excel(buf, index=False, engine="openpyxl")
+            buf.seek(0)
+
+            d1, d2 = st.columns(2)
+            with d1:
+                st.download_button(
+                    f"⬇️ Plano TSV ({len(rv.plano_df):,} líneas)",
+                    data=tsv_bytes,
+                    file_name=f"plano_pos_token_{f_desde}_a_{f_hasta}.txt",
+                    mime="text/tab-separated-values",
+                    use_container_width=True,
+                    type="primary",
+                )
+            with d2:
+                st.download_button(
+                    f"⬇️ Plano Excel ({len(rv.plano_df):,} líneas)",
+                    data=buf.getvalue(),
+                    file_name=f"plano_pos_token_{f_desde}_a_{f_hasta}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
+
+            with st.expander("Vista previa del plano", expanded=False):
+                st.dataframe(
+                    rv.plano_df.head(50),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+    # Reset
+    st.markdown("---")
+    if st.button("🔄 Limpiar resultado Token", key="btn_pos_tok_reset"):
+        st.session_state.pop("pos_tok_res", None)
+        st.rerun()
+
+    # Termina aquí el modo Token — no continúa al modo Reportes
+    st.stop()
+
+
+# ════════════════════════════════════════════════════════════════════════
+# MODO A — REPORTES POS (flujo original, sin cambios)
+# ════════════════════════════════════════════════════════════════════════
 
 
 # ════════════════════════════════════════════════════════════
