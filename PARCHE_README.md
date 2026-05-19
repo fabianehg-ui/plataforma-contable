@@ -1,96 +1,141 @@
-# Parche v7 — JIPER + Módulo PT DIAN (mayo 2026)
+# Parche v8 — JIPER + PT DIAN Multi-tenant (mayo 2026)
 
-Este parche acumula TODO el trabajo anterior + el nuevo módulo
-`core/dian_pt` como BASE para Proveedor Tecnológico DIAN propio.
+Acumula todo el trabajo previo + sistema multi-tenant completo.
 
-## 🆕 Nuevo en este turno
+## 🆕 Nuevo en este turno: Multi-tenant
 
-### Módulo `core/dian_pt/` — Base de Proveedor Tecnológico DIAN
+3 archivos nuevos en `core/dian_pt/`:
 
-**2.230 líneas** de código nuevas. Estructura:
+### `vault.py` (440 líneas)
+Almacén cifrado AES-256-GCM de credenciales DIAN por cliente.
+- PBKDF2-HMAC-SHA256 con 300k iteraciones.
+- Salt único por cliente, nonce único por operación.
+- Verifica que NIT del cert coincida con NIT declarado.
+- Sobreescritura con basura antes de eliminar (defensa básica).
+
+### `auditoria.py` (353 líneas)
+Logs JSONL mensuales de todas las operaciones DIAN.
+- Hash SHA-256 del XML enviado (no guarda el XML completo, datos sensibles).
+- Consulta filtrada por cliente, tipo, fecha.
+- Resumen estadístico mensual por cliente.
+- Retención automática NO (DIAN exige 5 años, configurar archivado externo).
+
+### `servicio_multi_tenant.py` (448 líneas)
+Orquestador que une vault + auditoría + módulo dian_pt.
+API simple para la UI:
+```python
+servicio = ServicioDIAN(master_password="...")
+servicio.registrar_cliente(nit="...", p12_bytes=..., ...)
+resultado = servicio.enviar_evento(nit_cliente="...", tipo_evento="030", ...)
+```
+- Carga creds del vault solo cuando se necesita (no en memoria persistente).
+- Auditoría automática de cada operación.
+- Calcula DV con algoritmo oficial DIAN.
+- Maneja consecutivos por cliente.
+
+## Modelo conceptual
 
 ```
-core/dian_pt/
-├── __init__.py              151 líneas — API pública del módulo
-├── certificado.py           284 líneas — Manejo .p12 (Andes/Certicámara/GSE)
-├── cude_calculator.py       209 líneas — Cálculo CUDE eventos (SHA-384)
-├── xml_evento_radian.py     575 líneas — Generador XML UBL 2.1
-├── firmador_xades.py        479 líneas — Firma XAdES-EPES + política DIAN
-├── cliente_dian_soap.py     532 líneas — Cliente SOAP a vpfe.dian.gov.co
-└── README.md                ~150 líneas — Doc técnico para iteración
+Cliente JIPER ─┐
+               │
+Cliente B ─────┼─→ Tu Plataforma (puente) ──→ DIAN
+               │   - Vault cifrado AES-256
+Cliente C ─────┘   - Cada cliente con SU certificado
+                   - Plataforma solo facilita, no es PT
 ```
 
-### Lo que cubre
+Tu plataforma es **software puente**, NO Proveedor Tecnológico.
+Cada cliente:
+1. Compra su certificado .p12.
+2. Hace su trámite ante DIAN (recibe Software ID + PIN + Clave técnica).
+3. Sube sus 5 credenciales a tu plataforma.
+4. La plataforma firma con SU certificado y envía a DIAN en su nombre.
 
-✅ Carga de certificados .p12 con manejo de errores específicos
-✅ Cálculo CUDE de eventos según fórmula DIAN
-✅ Generación XML UBL 2.1 con todas las extensiones DIAN
-✅ Firma XAdES-EPES con 3 referencias firmadas + política DIAN
-✅ Cliente SOAP con WSSecurity (header firmado) + WSA
-✅ Soporta eventos 030 (acuse), 031 (reclamo), 032 (recibo bien), 033 (aceptación)
-✅ Habilitación + producción (mismo código, distinto endpoint)
-✅ Tests internos pasan: certificado, CUDE, XML, firma criptográfica, SOAP envelope
+**Ventajas vs Modo PT:**
+- Sin habilitación de tu empresa ante DIAN.
+- Sin pólizas obligatorias.
+- Sin SLA 99.5%.
+- Tú no eres responsable solidario.
 
-### Lo que NO cubre todavía
+## Estado del módulo `core/dian_pt/`
 
-❌ Set de habilitación DIAN (186 escenarios) — proceso formal con DIAN
-❌ Pruebas contra ambiente real de habilitación — requiere credenciales DIAN
-❌ Multi-tenant (manejo seguro de varios .p12 de empresas distintas)
-❌ UI Streamlit para emitir eventos masivos
-❌ Sistema de reintentos + cola de envíos persistente
-❌ Validación contra XSD oficiales DIAN
-❌ Actualización del hash de política de firma (placeholder)
+| Archivo | Líneas | Función |
+|---|---|---|
+| `__init__.py` | 177 | API pública |
+| `certificado.py` | 284 | Cargar .p12 |
+| `cude_calculator.py` | 209 | Hash SHA-384 DIAN |
+| `xml_evento_radian.py` | 575 | XML UBL 2.1 |
+| `firmador_xades.py` | 479 | Firma XAdES-EPES |
+| `cliente_dian_soap.py` | 532 | Cliente SOAP+WSSecurity |
+| **`vault.py`** | **440** | **🆕 Vault cifrado** |
+| **`auditoria.py`** | **353** | **🆕 Logs JSONL** |
+| **`servicio_multi_tenant.py`** | **448** | **🆕 Orquestador** |
+| **Total** | **3,497** | |
 
-## Validación
+## Validaciones de esta sesión
 
-✅ 6 archivos sintácticamente correctos
-✅ Importable desde `core.dian_pt`
-✅ Tests internos OK (firma criptográfica verifica, envelope parseable)
-✅ Suite previa: 51 tests pasan, 0 regresiones
+- ✅ Vault: guardar/cargar/eliminar, multi-tenant, password incorrecta detectada, NIT mismatch detectado.
+- ✅ Auditor: registro JSONL, consulta filtrada, resumen estadístico.
+- ✅ Orquestador: registro de cliente, pipeline completo (vault→CUDE→XML→firma→envelope), auditoría automática.
+- ✅ 51 tests previos pasan, 0 regresiones.
 
-## Pasos siguientes (para tu consultor DIAN)
+## Lo que TODAVÍA falta para producción
 
-Ver `core/dian_pt/README.md` que tiene:
-- Fases del proceso de habilitación
-- Errores típicos de DIAN y archivo a revisar para cada uno
-- Tabla de costos estimados ($27M-$74M COP año 1)
-- Particularidades técnicas (canonicalización, ZIP, SOAP 1.2)
-- Códigos de evento y cuándo se emite cada uno
+❌ UI Streamlit para registrar/listar/usar clientes.
+❌ Persistencia de consecutivos en SQLite (ahora son en memoria).
+❌ Página de auditoría para revisar envíos pasados.
+❌ Pruebas reales contra ambiente de habilitación DIAN.
+❌ Actualizar hash de política de firma DIAN al vigente.
+❌ Acompañamiento del consultor DIAN para pasar habilitación cliente por cliente.
 
-## Lo demás incluido (lo del parche v6)
+## Próximos pasos sugeridos
 
-- Módulo descargador XML DIAN renombrado a "Contabilidad con XML DIAN"
-- Ocultado del menú: "Procesar Token DIAN"
-- Modo solo_pos en Ventas POS (sin DSE/STL, doc=día, orden cronológico)
-- Configuración multi-empresa JIPER
-- Filtros del descargador (checkboxes recibidos, multiselect emitidos)
-- Propinas POS en ambos modos (Reportes + Token)
-- Terceros nuevos desde XMLs (plano Siigo)
+1. **Antes que nada**: que JIPER se habilite como autofacturador en DIAN
+   (es ELLOS quien tramita, no tu plataforma).
+2. JIPER recibe sus 5 credenciales DIAN (Software ID, PIN, Clave técnica + RUT con DV + Certificado).
+3. Usas el servicio para registrar JIPER en el vault.
+4. Primer envío al ambiente de habilitación.
+5. Iteras con DIAN hasta que acepte (semanas).
+6. Replicar el proceso para cada cliente nuevo.
 
-## Cómo aplicar
+## Uso desde código (sin UI todavía)
 
-```bash
-# Descomprime sobre el repo
-unzip -o parche_jiper_v7_dian_pt.zip -d /ruta/plataforma-contable/
+```python
+from core.dian_pt import ServicioDIAN
+from datetime import datetime, timezone, timedelta
 
-# Reinicia Streamlit
-streamlit run Home.py
+# Master password se configura en variable de entorno
+import os
+servicio = ServicioDIAN(master_password=os.environ["DIAN_MASTER_PWD"])
 
-# El módulo nuevo no aparece en UI todavía (es solo backend).
-# Puede importarse desde Python:
-from core.dian_pt import cargar_p12, generar_xml_evento, firmar_xml, ClienteDIAN
+# Registrar cliente (una sola vez)
+with open("jiper.p12", "rb") as f:
+    p12 = f.read()
+
+servicio.registrar_cliente(
+    nit="901038325",
+    razon_social="JIPER SAS",
+    p12_bytes=p12,
+    p12_password=os.environ["JIPER_P12_PWD"],
+    software_id="...",  # DIAN lo da
+    software_security_code="...",  # DIAN lo da
+    clave_tecnica="...",  # DIAN la da
+    ambiente="habilitacion",
+)
+
+# Enviar acuse 030
+tz = timezone(timedelta(hours=-5))
+resultado = servicio.enviar_evento(
+    nit_cliente="901038325",
+    tipo_evento="030",
+    cufe_factura="<CUFE del proveedor>",
+    numero_factura="FE-12345",
+    fecha_factura=datetime(2026, 3, 15, tzinfo=tz),
+    monto_factura=1500000,
+    nit_proveedor="800111222",
+    dv_proveedor="3",
+    razon_social_proveedor="PROVEEDOR SAS",
+)
+
+print(f"Track ID: {resultado.track_id}")
 ```
-
-## Dependencias nuevas
-
-Si tu venv no las tiene:
-```bash
-pip install signxml zeep cryptography lxml
-```
-
-## Tiempo estimado a producción
-
-- **Hoy:** código BASE listo para iteración (2.230 líneas).
-- **+1 mes:** consultor DIAN ajusta para pasar primeros escenarios habilitación.
-- **+3 meses:** 186 escenarios pasados, resolución DIAN para producción.
-- **+6 meses:** primeros clientes facturando con tu PT.

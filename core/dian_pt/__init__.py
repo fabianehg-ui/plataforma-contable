@@ -130,6 +130,26 @@ from .cliente_dian_soap import (
     ENDPOINT_PRODUCCION,
 )
 
+# Multi-tenant: vault, auditoría, orquestador
+from .vault import (
+    VaultDIAN,
+    CredencialesDIAN,
+    ErrorVault,
+    MasterPasswordIncorrecto,
+    CredencialesNoEncontradas,
+    VaultCorrupto,
+)
+
+from .auditoria import (
+    AuditorDIAN,
+    RegistroAuditoria,
+)
+
+from .servicio_multi_tenant import (
+    ServicioDIAN,
+    ResultadoEnvio,
+)
+
 __all__ = [
     # Certificado
     "CertificadoP12", "cargar_p12",
@@ -148,4 +168,10 @@ __all__ = [
     "ClienteDIAN", "RespuestaDIAN", "ResultadoConsulta",
     "ErrorClienteDIAN", "ErrorRed", "ErrorRespuestaDIAN",
     "ENDPOINT_HABILITACION", "ENDPOINT_PRODUCCION",
+    # Multi-tenant
+    "VaultDIAN", "CredencialesDIAN",
+    "ErrorVault", "MasterPasswordIncorrecto",
+    "CredencialesNoEncontradas", "VaultCorrupto",
+    "AuditorDIAN", "RegistroAuditoria",
+    "ServicioDIAN", "ResultadoEnvio",
 ]
