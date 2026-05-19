@@ -245,14 +245,28 @@ def procesar_ventas_v2(
     df_excel: pd.DataFrame,
     ruta_mapeo_prefijos: str,
     ruta_mapeo_dse: str,
+    modo: str = "completo",
 ) -> ResultadoVentasV2:
     """
     Procesa el Excel del Token DIAN aplicando la estrategia de consolidación.
+
+    modo:
+      - "completo": flujo legacy (POS + STL + NCs STL + DSE)
+      - "solo_pos": SOLO ventas POS consolidadas por día×prefijo (incluye sus NCs).
+                    Las STL y DSE se descartan porque vienen por XML.
+                    El campo DOCUMENTO se rellena con el día del mes (1, 2, 3...)
+                    y NO se aplica el numerador consecutivo posterior.
+                    El plano sale ordenado por fecha ascendente.
     """
     resultado = ResultadoVentasV2()
+    modo_solo_pos = (modo == "solo_pos")
 
     mapeo_pref = _cargar_mapeo_prefijos(ruta_mapeo_prefijos)
-    mapeo_dse  = _cargar_mapeo_dse(ruta_mapeo_dse)
+    # En modo solo_pos el mapeo DSE no es necesario (los DSE se descartan)
+    if modo_solo_pos or not ruta_mapeo_dse:
+        mapeo_dse = {"nit_a_concepto": {}, "cuentas": {}}
+    else:
+        mapeo_dse = _cargar_mapeo_dse(ruta_mapeo_dse)
 
     # Solo emitidos
     df = df_excel[df_excel["grupo"].str.lower() == "emitido"].copy()
@@ -291,17 +305,25 @@ def procesar_ventas_v2(
         if fecha is None or pd.isna(fecha):
             fecha = date.today()
 
-        # Determinar categoría
+        # Determinar categoría (case-insensitive + alias por si el Excel
+        # del Token trae los nombres con/sin acentos o variantes)
+        tdt_norm = (tipo_doc_text or "").strip().lower()
         tipo_corto = ""
-        if tipo_doc_text == TIPOS_FE:
+        # FE: cualquier variante de "factura electronica"
+        if "factura" in tdt_norm and "electr" in tdt_norm:
             tipo_corto = "FE"
-        elif tipo_doc_text == TIPOS_NC:
+        # NC: cualquier variante de "nota credito" / "nota de credito"
+        elif "nota" in tdt_norm and "credit" in tdt_norm:
             tipo_corto = "NC"
-        elif tipo_doc_text == TIPOS_DSE:
+        # DSE: cualquier variante de "documento soporte"
+        elif "documento" in tdt_norm and "soporte" in tdt_norm:
             tipo_corto = "DSE"
+        # ND: nota debito
+        elif "nota" in tdt_norm and ("debit" in tdt_norm or "débit" in tdt_norm):
+            tipo_corto = "ND"
 
         es_stl = prefijo == "STL"
-        es_nc = tipo_doc_text == TIPOS_NC
+        es_nc = tipo_corto == "NC"
 
         fac = FacturaTokenV2(
             cufe=cufe, folio=folio, prefijo=prefijo,
@@ -332,11 +354,24 @@ def procesar_ventas_v2(
             resultado.mixtas.append(fac)
             continue
 
+        # En modo solo_pos: filtro defensivo. SOLO documentos cuyo prefijo
+        # esté en mapeo_prefijos_token.json (los POS reales). Esto descarta
+        # automáticamente DSE, STL y cualquier otro prefijo institucional.
+        if modo_solo_pos:
+            if not fac.sucursal_info:
+                # Prefijo no mapeado en mapeo_prefijos_token.json → no es POS
+                continue
+            if fac.es_stl or fac.prefijo in ("STL", "NC", "DSE"):
+                # STL, NC institucional o DSE → fuera (vienen por XML)
+                continue
+
         if not fac.sucursal_info and fac.tipo_doc in ("FE", "NC"):
             resultado.sin_sucursal.append(fac)
             continue
 
         if fac.tipo_doc == "DSE":
+            if modo_solo_pos:
+                continue
             concepto = mapeo_dse["nit_a_concepto"].get(fac.nit_receptor.strip())
             if not concepto:
                 resultado.sin_concepto_dse.append(fac)
@@ -353,6 +388,8 @@ def procesar_ventas_v2(
         # STL y sus NCs (prefijo NC institucional) van detalladas
         es_stl_o_nc_institucional = fac.es_stl or (fac.prefijo == "NC" and fac.es_nc)
         if es_stl_o_nc_institucional:
+            if modo_solo_pos:
+                continue
             if fac.es_nc:
                 resultado.ncs_stl_detalladas.append(fac)
             else:
@@ -367,9 +404,13 @@ def procesar_ventas_v2(
 
     # ── Construir asientos consolidados POS ──────────────────
     # Agrupar por (fecha, prefijo) las FE y separadamente las NC
-    grupos_fe = {}  # (fecha, prefijo) -> {n, base, inc, iva, otros, propina, total}
+    # Las NCs POS llegan con su PROPIO prefijo (NCVI, NCT, NCLU, etc.) que
+    # NO coincide con el prefijo de FE de la sucursal (VIV, TES, LUC...).
+    # Para que crucen, las agrupamos por (fecha, cc) en lugar de (fecha, prefijo).
+    grupos_fe = {}  # (fecha, cc) -> {n, base, inc, iva, otros, propina, total, sucursal_info, prefijo_fe}
     for fac in pos_facturas_a_consolidar:
-        key = (fac.fecha, fac.prefijo)
+        cc_suc = fac.sucursal_info.get("cc", "")
+        key = (fac.fecha, cc_suc)
         if key not in grupos_fe:
             grupos_fe[key] = {
                 "fecha": fac.fecha, "prefijo": fac.prefijo,
@@ -388,10 +429,12 @@ def procesar_ventas_v2(
 
     grupos_nc = {}
     for fac in pos_ncs_a_consolidar:
-        key = (fac.fecha, fac.prefijo)
+        cc_suc = fac.sucursal_info.get("cc", "")
+        key = (fac.fecha, cc_suc)
         if key not in grupos_nc:
             grupos_nc[key] = {
                 "fecha": fac.fecha, "prefijo": fac.prefijo,
+                "sucursal_info": fac.sucursal_info,
                 "n_ncs": 0, "nc_base": 0, "nc_inc": 0,
                 "nc_iva": 0, "nc_total": 0,
             }
@@ -433,9 +476,9 @@ def procesar_ventas_v2(
         todos_grupos.append(consolidado)
         resultado.pos_consolidados.append(consolidado)
 
-    # NCs huérfanas (sin FE el mismo día/prefijo) — caso raro
+    # NCs huérfanas (sin FE el mismo día/cc) — caso raro
     for key, g in grupos_nc.items():
-        info = mapeo_pref.get(g["prefijo"], {})
+        info = g.get("sucursal_info", {})
         consolidado = {
             "fecha": g["fecha"],
             "prefijo": g["prefijo"],
@@ -457,18 +500,28 @@ def procesar_ventas_v2(
         resultado.pos_consolidados.append(consolidado)
 
     # ── Construir líneas del plano ────────────────────────────
+
+    # En MODO SOLO POS: ordenar por (fecha ascendente, prefijo) para que el
+    # plano salga cronológicamente del día más antiguo al más reciente.
+    if modo_solo_pos:
+        todos_grupos = sorted(
+            todos_grupos,
+            key=lambda g: (g["fecha"], g.get("prefijo", "")),
+        )
+
     filas = []
     for g in todos_grupos:
-        filas.extend(_generar_lineas_pos_consolidado(g))
+        filas.extend(_generar_lineas_pos_consolidado(g, modo_solo_pos=modo_solo_pos))
 
-    for fac in resultado.stl_detalladas:
-        filas.extend(_generar_lineas_factura_detallada(fac, es_nc=False))
+    if not modo_solo_pos:
+        for fac in resultado.stl_detalladas:
+            filas.extend(_generar_lineas_factura_detallada(fac, es_nc=False))
 
-    for fac in resultado.ncs_stl_detalladas:
-        filas.extend(_generar_lineas_factura_detallada(fac, es_nc=True))
+        for fac in resultado.ncs_stl_detalladas:
+            filas.extend(_generar_lineas_factura_detallada(fac, es_nc=True))
 
-    for fac in resultado.dse_detalladas:
-        filas.extend(_generar_lineas_dse(fac, mapeo_dse))
+        for fac in resultado.dse_detalladas:
+            filas.extend(_generar_lineas_dse(fac, mapeo_dse))
 
     if filas:
         resultado.plano_df = pd.DataFrame(filas, columns=COLUMNAS_PLANO)
@@ -477,8 +530,13 @@ def procesar_ventas_v2(
         resultado.plano_df = pd.DataFrame(columns=COLUMNAS_PLANO)
         resultado.plano_lineas = 0
 
-    # Aplicar numeración consecutiva por comprobante (DOCUMENTO=1,2,3... DOC REFERENCIA=folio sin prefijo)
-    if resultado.plano_df is not None and len(resultado.plano_df) > 0:
+    # Numeración:
+    #   - modo completo: aplicar_numeracion → DOCUMENTO consecutivo 1,2,3...
+    #   - modo solo_pos: DOCUMENTO ya viene con el día del mes; NO se aplica
+    #     el numerador para no sobrescribirlo.
+    if (resultado.plano_df is not None
+            and len(resultado.plano_df) > 0
+            and not modo_solo_pos):
         from .numerador_comprobantes import aplicar_numeracion
         resultado.plano_df = aplicar_numeracion(resultado.plano_df)
 
@@ -487,7 +545,7 @@ def procesar_ventas_v2(
 
 # ─── Generadores de líneas ───────────────────────────────────
 
-def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
+def _generar_lineas_pos_consolidado(g: dict, modo_solo_pos: bool = False) -> List[dict]:
     """
     Genera un asiento consolidado por (día × prefijo) con BRUTO + NC SEPARADA.
 
@@ -500,12 +558,21 @@ def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
        Cr PROPINAS       = propina (si > $2)   [cuenta 28150505 — PUC JIPER]
 
     El cuadre Db = Cr está garantizado por construcción.
+
+    modo_solo_pos:
+      - False (default): DOCUMENTO = "POS-VIV-20260315" (será sobrescrito por
+                          el numerador_comprobantes en la salida final).
+      - True : DOCUMENTO = "15" (solo el día del mes). Se respeta tal cual,
+               no se aplica numerador.
     """
     out = []
     fecha_str = g["fecha"].strftime("%m/%d/%Y")
     comp = g["comprobante"]
     detalle_base = f"{DETALLE_POS_PREFIJO}{g['nombre_sucursal']} {fecha_str}"
-    doc = f"POS-{g['prefijo']}-{g['fecha'].strftime('%Y%m%d')}"
+    if modo_solo_pos:
+        doc = str(g["fecha"].day)
+    else:
+        doc = f"POS-{g['prefijo']}-{g['fecha'].strftime('%Y%m%d')}"
 
     # ── BRUTO (si hay facturas) ──
     if g["n_facturas"] > 0:
@@ -579,7 +646,10 @@ def _generar_lineas_pos_consolidado(g: dict) -> List[dict]:
     # ── NC SEPARADA (si hay NCs ese día) ──
     if g.get("n_ncs", 0) > 0:
         nc_total_contable = round(g["nc_base"] + g["nc_inc"] + g["nc_iva"], 0)
-        doc_nc = f"NC-{g['prefijo']}-{g['fecha'].strftime('%Y%m%d')}"
+        if modo_solo_pos:
+            doc_nc = str(g["fecha"].day)
+        else:
+            doc_nc = f"NC-{g['prefijo']}-{g['fecha'].strftime('%Y%m%d')}"
         detalle_nc = f"{DETALLE_NC_PREFIJO}{g['nombre_sucursal']} {fecha_str}"
 
         # Db Devolución en Ventas

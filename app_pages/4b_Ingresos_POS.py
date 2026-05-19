@@ -225,6 +225,7 @@ if modo_fuente == "💾 Excel del Token DIAN":
                     df_token_filt,
                     str(RUTA_MAPEO_PREF),
                     str(RUTA_MAPEO_DSE) if RUTA_MAPEO_DSE.exists() else None,
+                    modo="solo_pos",
                 )
                 st.session_state["pos_tok_res"] = res
             except Exception as e:
@@ -238,40 +239,17 @@ if modo_fuente == "💾 Excel del Token DIAN":
         resu = rv.resumen()
 
         st.markdown("### 📊 Resumen del procesamiento")
-        c1, c2, c3, c4 = st.columns(4)
+        st.caption("Modo: solo ventas POS (STL y DSE se procesan por XML, no aquí).")
+        c1, c2, c3 = st.columns(3)
         c1.metric("Asientos POS", f"{resu['asientos_pos']:,}")
-        c2.metric("STL detalladas", f"{resu['stl_detalladas']:,}")
-        c3.metric("DSE procesados", f"{resu['dse_procesados']:,}")
-        c4.metric("Líneas plano", f"{resu['lineas_plano']:,}")
+        c2.metric("Líneas del plano", f"{resu['lineas_plano']:,}")
+        c3.metric("MIXTAS (excluidas)", f"{resu['mixtas']:,}")
 
-        c5, c6, c7, c8 = st.columns(4)
-        c5.metric("Base POS", f"${resu['total_base_pos']:,.0f}")
-        c6.metric("INC 8%", f"${resu['total_inc_pos']:,.0f}")
-        c7.metric("Propinas POS", f"${resu['total_propina_pos']:,.0f}")
-        c8.metric("Total DSE", f"${resu['total_dse']:,.0f}")
-
-        st.caption(
-            f"Base STL: ${resu['total_base_stl']:,.0f} · "
-            f"NCs POS: ${resu['total_nc_base_pos']:,.0f} · "
-            f"MIXTAS: {resu['mixtas']}"
-        )
-
-        # DSE sin concepto mapeado
-        if resu.get("dse_sin_concepto", 0) > 0:
-            with st.expander(
-                f"⚠️ {resu['dse_sin_concepto']} DSE sin concepto mapeado",
-                expanded=False,
-            ):
-                st.caption("Agrega estos NITs a `mapeo_dse_conceptos.json`.")
-                nits = {}
-                for f in rv.sin_concepto_dse:
-                    k = (f.nit_receptor, f.nombre_receptor)
-                    nits[k] = nits.get(k, 0) + 1
-                df_no = pd.DataFrame([
-                    {"NIT": nit, "Nombre": n, "Docs": c}
-                    for (nit, n), c in sorted(nits.items(), key=lambda x: -x[1])
-                ])
-                st.dataframe(df_no, use_container_width=True, hide_index=True)
+        c4, c5, c6, c7 = st.columns(4)
+        c4.metric("Base POS", f"${resu['total_base_pos']:,.0f}")
+        c5.metric("INC 8%", f"${resu['total_inc_pos']:,.0f}")
+        c6.metric("Propinas POS", f"${resu['total_propina_pos']:,.0f}")
+        c7.metric("NCs POS", f"${resu['total_nc_base_pos']:,.0f}")
 
         # Descargar plano + validar cuadre
         st.markdown("### 3️⃣ Descargar plano")
