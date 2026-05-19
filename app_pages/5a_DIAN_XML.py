@@ -315,6 +315,105 @@ def mostrar_resultados_recibidos(resultados, resumen, modo_plano,
                     use_container_width=True,
                 )
 
+    # ════════════════════════════════════════════════════════════
+    # PLANO DE TERCEROS NUEVOS — desde los XMLs procesados
+    # ════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.subheader("👥 Plano de TERCEROS NUEVOS para Siigo")
+    st.caption(
+        "Proveedores (emisores) detectados en los XMLs que NO están en el "
+        "histórico de compras. Se exportan en el formato Siigo NITs de 20 "
+        "columnas, con código DANE del municipio tomado del XML cuando viene."
+    )
+
+    try:
+        from core.procesadores import exportador_nits_siigo as exp_nits
+        from core.procesadores import agregador_terceros_xml as agr_terc
+
+        maestro_xml = agr_terc.construir_maestro_desde_resultados(resultados)
+        total_emisores = len(maestro_xml.get("terceros", {}))
+
+        if total_emisores == 0:
+            st.info("ℹ️ No se detectaron emisores en los XMLs procesados.")
+        else:
+            # Histórico (mapeo_compras_historico.json en la raíz del repo)
+            RUTA_HIST = Path("mapeo_compras_historico.json")
+            # NITs ya catalogados en mapeo_nits.json de cada empresa procesada
+            nits_extra = set()
+            for r in resultados:
+                try:
+                    cat = _cargar_catalogo_para(r.empresa_id)
+                    for nit in cat.mapeo_nits.keys():
+                        nits_extra.add(nit)
+                except Exception:
+                    pass
+
+            nits_nuevos = agr_terc.detectar_nits_nuevos(
+                maestro_xml,
+                ruta_historico_compras=RUTA_HIST if RUTA_HIST.exists() else None,
+                nits_extra_conocidos=nits_extra,
+            )
+
+            col_m1, col_m2 = st.columns(2)
+            col_m1.metric("Emisores vistos en XMLs", f"{total_emisores:,}")
+            col_m2.metric("Terceros nuevos (a crear en Siigo)", f"{len(nits_nuevos):,}")
+
+            if nits_nuevos:
+                df_terc = exp_nits.exportar_nits_desde_maestro(
+                    maestro_xml, nits_filtrar=nits_nuevos,
+                )
+
+                # Distribución de naturaleza
+                nat_dist = df_terc["NATURALEZA"].value_counts().to_dict()
+                naturales = nat_dist.get("N", 0)
+                juridicas = nat_dist.get("J", 0)
+                c1, c2 = st.columns(2)
+                c1.metric("Jurídicas (J)", f"{juridicas:,}")
+                c2.metric("Naturales (N)", f"{naturales:,}")
+
+                anio_mes = st.session_state.get("anio_mes", "XXXXXX")
+                base_nombre = f"nits_xml_{anio_mes}"
+
+                xlsx_bytes = exp_nits.generar_excel_nits_siigo(df_terc)
+                col_dl_a, col_dl_b = st.columns(2)
+                with col_dl_a:
+                    st.download_button(
+                        f"⬇️ NITs nuevos Excel formato Siigo ({len(df_terc):,})",
+                        data=xlsx_bytes,
+                        file_name=f"{base_nombre}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        type="primary",
+                        key="dl_terc_xlsx_xml",
+                    )
+                with col_dl_b:
+                    tsv_t = df_terc.to_csv(sep="\t", index=False, encoding="utf-8")
+                    st.download_button(
+                        f"⬇️ NITs nuevos TSV ({len(df_terc):,})",
+                        data=tsv_t.encode("utf-8"),
+                        file_name=f"{base_nombre}.txt",
+                        mime="text/tab-separated-values",
+                        use_container_width=True,
+                        key="dl_terc_tsv_xml",
+                    )
+
+                with st.expander("Vista previa de los primeros 10 terceros"):
+                    st.dataframe(
+                        df_terc.head(10),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+            else:
+                st.success(
+                    "✅ Todos los emisores de los XMLs ya están en el "
+                    "histórico/mapeo de la empresa. No hay terceros nuevos."
+                )
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo generar el plano de terceros: {e}")
+        with st.expander("Detalle del error"):
+            import traceback
+            st.code(traceback.format_exc())
+
 
 # ----------------------------------------------------------- Tabs
 tab_proc, tab_mapeo, tab_empresas = st.tabs(
