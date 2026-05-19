@@ -189,9 +189,9 @@ asistente_pila = st.Page(
 )
 asistente_xml_descargador = st.Page(
     "app_pages/5b_Descargador_XML.py",
-    title="Descargador XML DIAN",
+    title="Contabilidad con XML DIAN",
     icon="📥",
-    url_path="descargador-xml",
+    url_path="contabilidad-xml-dian",
 )
 
 # ----- Sección: Herramientas Tributarias -----
@@ -255,14 +255,13 @@ nav = st.navigation(
     {
         "": [pagina_inicio],
         "🤖 Asistente Contable": [
+            asistente_xml_descargador,
             asistente_caja,
-            asistente_token_dian,
             asistente_nomina,
             asistente_prov,
             asistente_ventas_c13,
             asistente_pos,
             asistente_pila,
-            asistente_xml_descargador,
         ],
         "📊 Herramientas Tributarias": [
             trib_radian,

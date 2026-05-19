@@ -1,14 +1,19 @@
 """
 app_pages/5b_Descargador_XML.py
 
-Descargador + Procesador XML DIAN (versión simplificada — mayo 2026).
+Contabilidad con XML DIAN (versión simplificada — mayo 2026).
+
+Reemplaza el flujo manual de subir ZIPs descargados con extensión Chrome.
+Hace todo lo útil de la página antigua "Procesar Token DIAN" pero con datos
+completos de los XMLs (líneas, descripciones, retenciones reales, dirección
+de entrega) en vez del Excel del Token (que es solo un índice).
 
 Flujo:
   1️⃣  Subir Excel del Token DIAN (referencia para los CUFEs disponibles)
   2️⃣  Detectar tipos de documento para RECIBIDOS (checkboxes)
        Detectar prefijos disponibles para EMITIDOS (multiselect)
-  3️⃣  Pegar Token URL y descargar
-  4️⃣  Procesar XMLs → plano contable + plano terceros nuevos
+  3️⃣  Pegar Token URL y descargar (hilos paralelos de 500 docs)
+  4️⃣  Procesar XMLs → plano contable por empresa + plano terceros nuevos
 """
 from __future__ import annotations
 
@@ -67,7 +72,7 @@ seleccionar_empresa_sidebar()
 sidebar_user_info()
 empresa = require_empresa()
 
-st.title("📥 Descargador XML DIAN")
+st.title("📥 Contabilidad con XML DIAN")
 st.caption(
     "Sube el Excel del Token como referencia, elige tipos de documentos "
     "(recibidos) y prefijos (emitidos), descarga directo de DIAN y procesa "
