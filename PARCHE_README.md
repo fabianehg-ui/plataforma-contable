@@ -1,155 +1,184 @@
-# Parche consolidado — JIPER (mayo 2026)
+# Parche consolidado v3 — JIPER (mayo 2026)
 
-Este parche junta:
+Este parche agrega/modifica:
 
-- **Bloque 1**: terceros nuevos desde XMLs + propinas en POS
+- **Bloque 1**: terceros nuevos desde XMLs + propinas en POS (reportes)
 - **Bloque 2**: nueva página unificada Descargador XML DIAN
+- **Bloque 3** (este turno):
+  - Modo "Excel del Token" dentro de Ventas POS, con CC y propinas
+  - Propinas asentadas a cuenta `28150505` también en el procesador Token
 
-⚠️ El menú principal (`Home.py`) NO se simplifica. Todas las herramientas
-existentes siguen visibles (Caja Menor, Token DIAN, Nómina, Provisiones,
-Ventas C13, PILA, RADIAN, Exógena, Renta, IVA, Retención, Saludables,
-Panel Admin, Configuración). Solo se AGREGA un nuevo ítem en "Asistente
-Contable": **📥 Descargador XML DIAN**.
+⚠️ `Home.py` SOLO se cambia para agregar la página nueva del Descargador XML.
+Todas las herramientas existentes siguen visibles.
 
 ## Cómo aplicar
 
-Descomprime el ZIP encima del repo y commit. Reemplaza los archivos
-existentes (sin borrar ninguno) y agrega los archivos nuevos.
+Descomprime el ZIP encima del repo y commit.
 
 ---
 
-## Bloque 1 — Terceros desde XMLs y propinas POS
+## Bloque 1 — Terceros desde XMLs y propinas POS (reportes)
 
-### 1.1 Descarga de terceros nuevos desde XMLs DIAN
+Ver detalle del turno anterior. Resumen:
 
-- `core/procesadores/procesador_dian_xml.py` — `DocumentoDIAN` ahora extrae del
-  emisor: `direccion`, `ciudad`, `codigo_ciudad` (DANE), `email`, `telefono`,
-  `actividad_economica` (CIIU). Los campos van al final del dataclass para no
-  romper la firma posicional.
+- `core/procesadores/procesador_dian_xml.py` — parser extendido (dirección,
+  ciudad, código DANE, email, teléfono, CIIU del emisor).
+- `core/procesadores/agregador_terceros_xml.py` (NUEVO) — junta emisores y
+  detecta NITs nuevos.
+- `core/procesadores/exportador_nits_siigo.py` — acepta `codigo_ciudad` del XML.
+- `core/procesadores/procesador_pos.py` — fórmula propinas con cuadre Db=Cr.
 
-- `core/procesadores/agregador_terceros_xml.py` (**NUEVO**)
-  - `construir_maestro_desde_resultados(resultados)`: agrupa emisores únicos.
-  - `detectar_nits_nuevos(maestro, historico, nits_extra)`: filtra NITs nuevos.
-
-- `core/procesadores/exportador_nits_siigo.py` — `construir_fila_siigo` acepta
-  `codigo_ciudad` del XML (más confiable que adivinar por nombre).
-
-### 1.2 Propinas en plano POS
-
-Fórmula del usuario, aplicada solo cuando hay INC > 0:
+Fórmula propinas:
 ```
 base_inc = INC / 0.08
 propina  = Final - base_inc - INC
+Cuenta propinas: 28150505 (PUC JIPER)
 ```
-
-Asiento POS (4 líneas si hay propina, 3 si no):
-```
-Db CUENTA DE CAJA   = Final
-Cr CTA BASE V       = base_inc       (= INC/0.08 si hay propina, si no = Neto)
-Cr CTA ICO          = INC
-Cr CTA PROPINAS     = propina        (solo si > $2)
-```
-
-Cuadre Db=Cr garantizado por construcción.
-Cuenta default propinas: `28150505` (PUC JIPER).
-CC propina = CC de la sucursal (como en histórico real).
 
 ---
 
 ## Bloque 2 — Nueva página `5b_Descargador_XML.py`
 
-Página unificada que reemplaza el flujo manual de subir ZIPs descargados con
-extensión Chrome. Aparece como `📥 Descargador XML DIAN` en la sección
-"Asistente Contable" del menú principal, **al lado** de las demás herramientas.
+Página simplificada de descarga y procesamiento de XMLs, **dentro** del
+módulo Descargador XML DIAN.
 
-Flujo:
+Flujo (4 pasos):
+1. Subir Excel del Token DIAN (referencia de los CUFEs).
+2. Marcar tipos de documentos para recibidos (checkboxes) y prefijos para
+   emitidos (multiselect). Application response y Nomina Individual OFF
+   por default.
+3. Pegar Token URL → descarga paralela en **hilos de hasta 500 documentos**.
+4. Procesar → plano contable + plano de terceros nuevos.
+
+**Tamaño de bloque**: 500 docs/hilo. Si descargas 1.234 docs → 3 hilos
+(500 + 500 + 234) corriendo en paralelo.
+
+Aparece en el sidebar como `📥 Descargador XML DIAN` al lado de las demás
+herramientas, sin tocar nada del menú original.
+
+---
+
+## Bloque 3 (este turno) — Ventas POS con dos fuentes
+
+### 3.1 Página `4b_Ingresos_POS.py` con selector de modo
+
+Al entrar al módulo Ventas POS, ahora ves un selector arriba:
 
 ```
-1️⃣  Subir Excel del Token DIAN
-    → detecta fechas, tipos de documentos y prefijos automáticamente
-
-2️⃣  Elegir qué descargar
-    📥 RECIBIDOS                    📤 EMITIDOS
-    Checkboxes por tipo:            Multiselect de prefijos:
-    ☑ Factura electronica           ☑ STL — 15 docs
-    ☑ Nota credito                  ☑ DSE — 8 docs
-    ☑ Documento Soporte             ☐ VIV — 50 docs
-    ☐ Application response (off)    ☐ IND — 30 docs
-    ☐ Nomina Individual (off)
-
-3️⃣  Pegar Token URL → ⬇️ Descargar
-    Descarga paralela en bloques de 500 con barra de progreso
-
-4️⃣  Procesar XMLs
-    → Plano contable por empresa (TXT/CSV/Excel)
-    → Plano de TERCEROS NUEVOS para Siigo (20 columnas)
+Elige la fuente de datos para generar el plano:
+   ⦿ 📊 Reportes POS (CHILI, L3AF, HENKO)       ← flujo original sin tocar
+   ⦿ 💾 Excel del Token DIAN                     ← flujo nuevo
 ```
 
-**Decisiones de diseño:**
-- Application response y Nomina Individual **OFF por default** (no contables).
-- Prefijos **STL** y **DSE** sugeridos por default (los más usados en JIPER).
-- El procesamiento es post-descarga (no automático) para revisar el dictamen.
+**Modo A — Reportes POS**: igual que antes. Sube los 4 reportes, procesa,
+descarga plano con propinas (las que vienen como diferencia
+`Final − Neto − INC`).
+
+**Modo B — Excel del Token DIAN**: sube el Excel del Token y la app:
+- Lee y filtra por fecha.
+- Detecta cada prefijo (STL, IND, OVI, VIV, MED, MMI, MTE, MRE, MVI, MLA,
+  MFA, MMA, NCI, NCVI, NCT, etc. — los 50+ del repo).
+- Mapea cada prefijo a su sucursal/CC/cuenta/comprobante usando
+  `mapeo_prefijos_token.json`.
+- Consolida por (día × prefijo) y asienta el plano con la misma fórmula
+  de propinas que el flujo de reportes.
+- Genera plano contable cuadrado Db=Cr listo para Siigo.
+
+### 3.2 Propinas en el procesador Token
+
+`core/procesadores/procesador_ventas_excel_token_v2.py` modificado:
+
+**Antes:**
+```python
+total_bruto_contable = round(base + inc + iva + otros, 0)
+# propina se acumulaba pero NO se asentaba (quedaba descuadrado)
+```
+
+**Ahora:**
+```python
+total_bruto_contable = round(base + inc + iva + otros + propina, 0)
+# y se agrega línea:
+Cr 28150505 (PROPINAS) = propina (si > $5)
+```
+
+Asiento POS Token (4-5 líneas según haya IVA y/o propina):
+```
+Db CUENTA DE CAJA   = base + INC + IVA + otros + propina
+Cr 41401501         = base               (cta_base_v)
+Cr 24800505         = INC                (cta_ico, solo si > 0)
+Cr 24080501         = IVA                (solo si > 0)
+Cr 28150505         = propina            (solo si > $5)
+```
+
+Cuadre Db=Cr garantizado por construcción.
+
+CC propina = CC de la sucursal (igual que en histórico real de JIPER).
 
 ---
 
 ## Cambio en `Home.py`
 
-Diff mínimo — solo se agrega el registro de la nueva página y se incluye en
-el sidebar de "Asistente Contable". Todas las demás herramientas siguen
-en su lugar:
-
-```diff
-+asistente_xml_descargador = st.Page(
-+    "app_pages/5b_Descargador_XML.py",
-+    title="Descargador XML DIAN",
-+    icon="📥",
-+    url_path="descargador-xml",
-+)
-
- nav = st.navigation(
-     {
-         ...
-         "🤖 Asistente Contable": [
-             asistente_caja,
-             asistente_token_dian,
-             asistente_nomina,
-             asistente_prov,
-             asistente_ventas_c13,
-             asistente_pos,
-             asistente_pila,
-+            asistente_xml_descargador,
-         ],
-         "📊 Herramientas Tributarias": [...],
-         "⚙️ Sistema": [...],
-     },
- )
-```
+Solo +11 líneas (registrar nueva página y agregarla al sidebar). Todas las
+herramientas originales se conservan.
 
 ---
 
 ## Archivos modificados
 
 ```
-Home.py                                             (+11 líneas, 0 removidas)
-app_pages/4b_Ingresos_POS.py                        (sin cambios)
-app_pages/5b_Descargador_XML.py                     (NUEVO)
-app_pages/5a_DIAN_XML.py                            (modificado del turno anterior)
-core/data/datos_punto.json                          (+cta_propinas)
-core/procesadores/procesador_dian_xml.py            (+campos extendidos emisor)
-core/procesadores/procesador_pos.py                 (+lógica propinas)
-core/procesadores/exportador_nits_siigo.py          (+codigo_ciudad)
-core/procesadores/agregador_terceros_xml.py         (NUEVO)
-datos_punto.json                                    (+cta_propinas)
-tests/test_pos_propinas.py                          (NUEVO — 6 tests)
-tests/test_agregador_terceros_xml.py                (NUEVO — 7 tests)
-tests/test_filtros_descargador.py                   (NUEVO — 7 tests)
+Home.py                                                  (+11 líneas, 0 removidas)
+app_pages/4b_Ingresos_POS.py                             (+ selector modo + flujo Token)
+app_pages/5a_DIAN_XML.py                                 (modificado del bloque 1)
+app_pages/5b_Descargador_XML.py                          (NUEVO — del bloque 2)
+core/data/datos_punto.json                               (+cta_propinas)
+core/procesadores/agregador_terceros_xml.py              (NUEVO)
+core/procesadores/exportador_nits_siigo.py               (+codigo_ciudad)
+core/procesadores/procesador_dian_xml.py                 (+campos extendidos emisor)
+core/procesadores/procesador_pos.py                      (+propinas Modo Reportes)
+core/procesadores/procesador_ventas_excel_token_v2.py    (+propinas Modo Token)  ← NUEVO
+datos_punto.json                                         (+cta_propinas)
+tests/test_pos_propinas.py                               (6 tests)
+tests/test_pos_token_propinas.py                         (5 tests)  ← NUEVO
+tests/test_agregador_terceros_xml.py                     (7 tests)
+tests/test_filtros_descargador.py                        (7 tests)
 ```
 
 ## Tests
 
-Total: **38 tests pasan**, 0 regresiones.
+**43 tests pasan** (38 acumulados + 5 nuevos del modo Token POS). 0 regresiones.
 
-## Cómo se ve el menú después del parche
+```
+tests/test_pos_propinas.py             6 passed   (Modo Reportes — propinas)
+tests/test_pos_token_propinas.py       5 passed   (Modo Token — propinas)  ← NUEVO
+tests/test_agregador_terceros_xml.py   7 passed   (terceros nuevos)
+tests/test_pos_token.py               18 passed   (preexistente, sigue OK)
+tests/test_filtros_descargador.py      7 passed   (filtros tipos/prefijos)
+```
+
+## Notas sobre hilos de descarga (pregunta del usuario)
+
+Sí, en `5b_Descargador_XML.py` los hilos están configurados en **bloques de
+hasta 500 documentos por hilo**:
+
+```python
+n_hilos_total = max(1, math.ceil(total_descargar / 500))
+ctrl = dd.iniciar_descarga_paralela(
+    token_url, cufes_pendientes,
+    tam_bloque=500,  # ← 500 docs por hilo
+    delay=0.15,
+)
+```
+
+Ejemplos:
+- 234 docs → 1 hilo
+- 1.234 docs → 3 hilos paralelos (500 + 500 + 234)
+- 2.500 docs → 5 hilos paralelos
+
+Cada hilo es una sesión paralela; si el Token expira, los hilos restantes
+siguen y los faltantes se pueden retomar con un Token nuevo (la página
+detecta los ya descargados).
+
+## Cómo se ve el menú
 
 ```
 📊 Plataforma Contable
@@ -160,17 +189,9 @@ Total: **38 tests pasan**, 0 regresiones.
 │   ├── 💼 Nómina
 │   ├── 📝 Provisiones
 │   ├── 🛍️ Ventas C13
-│   ├── 🧾 Ventas POS
+│   ├── 🧾 Ventas POS                    ← ahora con 2 modos adentro
 │   ├── 📎 PILA
-│   └── 📥 Descargador XML DIAN          ← NUEVO
-├── 📊 Herramientas Tributarias
-│   ├── 📑 RADIAN Acuses DIAN
-│   ├── 📑 Información Exógena
-│   ├── 📝 Declaración de Renta
-│   ├── 💸 IVA y reteIVA
-│   ├── 🧾 Retención en la Fuente
-│   └── 🥤 Impuestos Saludables
-└── ⚙️ Sistema
-    ├── 🛡️ Panel Admin
-    └── ⚙️ Configuración
+│   └── 📥 Descargador XML DIAN          ← agregado en el turno anterior
+├── 📊 Herramientas Tributarias  (intacto)
+└── ⚙️ Sistema  (intacto)
 ```
