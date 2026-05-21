@@ -61,10 +61,12 @@ st.set_page_config(
 # HEADER
 # =============================================================================
 
-st.title('📑 RADIAN — Documentos Electrónicos DIAN')
+st.title('📑 Reporte Catálogo VPFE')
 st.caption(
     'Filtra y exporta documentos del catálogo VPFE de la DIAN. '
-    'Útil para identificar facturas a crédito recibidas y cruzar contra F1009/CxP.'
+    'Útil para identificar facturas a crédito recibidas y cruzar contra F1009/CxP. '
+    '*(Nota: NO emite eventos RADIAN reales. Para envío de eventos 030/032/033 '
+    'usar el módulo de RADIAN Eventos cuando esté disponible.)*'
 )
 
 with st.expander('ℹ️ ¿Cómo descargar el reporte del catálogo VPFE?'):
