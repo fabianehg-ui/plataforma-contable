@@ -1,6 +1,6 @@
 {
   "_descripcion": "Índice maestro de empresas configuradas",
-  "_actualizado": "2026-05-19",
+  "_actualizado": "2026-05-21",
   "empresas": [
     {
       "id": "900451388",
@@ -14,6 +14,13 @@
       "nit": "901038325",
       "razon_social": "JIPER S.A.S",
       "carpeta": "901038325_jiper",
+      "activa": true
+    },
+    {
+      "id": "900473959",
+      "nit": "900473959",
+      "razon_social": "Casa UnoTres SAS",
+      "carpeta": "900473959_casa_unotres",
       "activa": true
     }
   ]
