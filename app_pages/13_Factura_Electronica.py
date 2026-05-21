@@ -74,17 +74,29 @@ def _obtener_master():
     env = _master_desde_entorno()
     if env:
         return env
-    with st.sidebar:
-        st.markdown("### 🔐 Clave maestra del vault")
-        st.caption("Descifra el certificado .p12. Solo vive en esta sesión.")
-        pwd = st.text_input("Clave maestra", type="password", key="_fe_master")
-    return pwd if (pwd and len(pwd) >= 8) else None
+    st.markdown("### 🔐 Clave maestra del vault")
+    st.caption(
+        "Descifra el certificado .p12. Solo vive en esta sesión. "
+        "**Mínimo 8 caracteres** — usa siempre la misma."
+    )
+    pwd = st.text_input(
+        "Clave maestra", type="password", key="_fe_master",
+        placeholder="Al menos 8 caracteres…",
+    )
+    if not pwd:
+        return None
+    if len(pwd) < 8:
+        st.error(
+            f"La clave debe tener al menos 8 caracteres (tiene {len(pwd)})."
+        )
+        return None
+    return pwd
 
 
 MASTER = _obtener_master()
 if not MASTER:
     st.info(
-        "🔐 Ingresa la **clave maestra del vault** en la barra lateral "
+        "🔐 Escribe la **clave maestra del vault** arriba "
         "(o configura el secret `DIAN_MASTER_PWD`)."
     )
     st.stop()

@@ -88,27 +88,36 @@ def _obtener_master_password():
     env_pwd = _master_password_desde_entorno()
     if env_pwd:
         return env_pwd
-    with st.sidebar:
-        st.markdown("### 🔐 Clave maestra del vault")
-        st.caption(
-            "Cifra/descifra los certificados .p12. No se guarda en disco; "
-            "solo vive en esta sesión."
+
+    # Campo en el CUERPO de la página (visible siempre, no solo en la barra lateral)
+    st.markdown("### 🔐 Clave maestra del vault")
+    st.caption(
+        "Cifra/descifra los certificados .p12. No se guarda en disco; solo vive "
+        "en esta sesión. **Mínimo 8 caracteres** — defínela una vez y usa siempre "
+        "la misma (con otra clave no podrás abrir los certificados ya guardados)."
+    )
+    pwd = st.text_input(
+        "Clave maestra", type="password", key="_dian_master_input",
+        placeholder="Al menos 8 caracteres…",
+    )
+    if not pwd:
+        return None
+    if len(pwd) < 8:
+        st.error(
+            f"La clave debe tener al menos 8 caracteres (tiene {len(pwd)}). "
+            "Escribe una más larga para continuar."
         )
-        pwd = st.text_input(
-            "Clave maestra", type="password", key="_dian_master_input",
-            help="Mínimo 8 caracteres. Usa siempre la misma.",
-        )
-    if pwd and len(pwd) >= 8:
-        return pwd
-    return None
+        return None
+    return pwd
 
 
 MASTER = _obtener_master_password()
 
 if not MASTER:
     st.info(
-        "🔐 Ingresa la **clave maestra del vault** en la barra lateral para "
-        "operar este módulo. (O configura el secret `DIAN_MASTER_PWD`.)"
+        "🔐 Escribe la **clave maestra del vault** arriba para operar este módulo. "
+        "(O configura el secret `DIAN_MASTER_PWD` en Streamlit Cloud para no "
+        "tener que escribirla.)"
     )
     st.stop()
 
