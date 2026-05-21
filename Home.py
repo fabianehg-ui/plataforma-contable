@@ -76,7 +76,7 @@ def home_page():
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric("Módulos disponibles", "15")
+        st.metric("Módulos disponibles", "17")
     with col3:
         st.metric("Sesión", "Activa")
 
@@ -91,15 +91,13 @@ def home_page():
                 "_Procesamiento contable diario y mensual._"
             )
             st.markdown(
+                "- 📥 Contabilidad con XML DIAN\n"
                 "- 💵 Caja Menor\n"
-                "- 🛒 Compras DIAN\n"
-                "- 📊 Compras y Egresos\n"
                 "- 💼 Nómina\n"
                 "- 📝 Provisiones\n"
                 "- 🛍️ Ventas C13\n"
-                "- 🧾 Ingresos POS\n"
-                "- 📎 PILA\n"
-                "- 📥 DIAN XML"
+                "- 🧾 Ventas POS\n"
+                "- 📎 PILA"
             )
 
     with col_b:
@@ -109,7 +107,9 @@ def home_page():
                 "_Declaraciones e información tributaria periódica._"
             )
             st.markdown(
-                "- 📑 RADIAN Acuses DIAN\n"
+                "- 📑 Reporte Catálogo VPFE\n"
+                "- 📨 RADIAN Eventos *(próximamente)*\n"
+                "- 🧾 Facturación Electrónica *(próximamente)*\n"
                 "- 📑 Información Exógena\n"
                 "- 📝 Declaración de Renta\n"
                 "- 💸 IVA y reteIVA\n"
@@ -197,9 +197,9 @@ asistente_xml_descargador = st.Page(
 # ----- Sección: Herramientas Tributarias -----
 trib_radian = st.Page(
     "app_pages/6_RADIAN_Acuses_DIAN.py",
-    title="RADIAN Acuses DIAN",
+    title="Reporte Catálogo VPFE",
     icon="📑",
-    url_path="radian-acuses",
+    url_path="reporte-vpfe",
 )
 trib_exogena = st.Page(
     "app_pages/7_Informacion_Exogena.py",
@@ -230,6 +230,18 @@ trib_saludables = st.Page(
     title="Impuestos Saludables",
     icon="🥤",
     url_path="saludables",
+)
+trib_radian_eventos = st.Page(
+    "app_pages/12_RADIAN_Eventos.py",
+    title="RADIAN Eventos",
+    icon="📨",
+    url_path="radian-eventos",
+)
+trib_factura_e = st.Page(
+    "app_pages/13_Factura_Electronica.py",
+    title="Facturación Electrónica",
+    icon="🧾",
+    url_path="factura-electronica",
 )
 
 # ----- Sección: Sistema -----
@@ -265,6 +277,8 @@ nav = st.navigation(
         ],
         "📊 Herramientas Tributarias": [
             trib_radian,
+            trib_radian_eventos,
+            trib_factura_e,
             trib_exogena,
             trib_renta,
             trib_iva,
