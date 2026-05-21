@@ -1,0 +1,59 @@
+{
+  "_doc": {
+    "descripcion": "Maestro de empleadas para el módulo de Nómina. Cada empleada se identifica por su CC. El campo tipo determina las cuentas contables (ADMIN→510xxx, OPERACION→520xxx). La tasa_arl es específica por empleada (se calcula como 'Aporte Riesgos / IBC Riesgos' en la planilla PILA mensual; estos son los valores por defecto y pueden ajustarse).",
+    "campos": {
+      "cc": "Cédula sin guiones ni puntos. Es la clave única.",
+      "nombre": "Nombre completo en mayúsculas.",
+      "tipo": "ADMIN | OPERACION — define la serie de cuentas (510 o 520).",
+      "tasa_arl": "Decimal. Por defecto 0.00522 (Clase I). Para operación de restaurante suele ser 0.02436 (Clase III).",
+      "fondo_pension": "Informativo. Para futuras conciliaciones con PILA.",
+      "eps": "Informativo.",
+      "arl": "Informativo.",
+      "caja": "Informativo."
+    },
+    "version": "1.0",
+    "actualizado": "2026-04-27"
+  },
+  "empleados": [
+    {
+      "cc": "39177488",
+      "nombre": "ELIZABETH MENA COLLASOS",
+      "tipo": "ADMIN",
+      "tasa_arl": 0.00522,
+      "fondo_pension": "PROTECCION",
+      "eps": "EPS SURA",
+      "arl": "ARL SURA",
+      "caja": "COMFAMA"
+    },
+    {
+      "cc": "43101052",
+      "nombre": "MARIA YORLADIS MORALES RAMOS",
+      "tipo": "OPERACION",
+      "tasa_arl": 0.02436,
+      "fondo_pension": "COLFONDOS",
+      "eps": "EPS SURA",
+      "arl": "ARL SURA",
+      "caja": "COMFAMA"
+    },
+    {
+      "cc": "1000895032",
+      "nombre": "MARIA JOSE GARCIA MORALES",
+      "tipo": "OPERACION",
+      "tasa_arl": 0.02436,
+      "fondo_pension": "PROTECCION",
+      "eps": "EPS SURA",
+      "arl": "ARL SURA",
+      "caja": "COMFAMA"
+    },
+    {
+      "cc": "1128467903",
+      "nombre": "JOHANA ANDREA GARCIA MORALES",
+      "tipo": "OPERACION",
+      "tasa_arl": 0.02436,
+      "fondo_pension": "PORVENIR",
+      "eps": "EPS SURA",
+      "arl": "ARL SURA",
+      "caja": "COMFAMA"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "_version": "0.3.1",
+  "_actualizado": "2026-04-30",
+
+  "nit": "900451388",
+  "dv": "9",
+  "razon_social": "SILLA TRES S.A.S",
+  "tipo_empresa": "restaurante_multi_local",
+  "regimen_tributario": {
+    "es_responsable_iva": true,
+    "es_gran_contribuyente": false,
+    "es_autorretenedor_renta": false,
+    "regimen": "ordinario",
+    "ica_municipio": "MEDELLIN",
+    "ica_actividad_principal": "servicios"
+  },
+
+  "comportamiento_retenciones": {
+    "_descripcion": "Define cuándo y cómo Silla Tres practica retenciones a sus proveedores",
+    "practica_retefuente": true,
+    "practica_reteiva": true,
+    "practica_reteiva_modo": "solo_a_RST",
+    "practica_reteica": false,
+    "_comentario_reteiva": "Silla Tres SOLO retiene IVA a proveedores RST (régimen simple).",
+    "_comentario_reteica": "Silla Tres NO es agente retenedor de ICA.",
+    "umbral_minimo_aplica": true,
+    "redondeo": "miles"
+  },
+
+  "formato_salida": {
+    "cc_formato": "sin_guion",
+    "_comentario_cc": "Los CCs internamente son '10-04' pero en el plano salen como '1004' (sin guion).",
+    "ejemplo": "10-04 → 1004"
+  },
+
+  "auto_insumos_alimenticios": {
+    "activo": true,
+    "comentario": "Para NITs no catalogados se intenta auto-detección de insumos alimenticios"
+  },
+
+  "cuentas_iva": {
+    "bienes": "24080201",
+    "servicios": "24080308",
+    "reverso_iva_nc": "24080204",
+    "por_tarifa": {
+      "5":  { "bienes": "24080203", "servicios": "24080306" },
+      "19": { "bienes": "24080201", "servicios": "24080308" }
+    }
+  },
+
+  "cuentas_inventario_por_tarifa_iva": {
+    "_descripcion": "Cuentas de inventario alineadas al plan contable real de Silla Tres",
+    "0":  "14350503",
+    "5":  "14350509",
+    "19": "14350511",
+    "no_deducible": "14350504"
+  },
+
+  "cuentas_impuestos_especiales": {
+    "inc": "24080530",
+    "ibua_inventario": "14359505",
+    "icui_inventario": "14359504",
+    "otros": "24089595",
+    "_comentario": "IBUA e ICUI van a inventario (143595xx) según plan contable de Silla Tres, NO a cuenta del pasivo"
+  },
+
+  "cuentas_proveedores": {
+    "default": "22050501",
+    "anticipo": "13300501"
+  },
+
+  "cuenta_pendiente_revision": "519095",
+  "cuenta_no_deducible": "529596",
+
+  "comprobantes": {
+    "_descripcion": "Mapeo legacy v0.2 (usado por procesador_dian_xml.py). Mantener sincronizado con comprobantes_por_tipo_dian.",
+    "factura_recibida": "3",
+    "nota_credito_recibida": "12",
+    "nota_debito_recibida": "7",
+    "documento_soporte_recibido": "3"
+  },
+
+  "comprobantes_por_tipo_dian": {
+    "_descripcion": "Mapeo de tipo de documento DIAN a comprobante contable de Silla Tres",
+    "FE": { "comprobante": "3",  "descripcion": "Causación factura compra" },
+    "DS": { "comprobante": "3",  "descripcion": "Causación documento soporte" },
+    "NC": { "comprobante": "12", "descripcion": "Nota crédito recibida" },
+    "ND": { "comprobante": "7",  "descripcion": "Nota débito recibida" },
+    "ACUSE": { "comprobante": "", "descripcion": "Acuse de recibo (no se contabiliza)" },
+    "DESCONOCIDO": { "comprobante": "99", "descripcion": "Tipo no detectado - revisar manualmente" }
+  },
+
+  "cc_default": "10-10",
+  "cc_default_nombre": "GENERAL",
+  "_comentario_cc": "Si no se puede determinar CC por palabra clave, dirección ni NIT, va al CC GENERAL"
+}

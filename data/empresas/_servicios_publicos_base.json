@@ -1,0 +1,138 @@
+{
+  "_comentario": "Catálogo base de empresas de servicios públicos colombianas. Se usa como semilla para empresas nuevas. NITs y reglas conocidas a 2026.",
+  "_uso": "Cargar este JSON automáticamente cuando se crea una empresa nueva, o usarlo como referencia al editar mapeos.",
+  "servicios_publicos": {
+    "830037946": {
+      "razon_social": "Empresas Públicas de Medellín ESP (EPM)",
+      "tipo_servicio": "energia_agua_gas",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513525",
+        "centro_costo": "ADMIN",
+        "concepto": "Servicios públicos - EPM"
+      },
+      "reglas_item": [
+        { "patron": "energ[ií]a|kwh|electric", "cuenta": "513525", "centro_costo": "ADMIN", "concepto": "Energía eléctrica" },
+        { "patron": "agua|acueducto|alcantarillado|m3", "cuenta": "513530", "centro_costo": "ADMIN", "concepto": "Acueducto y alcantarillado" },
+        { "patron": "gas natural|gas\\b", "cuenta": "513540", "centro_costo": "ADMIN", "concepto": "Gas natural" },
+        { "patron": "aseo|recolecci[oó]n", "cuenta": "513545", "centro_costo": "ADMIN", "concepto": "Aseo público" }
+      ]
+    },
+    "830122566": {
+      "razon_social": "CODENSA SA ESP / ENEL",
+      "tipo_servicio": "energia",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513525",
+        "centro_costo": "ADMIN",
+        "concepto": "Energía eléctrica"
+      },
+      "reglas_item": []
+    },
+    "899999094": {
+      "razon_social": "Empresa de Acueducto y Alcantarillado de Bogotá (EAAB)",
+      "tipo_servicio": "agua",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513530",
+        "centro_costo": "ADMIN",
+        "concepto": "Acueducto y alcantarillado"
+      },
+      "reglas_item": []
+    },
+    "800007813": {
+      "razon_social": "Vanti SA ESP (Gas Natural)",
+      "tipo_servicio": "gas",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513540",
+        "centro_costo": "ADMIN",
+        "concepto": "Gas natural"
+      },
+      "reglas_item": []
+    },
+    "800153993": {
+      "razon_social": "COMUNICACIÓN CELULAR S.A. (Claro Movil)",
+      "tipo_servicio": "telecomunicaciones",
+      "tipo_retencion": "juridica",
+      "default": {
+        "cuenta": "513535",
+        "centro_costo": "ADMIN",
+        "concepto": "Servicios de telecomunicaciones"
+      },
+      "reglas_item": [
+        { "patron": "internet|fibra|banda\\s*ancha", "cuenta": "513535", "centro_costo": "ADMIN", "concepto": "Internet" },
+        { "patron": "celular|m[oó]vil|telefon[ií]a", "cuenta": "513535", "centro_costo": "ADMIN", "concepto": "Telefonía móvil" }
+      ]
+    },
+    "830122718": {
+      "razon_social": "COLOMBIA TELECOMUNICACIONES S.A. (Movistar)",
+      "tipo_servicio": "telecomunicaciones",
+      "tipo_retencion": "juridica",
+      "default": {
+        "cuenta": "513535",
+        "centro_costo": "ADMIN",
+        "concepto": "Servicios de telecomunicaciones"
+      },
+      "reglas_item": []
+    },
+    "830114921": {
+      "razon_social": "COLOMBIA MOVIL S.A. ESP (Tigo)",
+      "tipo_servicio": "telecomunicaciones",
+      "tipo_retencion": "juridica",
+      "default": {
+        "cuenta": "513535",
+        "centro_costo": "ADMIN",
+        "concepto": "Servicios de telecomunicaciones"
+      },
+      "reglas_item": []
+    },
+    "890903938": {
+      "razon_social": "EMPRESAS VARIAS DE MEDELLÍN S.A. ESP",
+      "tipo_servicio": "aseo",
+      "tipo_retencion": "no_retiene",
+      "default": {
+        "cuenta": "513545",
+        "centro_costo": "ADMIN",
+        "concepto": "Aseo público"
+      },
+      "reglas_item": []
+    }
+  },
+  "_reglas_genericas_servicios_publicos": [
+    {
+      "_comentario": "Si el NIT no está catalogado pero la descripción del ítem matchea estos patrones, se asume servicio público",
+      "patron_emisor": "(EPM|EMPRESAS\\s*P[UÚ]BLICAS|ESP\\b|E\\.S\\.P|CODENSA|ENEL|EAAB|ACUEDUCTO|VANTI|GAS\\s*NATURAL|CLARO|MOVISTAR|TIGO|UNE|EMPRESAS?\\s*VARIAS)"
+    },
+    {
+      "patron_descripcion": "energ[ií]a|kwh\\b|electric",
+      "cuenta": "513525",
+      "concepto": "Energía eléctrica"
+    },
+    {
+      "patron_descripcion": "agua|acueducto|alcantarillado|m3\\b",
+      "cuenta": "513530",
+      "concepto": "Acueducto"
+    },
+    {
+      "patron_descripcion": "gas\\s*(natural)?|m3\\s*gas",
+      "cuenta": "513540",
+      "concepto": "Gas natural"
+    },
+    {
+      "patron_descripcion": "internet|fibra|banda\\s*ancha|red\\s*fija",
+      "cuenta": "513535",
+      "concepto": "Internet"
+    },
+    {
+      "patron_descripcion": "celular|m[oó]vil|telefon[ií]a|plan\\s*pospago",
+      "cuenta": "513535",
+      "concepto": "Telecomunicaciones"
+    },
+    {
+      "patron_descripcion": "aseo|recolecci[oó]n|residuos",
+      "cuenta": "513545",
+      "concepto": "Aseo"
+    }
+  ]
+}

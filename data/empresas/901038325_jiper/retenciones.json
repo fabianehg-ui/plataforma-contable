@@ -1,0 +1,244 @@
+{
+  "_descripcion": "Catálogo de conceptos de retención según tabla DIAN 2026 oficial",
+  "_fuente": "https://www.gerencie.com/tabla-de-retencion-en-la-fuente-2026.html",
+  "_uvt_2026": 52374,
+  "_resolucion_uvt": "Resolución DIAN 000238 de diciembre 2025",
+  "_actualizado": "2026-04-30",
+
+  "_configuracion_jiper": {
+    "comentario_reteiva": "Configuración base de JIPER. AJUSTAR cuando se definan reglas reales.",
+    "comentario_reteica": "JIPER por defecto NO es agente retenedor de ICA. Cambiar si aplica.",
+    "redondeo": "miles"
+  },
+
+  "conceptos": {
+    "compras_2_5": {
+      "nombre": "Compras generales (declarantes)",
+      "tarifa": 0.025,
+      "base_minima_uvt": 10,
+      "base_minima_pesos": 523740,
+      "cuenta_db_proveedor": "23654020",
+      "aplica_si_emisor_es": ["declarante_renta"],
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta", "no_declarante"]
+    },
+    "compras_3_5": {
+      "nombre": "Compras generales (no declarantes)",
+      "tarifa": 0.035,
+      "base_minima_uvt": 10,
+      "base_minima_pesos": 523740,
+      "cuenta_db_proveedor": "23654025",
+      "aplica_si_emisor_es": ["no_declarante"],
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta", "declarante_renta"]
+    },
+    "compras_agricolas_sin_proceso_1_5": {
+      "nombre": "Compras agrícolas/pecuarios sin procesamiento industrial",
+      "tarifa": 0.015,
+      "base_minima_uvt": 70,
+      "base_minima_pesos": 3666180,
+      "cuenta_db_proveedor": "23654030",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "compras_agricolas_con_proceso_2_5": {
+      "nombre": "Compras agrícolas/pecuarios con procesamiento industrial (declarantes)",
+      "tarifa": 0.025,
+      "base_minima_uvt": 10,
+      "base_minima_pesos": 523740,
+      "cuenta_db_proveedor": "23654030",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "servicios_4": {
+      "nombre": "Servicios generales (declarantes)",
+      "tarifa": 0.04,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652505",
+      "aplica_si_emisor_es": ["declarante_renta"],
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "servicios_6": {
+      "nombre": "Servicios generales (no declarantes)",
+      "tarifa": 0.06,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652510",
+      "aplica_si_emisor_es": ["no_declarante"],
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "servicios_temporales_aiu_1": {
+      "nombre": "Servicios prestados por empresas de servicios temporales (sobre AIU)",
+      "tarifa": 0.01,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652515",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "servicios_vigilancia_aseo_aiu_2": {
+      "nombre": "Servicios de vigilancia y aseo (sobre AIU)",
+      "tarifa": 0.02,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652515",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "servicios_hoteles_restaurantes_3_5": {
+      "nombre": "Servicios de hoteles y restaurantes",
+      "tarifa": 0.035,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652525",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "servicios_salud_ips_2": {
+      "nombre": "Servicios integrales de salud prestados por IPS",
+      "tarifa": 0.02,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652535",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "transporte_carga_1": {
+      "nombre": "Servicios de transporte de carga",
+      "tarifa": 0.01,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652520",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "transporte_pasajeros_terrestre_3_5": {
+      "nombre": "Transporte nacional de pasajeros por vía terrestre",
+      "tarifa": 0.035,
+      "base_minima_uvt": 10,
+      "base_minima_pesos": 523740,
+      "cuenta_db_proveedor": "23652520",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "transporte_pasajeros_aereo_1": {
+      "nombre": "Transporte nacional de pasajeros aéreo o marítimo",
+      "tarifa": 0.01,
+      "base_minima_uvt": 2,
+      "base_minima_pesos": 104748,
+      "cuenta_db_proveedor": "23652520",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "honorarios_11": {
+      "nombre": "Honorarios y comisiones (personas jurídicas)",
+      "tarifa": 0.11,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23651510",
+      "aplica_si_emisor_es": ["persona_juridica", "declarante_renta"],
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "honorarios_pn_3300_uvt_11": {
+      "nombre": "Honorarios PN >3300 UVT año (o contratos >3300 UVT)",
+      "tarifa": 0.11,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23651505",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "honorarios_10": {
+      "nombre": "Honorarios y comisiones (no declarantes / PN < 3300 UVT)",
+      "tarifa": 0.10,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23651505",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "comisiones_11": {
+      "nombre": "Comisiones",
+      "tarifa": 0.11,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23651520",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "arrendamiento_inmueble_3_5": {
+      "nombre": "Arrendamiento de bienes inmuebles",
+      "tarifa": 0.035,
+      "base_minima_uvt": 10,
+      "base_minima_pesos": 523740,
+      "cuenta_db_proveedor": "23653005",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "arrendamiento_mueble_4": {
+      "nombre": "Arrendamiento de bienes muebles",
+      "tarifa": 0.04,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23653010",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "software_3_5": {
+      "nombre": "Servicios de licenciamiento o derecho de uso de software",
+      "tarifa": 0.035,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23652530",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "construccion_2": {
+      "nombre": "Contratos de construcción y urbanización",
+      "tarifa": 0.02,
+      "base_minima_uvt": 10,
+      "base_minima_pesos": 523740,
+      "cuenta_db_proveedor": "23652540",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "regalias_franquicias_2_5": {
+      "nombre": "Regalías y uso de marca / franquicias",
+      "tarifa": 0.025,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23657002",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "compras_combustibles_0_1": {
+      "nombre": "Compras de combustibles derivados del petróleo",
+      "tarifa": 0.001,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23654030",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "compras_tarjeta_1_5": {
+      "nombre": "Compras con tarjeta débito o crédito",
+      "tarifa": 0.015,
+      "base_minima_uvt": 0,
+      "base_minima_pesos": 0,
+      "cuenta_db_proveedor": "23654020",
+      "no_aplica_si_emisor_es": ["RST", "autorretenedor_renta"]
+    },
+    "sin_retencion_servicio_publico": {
+      "nombre": "Servicios públicos domiciliarios (no retiene)",
+      "tarifa": 0,
+      "no_aplicar": true,
+      "razon": "Los servicios públicos domiciliarios (agua, luz, gas, aseo) no están sujetos a retención en la fuente"
+    },
+    "sin_retencion": {
+      "nombre": "Sin retención",
+      "tarifa": 0,
+      "no_aplicar": true,
+      "razon": "Concepto sin retención asociada"
+    }
+  },
+
+  "reteiva": {
+    "_descripcion": "Retención de IVA. CONFIGURACIÓN ESPECIAL SILLA TRES: Solo se practica cuando el emisor es RST (Régimen Simple).",
+    "modo_aplicacion": "solo_a_RST",
+    "comentario": "El comportamiento estándar sería NO retener a RST. Pero en Silla Tres el comportamiento es INVERSO: retener SOLO a RST.",
+    "tarifa_compras": 0.15,
+    "tarifa_servicios": 0.15,
+    "base_minima_uvt_compras": 10,
+    "base_minima_uvt_servicios": 2,
+    "base_minima_pesos_compras": 523740,
+    "base_minima_pesos_servicios": 104748,
+    "cuenta_db_proveedor": "23670505"
+  },
+
+  "reteica": {
+    "_descripcion": "Silla Tres NO es agente retenedor de ICA. Esta sección queda deshabilitada.",
+    "habilitado": false,
+    "razon": "La empresa no está obligada a practicar reteICA"
+  }
+}

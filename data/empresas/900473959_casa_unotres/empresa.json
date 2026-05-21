@@ -1,0 +1,43 @@
+{
+  "id": "casa_unotres",
+  "nit": "900473959",
+  "razon_social": "Casa UnoTres SAS",
+  "regimen": "ordinario",
+  "responsabilidades_fiscales": ["O-13", "O-15"],
+  "exonerada_114_1": true,
+  "comprobantes": {
+    "factura_recibida": "COMP 7",
+    "nota_credito_recibida": "COMP 13",
+    "documento_soporte_recibido": "COMP 18",
+    "nota_debito_recibida": "COMP 7"
+  },
+  "cuentas_iva": {
+    "bienes": "24080201",
+    "servicios": "24080308",
+    "reverso_iva_nc": "24080204",
+    "por_tarifa": {
+      "5":  { "bienes": "24080203", "servicios": "24080306" },
+      "19": { "bienes": "24080201", "servicios": "24080308" }
+    }
+  },
+  "cuentas_impuestos_especiales": {
+    "inc": "24080530",
+    "ibua": "24080540",
+    "icui": "24080515",
+    "otros": "24089595"
+  },
+  "cuentas_retencion_default": {
+    "rete_fuente": "23652501",
+    "rete_iva": "23680505",
+    "rete_ica": "23680510"
+  },
+  "auto_insumos_alimenticios": {
+    "activo": false,
+    "cuenta": "143505",
+    "centro_costo": "PROD",
+    "concepto": "Materia prima - alimentos (auto)"
+  },
+  "centro_costo_default": "ADMIN",
+  "consecutivo_inicial": 1,
+  "moneda": "COP"
+}

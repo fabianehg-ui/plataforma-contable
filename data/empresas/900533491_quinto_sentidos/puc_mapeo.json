@@ -1,0 +1,339 @@
+{
+  "empresa": "900533491_quinto_sentidos",
+  "version": "2025.1",
+  "fecha_creacion": "2026-05-05",
+  "ano_gravable": 2025,
+  "_comentario": "Mapeo de cuentas auxiliares PUC a conceptos DIAN para información exógena. Cada cuenta indica a qué formato(s) va y con qué concepto DIAN se reporta. Las cuentas con 'omitir: true' no se reportan (saldos de control, traslados internos, etc).",
+
+  "cuentas": {
+
+    "_____EFECTIVO_____": "===== Cuenta 11 — Efectivo =====",
+    "11050501": { "nombre": "CAJA GENERAL", "omitir": true, "razon": "Saldo final 0, movimiento interno" },
+    "11051003": { "nombre": "CAJA CRUCES BIOK", "omitir": true, "razon": "Saldo final 0" },
+    "11051004": { "nombre": "CAJA PACK BANCOLOMBIA", "omitir": true, "razon": "Saldo final 0" },
+    "11200505": { "nombre": "BANCOLOMBIA 7779", "omitir": true, "razon": "Saldo bancario propio, no se reporta en exógena" },
+    "11304001": { "nombre": "FIDUCIA BANCOL 0991000000133", "f1014": { "concepto": "1115", "descripcion": "Inversiones poseídas (fideicomisos)" } },
+    "11304002": { "nombre": "FIDUCIA BANCOL 0991000000134", "f1014": { "concepto": "1115" } },
+    "11304003": { "nombre": "FIDUCIA BANCOL 0991000000135", "f1014": { "concepto": "1115" } },
+    "11304004": { "nombre": "FIDUCIA BANCOL 0991000000205", "f1014": { "concepto": "1115" } },
+
+    "_____CXC_____": "===== Cuenta 13 — Cuentas por cobrar =====",
+    "13050501": { "nombre": "CLIENTES", "f1008": { "concepto": "1315", "descripcion": "Clientes - cuentas por cobrar" } },
+    "13300501": { "nombre": "ANTICIPOS A PROVEEDORES", "f1008": { "concepto": "1316", "descripcion": "Anticipos a proveedores" }, "_nota": "Saldo final 0, no aplica" },
+    "13652501": { "nombre": "CXC TRABAJADORES CALAMIDAD", "omitir": true, "razon": "Saldo 0" },
+    "13659501": { "nombre": "DESCUADRES DE CAJA", "omitir": true, "razon": "Saldo 0, cuenta de control" },
+    "13809501": { "nombre": "PRESTAMOS A TERCEROS", "f1008": { "concepto": "1317", "descripcion": "Préstamos por cobrar" }, "_nota": "Saldo final 0" },
+
+    "_____INVENTARIOS_____": "===== Cuenta 14 — Inventarios =====",
+    "143501":   { "nombre": "INVENTARIO AÑO ANTERIOR", "f1011": { "concepto": "1119", "descripcion": "Inventarios" } },
+    "14350503": { "nombre": "MERCANCIA NO GRAVADA", "f1001": { "concepto": "5005", "descripcion": "Compra de inventarios", "iva_aplicable": false } },
+    "14350505": { "nombre": "COMPRAS GRAVADAS 5%", "f1001": { "concepto": "5005", "iva_aplicable": true, "tarifa_iva": 0.05 } },
+    "14350511": { "nombre": "MERCANCIAS GRAVADAS 19%", "f1001": { "concepto": "5005", "iva_aplicable": true, "tarifa_iva": 0.19 } },
+
+    "_____DEVOLUCIONES_COMPRAS_____": "===== Devoluciones (afectan F1001 columna VDEV) =====",
+    "14357501": { "nombre": "DEVOL COMPRAS 16%", "f1001_devolucion": { "concepto": "5005" } },
+    "14357503": { "nombre": "DEVOL COMPRAS NO GRAVADAS", "f1001_devolucion": { "concepto": "5005" } },
+    "14357504": { "nombre": "DEVOLUCION COMPRAS 5%", "f1001_devolucion": { "concepto": "5005" } },
+    "14357505": { "nombre": "DEVOL COMPRAS 19%", "f1001_devolucion": { "concepto": "5005" } },
+
+    "_____IMPUESTO_SALUDABLE_____": "===== 🆕 NUEVA CATEGORÍA: Ley 2277/2022 - Impuesto saludable bebidas azucaradas =====",
+    "14359504": {
+      "nombre": "IMPUESTO SALUDABLE 10%",
+      "f1001": { "concepto": "5061", "descripcion": "Otros costos y deducciones - impuestos asumidos en compras" },
+      "_nota": "🆕 Cuenta nueva. El impuesto saludable se carga al inventario y se reporta como mayor valor de la compra. Cuando se vende, sale como costo.",
+      "regla_especial": "impuesto_saludable_inventario"
+    },
+    "14359505": {
+      "nombre": "IMPUESTO SALUDABLE 15%",
+      "f1001": { "concepto": "5061" },
+      "_nota": "🆕 Igual que la anterior pero tarifa 15%",
+      "regla_especial": "impuesto_saludable_inventario"
+    },
+
+    "14359901": { "nombre": "TRASLADO DE INVENTARIOS", "omitir": true, "razon": "Movimiento interno por venta - no es pago a tercero" },
+
+    "_____PPE_____": "===== Cuenta 15 — Propiedad Planta y Equipo =====",
+    "152005":   { "nombre": "MAQUINARIA Y EQUIPO (mayor)", "f1011": { "concepto": "1118", "descripcion": "PPE neto" } },
+    "152090":   { "nombre": "DEPRECIACION ACUMULADA 1520", "omitir": true, "razon": "Se reporta el PPE neto, no la depreciación separada" },
+    "152410":   { "nombre": "EQUIPOS OFICINA", "f1011": { "concepto": "1118" } },
+    "152480":   { "nombre": "IVA EQUIPO OFICINA", "omitir": true, "razon": "IVA capitalizado, no se reporta separado" },
+    "152490":   { "nombre": "DEPRECIACION 1524", "omitir": true },
+    "152890":   { "nombre": "DEPRECIACION 1528", "omitir": true },
+    "_nota_152": "Las cuentas auxiliares 1520xx individuales (TORRE, MONEDERO, MAQUI VENDING, etc.) se agrupan al saldo total del mayor 1520 para F1011. NO se reportan en F1001 las compras nuevas porque ya están en cuentas terminales 15200529, 15200531, 15200532.",
+    "15200529": { "nombre": "MONEDERO CSH VENDING", "f1001": { "concepto": "5052", "descripcion": "Compra de activos fijos" }, "_nota": "Compra de PPE en el año" },
+    "15200531": { "nombre": "COMPRA MAQUINARIA JUNIO 2025", "f1001": { "concepto": "5052" } },
+    "15200532": { "nombre": "COMPONENTE MONEDERO 2025", "f1001": { "concepto": "5052" } },
+    "15200524": { "nombre": "IVA COMPRA MAQUINARIA", "omitir": true, "razon": "IVA capitalizado va con la compra" },
+    "15200801": { "nombre": "MAQUINARIA (otra)", "f1001": { "concepto": "5052" } },
+    "15201005": { "nombre": "ACTIVOS MENORES", "f1001": { "concepto": "5052" }, "_nota": "Movimiento del año = compra activo menor" },
+
+    "_____INTANGIBLES_____": "===== Cuenta 16 — Intangibles (saldo final 0 pero hay movimiento) =====",
+    "16255001": {
+      "nombre": "RESERVAS HOTELERAS",
+      "f1001": { "concepto": "5026", "descripcion": "Servicios de alojamiento, manutención y turismo" },
+      "_nota": "🆕 Cuenta nueva. Reservas hoteleras a nombre de empleados. Pasa por intangible y se va al gasto.",
+      "regla_especial": "alojamiento_empleados"
+    },
+    "16352001": {
+      "nombre": "PLATAFORMAS VIRTUALES",
+      "f1001": { "concepto": "5026", "descripcion": "Servicios técnicos y software" },
+      "_nota": "🆕 Cuenta nueva. Software/licencias de plataformas digitales."
+    },
+
+    "_____ACTIVOS_IMPUESTOS_____": "===== Cuenta 19 — Activos por impuestos =====",
+    "194005":   { "nombre": "IMPUESTO DIFERIDO", "omitir": true, "razon": "No es activo fiscal — partida conciliatoria QS-003" },
+    "19551501": { "nombre": "RETENCION COMPRAS 3.5%", "f1003": { "concepto": "1313", "descripcion": "Retenciones que le practicaron" } },
+    "19551502": { "nombre": "RETENCION SERVICIOS 4%", "f1003": { "concepto": "1313" } },
+    "19551503": { "nombre": "RETENCION 1.5%", "f1003": { "concepto": "1313" } },
+    "19551504": { "nombre": "RETENCION SERVICIOS 1%", "f1003": { "concepto": "1313" } },
+    "19551505": { "nombre": "RETENCION COMPRAS 2.5%", "f1003": { "concepto": "1313" } },
+    "19551507": { "nombre": "RETENCION RENDIMIENTOS 7%", "f1003": { "concepto": "1313" } },
+    "19551901": { "nombre": "AUTORRETENCION ESPECIAL 1.10%", "omitir": true, "razon": "Autorretención no se reporta en F1003 (la practica la propia empresa)" },
+    "19551904": { "nombre": "AUTORRETENCION ESP 1.2%", "omitir": true, "razon": "Autorretención" },
+    "19552010": { "nombre": "RETENCIONES AÑO ANTERIOR", "omitir": true, "razon": "Saldo a favor de años anteriores" },
+    "19552011": { "nombre": "AUTORRETENCION AÑO ANTERIOR", "omitir": true },
+    "19552015": { "nombre": "SALDO A FAVOR EN RENTA", "omitir": true, "razon": "Saldo a favor declaración anterior" },
+
+    "_____PASIVOS_PROVEEDORES_____": "===== Cuenta 22 — Proveedores =====",
+    "22050501": { "nombre": "PROVEEDORES", "f1009": { "concepto": "2201", "descripcion": "Cuentas por pagar a proveedores nacionales" } },
+
+    "_____PASIVOS_SOCIOS_____": "===== Cuenta 21 — Obligaciones con socios =====",
+    "21952001": { "nombre": "SOCIOS Y ACCIONISTAS", "f1009": { "concepto": "2207", "descripcion": "Pasivos con socios o accionistas" }, "regla_especial": "intereses_presuntos_socios" },
+
+    "_____CXP_____": "===== Cuenta 23 — Cuentas por pagar (gastos por pagar) =====",
+    "23354001": { "nombre": "ARRENDAMIENTOS POR PAGAR", "f1009": { "concepto": "2202", "descripcion": "Cuentas por pagar - costos y gastos" }, "_nota": "Saldo 0" },
+    "23355001": { "nombre": "SERVICIOS PUBLICOS POR PAGAR", "f1009": { "concepto": "2202" }, "_nota": "Saldo 0" },
+
+    "_____RETENCIONES_PRACTICADAS_____": "===== Cuenta 2365/2369 — Retenciones que QS practicó (van en COLUMNA RETENCION del F1001) =====",
+    "23652505": { "nombre": "RETENCION SERVICIOS DEL 4%", "f1001_columna_retencion": true, "_nota": "Esta retención modifica la columna VRETE de F1001 según el tercero" },
+    "23652515": { "nombre": "RETENCION SERVICIOS DEL 2%", "f1001_columna_retencion": true },
+    "23652520": { "nombre": "RETENCION FLETES", "f1001_columna_retencion": true },
+    "23653005": { "nombre": "RETENCION ARRENDAMIENTOS", "f1001_columna_retencion": true },
+    "23654020": { "nombre": "RETENCION COMPRAS 2.5%", "f1001_columna_retencion": true },
+    "23659901": { "nombre": "TRASLADOS RETENCION", "omitir": true, "razon": "Pago a DIAN" },
+    "23690101": { "nombre": "AUTORRENTA 1.10%", "omitir": true, "razon": "Autorretención de la propia empresa" },
+    "23690102": { "nombre": "AUTORRETENCION ESP 1.2%", "omitir": true },
+    "23690199": { "nombre": "TRASLADO AUTORRENTA", "omitir": true },
+
+    "_____IMPUESTOS_POR_PAGAR_____": "===== Cuenta 24 — Impuestos =====",
+    "240205":   { "nombre": "IMPUESTO DIFERIDO PASIVO", "omitir": true, "razon": "Partida conciliatoria QS-004" },
+    "240405":   { "nombre": "IMPUESTO RENTA POR PAGAR", "omitir": true, "razon": "Provisión renta - partida conciliatoria QS-004" },
+    "240610":   { "nombre": "RETENCION FUENTE POR PAGAR", "f1009": { "concepto": "2208", "descripcion": "Impuestos por pagar" } },
+    "240625":   { "nombre": "IVA POR PAGAR", "f1009": { "concepto": "2208" } },
+    "24080506": { "nombre": "IVA GENERADO 19%", "omitir": true, "razon": "El IVA generado se relaciona en F1006 si aplica, no en F1009" },
+    "24081005": { "nombre": "IVA DESC COMPRAS 5%", "f1005": { "concepto": "1305", "descripcion": "IVA descontable" } },
+    "24081007": { "nombre": "IVA DESC COMPRAS 19%", "f1005": { "concepto": "1305" } },
+    "24081008": { "nombre": "IVA DESC SERVICIOS 19%", "f1005": { "concepto": "1305" } },
+    "24081106": { "nombre": "IVA DEV COMPRAS 5%", "f1005_devolucion": true },
+    "24081109": { "nombre": "IVA DEV COMPRAS 19%", "f1005_devolucion": true },
+    "24082505": { "nombre": "RETEIVA QUE NOS PRACTICARON", "f1003": { "concepto": "1314", "descripcion": "ReteIVA que le practicaron" } },
+    "24089901": { "nombre": "TRASLADOS IVA", "omitir": true, "razon": "Pago a DIAN" },
+
+    "_____BENEFICIOS_EMPLEADOS_____": "===== Cuenta 25 — Beneficios a empleados =====",
+    "25050501": { "nombre": "SALARIOS POR PAGAR", "f1009": { "concepto": "2203", "descripcion": "Cuentas por pagar laborales" } },
+    "251010":   { "nombre": "CESANTIAS CONSOLIDADAS", "f1009": { "concepto": "2203" } },
+    "251505":   { "nombre": "INTERESES CESANTIAS", "f1009": { "concepto": "2203" } },
+    "252501":   { "nombre": "VACACIONES CONSOLIDADAS", "f1009": { "concepto": "2203" } },
+    "_nota_2530": "Las provisiones cuenta 2530 se compensan al pagar — no van a F1009 separadas",
+    "25300501": { "nombre": "PROV CESANTIAS", "omitir": true, "razon": "Provisión interna" },
+    "25300502": { "nombre": "PAGOS CESANTIAS", "f1001": { "concepto": "5004", "descripcion": "Pagos a empleados - prestaciones" } },
+    "25301001": { "nombre": "PROV INT CESANTIAS", "omitir": true },
+    "25301002": { "nombre": "PAGOS INT CESANTIAS", "f1001": { "concepto": "5004" } },
+    "25301501": { "nombre": "PROV VACACIONES", "omitir": true },
+    "25301502": { "nombre": "PAGOS VACACIONES", "f1001": { "concepto": "5004" } },
+    "25302001": { "nombre": "PROV PRIMA SERVICIOS", "omitir": true },
+    "25302002": { "nombre": "PAGOS PRIMA SERVICIOS", "f1001": { "concepto": "5004" } },
+    "25500501": { "nombre": "PROVISION EPS", "omitir": true },
+    "25500502": { "nombre": "PAGOS EPS", "f1001": { "concepto": "5010", "descripcion": "Aportes obligatorios a salud" } },
+    "25500503": { "nombre": "DEDUCCION EMPLEADOS EPS", "omitir": true, "razon": "Es retención al empleado" },
+    "25500601": { "nombre": "PROVISION ARL", "omitir": true },
+    "25500602": { "nombre": "PAGOS ARL", "f1001": { "concepto": "5012", "descripcion": "Aportes ARL" } },
+    "25501001": { "nombre": "PROVISION CAJAS-SENA-ICBF", "omitir": true },
+    "25501002": { "nombre": "PAGOS CAJAS-SENA-ICBF", "f1001": { "concepto": "5013", "descripcion": "Aportes parafiscales" } },
+    "25502001": { "nombre": "PROVISION FONDOS PENSION", "omitir": true },
+    "25502002": { "nombre": "PAGOS FONDOS PENSION", "f1001": { "concepto": "5011", "descripcion": "Aportes pensión obligatoria" } },
+    "25502003": { "nombre": "DEDUCCION EMPLEADOS PENSION", "omitir": true },
+    "25503001": { "nombre": "CREDITOS LIBRANZAS", "omitir": true, "razon": "Descuentos de nómina" },
+    "25509501": { "nombre": "SEGURO DE VIDA", "omitir": true, "razon": "Descuento al empleado" },
+
+    "_____ANTICIPOS_CLIENTES_____": "===== 🆕 Cuenta 28 — Anticipos clientes (vending) =====",
+    "280505": {
+      "nombre": "ANTICIPOS DE CLIENTES",
+      "f1009": { "concepto": "2204", "descripcion": "Anticipos recibidos de clientes" },
+      "_nota": "🆕 Cuenta nueva. NIT 222222222 (cuantías menores - vending). Se reporta agrupado.",
+      "regla_especial": "vending_cuantias_menores"
+    },
+
+    "_____PATRIMONIO_____": "===== Cuenta 3 — Patrimonio =====",
+    "31051005": { "nombre": "CAPITAL POR SUSCRIBIR", "omitir": true, "razon": "Capital no suscrito - no aplica F1011" },
+    "310520":   { "nombre": "CAPITAL AUTORIZADO", "f1011": { "concepto": "1106", "descripcion": "Capital social pagado" } },
+    "330505":   { "nombre": "RESERVA LEGAL", "f1011": { "concepto": "1107", "descripcion": "Reservas" } },
+    "37050604": { "nombre": "UTILIDADES 2021", "f1011": { "concepto": "1108", "descripcion": "Utilidades acumuladas" } },
+    "37050605": { "nombre": "UTILIDADES 2022", "f1011": { "concepto": "1108" } },
+    "37050606": { "nombre": "UTILIDADES 2023", "f1011": { "concepto": "1108" } },
+    "37050607": { "nombre": "UTILIDADES 2024", "f1011": { "concepto": "1108" } },
+    "37100501": { "nombre": "PERDIDA ACUMULADA", "f1011": { "concepto": "1109", "descripcion": "Pérdidas acumuladas" } },
+    "371502":   { "nombre": "PERDIDA POR TRANSICION NIIF", "f1011": { "concepto": "1109" } },
+
+    "_____INGRESOS_____": "===== Cuenta 4 — Ingresos =====",
+    "41359505": {
+      "nombre": "VENTAS OTROS PRODUCTOS 1 (vending)",
+      "f1007": { "concepto": "4001", "descripcion": "Ingresos brutos operacionales" },
+      "_nota": "🆕 Ventas vending - todas al NIT 222222222",
+      "regla_especial": "vending_cuantias_menores"
+    },
+    "41359506": {
+      "nombre": "VENTAS FACTURACION PAPEL",
+      "f1007": { "concepto": "4001" },
+      "_nota": "🆕 Ventas con factura - se reporta por NIT del cliente"
+    },
+    "425540": {
+      "nombre": "INGRESOS POR INCAPACIDADES EPS",
+      "f1007": { "concepto": "4006", "descripcion": "Otros ingresos no operacionales" },
+      "_nota": "🆕 Indemnizaciones recibidas de EPS por incapacidades de trabajadores"
+    },
+    "431005":   { "nombre": "INTERESES (rendimientos financieros)", "f1007": { "concepto": "4007", "descripcion": "Rendimientos financieros" } },
+
+    "_____GASTOS_ADMIN_____": "===== Cuenta 51 — Gastos de administración =====",
+    "510468":   { "nombre": "APORTES ARL ADMIN", "f1001": { "concepto": "5012" } },
+    "510470":   { "nombre": "APORTES PENSION ADMIN", "f1001": { "concepto": "5011" } },
+    "510472":   { "nombre": "APORTES CAJAS ADMIN", "f1001": { "concepto": "5013" } },
+    "510506":   { "nombre": "SALARIOS ADMIN", "f1001": { "concepto": "5001", "descripcion": "Salarios y demás pagos laborales" } },
+    "510524":   { "nombre": "INCAPACIDADES ADMIN", "f1001": { "concepto": "5001" } },
+    "510530":   { "nombre": "CESANTIAS ADMIN", "f1001": { "concepto": "5004" } },
+    "510533":   { "nombre": "INT CESANTIAS ADMIN", "f1001": { "concepto": "5004" } },
+    "510536":   { "nombre": "PRIMA SERVICIOS ADMIN", "f1001": { "concepto": "5004" } },
+    "510539":   { "nombre": "VACACIONES ADMIN", "f1001": { "concepto": "5004" } },
+    "511570":   { "nombre": "IVA ASUMIDO", "f1001": { "concepto": "5061" } },
+    "51401001": { "nombre": "REGISTRO MERCANTIL ADMIN", "f1001": { "concepto": "5026", "descripcion": "Honorarios, comisiones, servicios" } },
+    "51953001": { "nombre": "PAPELERIA ADMIN", "f1001": { "concepto": "5005" } },
+    "51956501": { "nombre": "PARQUEADEROS ADMIN", "f1001": { "concepto": "5026" } },
+    "519596":   { "nombre": "GASTOS NO DEDUCIBLES", "f1001": { "concepto": "5061" }, "_nota": "Sí se reporta en F1001 aunque no sea deducible" },
+
+    "_____GASTOS_VENTAS_____": "===== Cuenta 52 — Gastos de distribución y ventas =====",
+    "520468":   { "nombre": "APORTES ARL VENTAS", "f1001": { "concepto": "5012" } },
+    "520469":   { "nombre": "APORTES EPS VENTAS", "f1001": { "concepto": "5010" } },
+    "520470":   { "nombre": "APORTES PENSION VENTAS", "f1001": { "concepto": "5011" } },
+    "520472":   { "nombre": "APORTES CAJAS VENTAS", "f1001": { "concepto": "5013" } },
+    "52050601": { "nombre": "SALARIOS VENTAS", "f1001": { "concepto": "5001" } },
+    "52051501": { "nombre": "HORAS EXTRAS VENTAS", "f1001": { "concepto": "5001" } },
+    "52052401": { "nombre": "INCAPACIDADES VENTAS", "f1001": { "concepto": "5001" } },
+    "52052701": { "nombre": "AUXILIO TRANSPORTE VENTAS", "f1001": { "concepto": "5001" } },
+    "52053001": { "nombre": "CESANTIAS VENTAS", "f1001": { "concepto": "5004" } },
+    "52053301": { "nombre": "INT CESANTIAS VENTAS", "f1001": { "concepto": "5004" } },
+    "52053601": { "nombre": "PRIMA SERVICIOS VENTAS", "f1001": { "concepto": "5004" } },
+    "52053901": { "nombre": "VACACIONES VENTAS", "f1001": { "concepto": "5004" } },
+    "52055101": { "nombre": "DOTACION TRABAJADORES", "f1001": { "concepto": "5005" } },
+    "52150501": { "nombre": "ICA MEDELLIN", "f1001": { "concepto": "5061" }, "_nota": "Impuestos asumidos - Municipio Medellín" },
+    "52150502": { "nombre": "ICA OTROS MUNICIPIOS", "f1001": { "concepto": "5061" } },
+    "52159501": {
+      "nombre": "IMPUESTO AL CONSUMO",
+      "f1001": { "concepto": "5061" },
+      "_nota": "🆕 Cuenta nueva. Impuesto al consumo asumido en compras"
+    },
+    "52159504": {
+      "nombre": "TASA SEGURIDAD",
+      "f1001": { "concepto": "5061" },
+      "_nota": "🆕 Cuenta nueva. Tasa especial de seguridad asumida"
+    },
+    "52201001": { "nombre": "ARRENDAMIENTOS LOCALES", "f1001": { "concepto": "5022", "descripcion": "Arrendamientos" } },
+    "52309501": { "nombre": "SEGURO TODO RIESGO", "f1001": { "concepto": "5026" } },
+    "52350501": { "nombre": "ASEO", "f1001": { "concepto": "5026" } },
+    "52351501": { "nombre": "ASISTENCIA TECNICA", "f1001": { "concepto": "5026" } },
+    "52352001": { "nombre": "PROCESAMIENTO ELECTRONICO DATOS", "f1001": { "concepto": "5026" } },
+    "52352501": { "nombre": "ACUEDUCTO", "f1001": { "concepto": "5026" } },
+    "52353001": { "nombre": "ENERGIA ELECTRICA", "f1001": { "concepto": "5026" } },
+    "52353501": { "nombre": "TELEFONIA", "f1001": { "concepto": "5026" } },
+    "52354001": { "nombre": "CORREO PORTES", "f1001": { "concepto": "5026" } },
+    "52355001": { "nombre": "FLETES", "f1001": { "concepto": "5026" } },
+    "52356001": { "nombre": "PUBLICIDAD", "f1001": { "concepto": "5026" } },
+    "52359501": {
+      "nombre": "PRUEBAS MICROBIOLOGICAS",
+      "f1001": { "concepto": "5026" },
+      "_nota": "🆕 Cuenta nueva. Análisis sanitarios - servicios técnicos"
+    },
+    "524010":   { "nombre": "REGISTRO MERCANTIL", "f1001": { "concepto": "5026" } },
+    "52451501": { "nombre": "MTTO MAQUINARIA", "f1001": { "concepto": "5026" } },
+    "52452001": { "nombre": "MTTO EQUIPO OFICINA", "f1001": { "concepto": "5026" } },
+    "524540":   { "nombre": "MTTO FLOTA", "f1001": { "concepto": "5026" } },
+    "52501501": { "nombre": "REPARACIONES LOCATIVAS", "f1001": { "concepto": "5026" } },
+    "52550501": {
+      "nombre": "ALOJAMIENTO MANUTENCION",
+      "f1001": { "concepto": "5026", "descripcion": "Servicios de alojamiento" },
+      "_nota": "🆕 Cuenta nueva. Hoteles para empleados en viajes"
+    },
+    "52550503": {
+      "nombre": "PASAJES Y VUELOS",
+      "f1001": { "concepto": "5026", "descripcion": "Servicios de transporte" },
+      "_nota": "🆕 Cuenta nueva. Pasajes aéreos y terrestres"
+    },
+    "526010":   { "nombre": "DEPRECIACION MAQUINARIA", "omitir": true, "razon": "Depreciación NO va en F1001 (no es pago a tercero)" },
+    "526015":   { "nombre": "DEPRECIACION OFICINA", "omitir": true },
+    "526020":   { "nombre": "DEPRECIACION COMPUTACION", "omitir": true },
+    "52952001": { "nombre": "GASTOS REPRESENTACION", "f1001": { "concepto": "5026" } },
+    "52952501": { "nombre": "CAFETERIA", "f1001": { "concepto": "5005" } },
+    "52952502": { "nombre": "ELEMENTOS DE ASEO", "f1001": { "concepto": "5005" } },
+    "52953001": { "nombre": "UTILES Y PAPELERIA", "f1001": { "concepto": "5005" } },
+    "52953002": { "nombre": "UTILES", "f1001": { "concepto": "5005" } },
+    "52956001": { "nombre": "RESTAURANTE", "f1001": { "concepto": "5026" } },
+    "52956501": { "nombre": "PARQUEADEROS", "f1001": { "concepto": "5026" } },
+    "52959508": { "nombre": "ACTIVOS MENOR CUANTIA", "f1001": { "concepto": "5005" } },
+
+    "_____GASTOS_FINANCIEROS_____": "===== Cuenta 53 — Gastos no operacionales =====",
+    "53050501": { "nombre": "GASTOS BANCARIOS", "f1001": { "concepto": "5028", "descripcion": "Gastos financieros" } },
+    "53051501": { "nombre": "COMISIONES BANCARIAS", "f1001": { "concepto": "5028" } },
+    "53059501": {
+      "nombre": "GMF 4x1000",
+      "f1001": { "concepto": "5061" },
+      "regla_especial": "gmf_50_no_deducible",
+      "_nota": "Solo el 50% del GMF es fiscalmente deducible (ET art. 115)"
+    },
+
+    "_____IMPUESTO_RENTA_____": "===== Cuenta 54 — Impuesto de renta =====",
+    "540505":   { "nombre": "IMPUESTO RENTA Y COMPLEMENT", "omitir": true, "razon": "El impuesto de renta NO va a F1001 (no es pago a tercero, es a la DIAN — partida conciliatoria QS-004)" },
+
+    "_____COSTOS_____": "===== Cuenta 6 — Costo de ventas =====",
+    "61359501": { "nombre": "COMERCIO AL POR MAYOR Y MENOR", "omitir": true, "razon": "Costo de ventas se calcula del inventario - los pagos a proveedores ya están en cuenta 14350xxx" }
+  },
+
+  "reglas_especiales": {
+    "vending_cuantias_menores": {
+      "descripcion": "Operaciones con NIT 222222222 (vending) se agrupan y reportan al pseudo-NIT de cuantías menores",
+      "aplica_a": ["41359505", "280505"],
+      "tratamiento": "Sumarizar todos los movimientos al NIT 222222222 sin individualizar"
+    },
+    "gmf_50_no_deducible": {
+      "descripcion": "Art. 115 ET — solo 50% del GMF es deducible",
+      "aplica_a": ["53059501"],
+      "tratamiento": "El monto SÍ se reporta completo en F1001, pero la conciliación fiscal toma solo el 50%"
+    },
+    "intereses_presuntos_socios": {
+      "descripcion": "Saldos a favor de socios pueden generar intereses presuntos (art. 35 ET)",
+      "aplica_a": ["21952001"],
+      "tratamiento": "Calcular sobre el saldo promedio del año a la tasa DTF + revisar si se causaron"
+    },
+    "impuesto_saludable_inventario": {
+      "descripcion": "Ley 2277/2022 - El impuesto saludable se carga al inventario y luego al costo cuando se vende",
+      "aplica_a": ["14359504", "14359505"],
+      "tratamiento": "Reportar en F1001 como mayor valor de la compra al proveedor original"
+    },
+    "alojamiento_empleados": {
+      "descripcion": "Reservas hoteleras para empleados",
+      "aplica_a": ["16255001"],
+      "tratamiento": "Reportar al NIT del prestador del servicio (hotel)"
+    }
+  },
+
+  "validacion_totales": {
+    "f1007_ingresos_total": 1098144184,
+    "f1008_cxc_clientes": 70875366,
+    "f1009_pasivos_total": 1561383994,
+    "f1011_patrimonio_bruto": 1784764849,
+    "_referencia_f110": {
+      "cas_38": 70875000,
+      "cas_44": 1783409000,
+      "cas_45": 1534040000,
+      "cas_58": 1098144000
+    }
+  }
+}

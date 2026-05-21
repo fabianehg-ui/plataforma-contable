@@ -1,0 +1,146 @@
+{
+  "_descripcion": "Catálogo de palabras clave que aparecen en notas (cbc:Note) o descripciones de ítems del XML para detectar el centro de costos correcto. Se aplica con prioridad MÁXIMA sobre la dirección de entrega.",
+  "_orden_evaluacion": [
+    "Las reglas se evalúan EN ORDEN. La primera que matchee gana.",
+    "Si una nota dice varias cosas, gana la regla más específica (con más palabras clave) primero.",
+    "Si ninguna regla matchea, se cae al siguiente nivel (dirección de entrega → NIT default → empresa default)."
+  ],
+  "_normalizacion": "Antes de comparar: UPPER, sin acentos, sin puntuación. Por eso 'CLÍNICA' = 'CLINICA'.",
+
+  "reglas_por_prioridad": [
+    {
+      "nombre": "DE LOLITA OASIS SAN DIEGO",
+      "patrones_todos": ["LOLITA", "OASIS"],
+      "cc": "10-16",
+      "comentario": "DE LOLITA del CC OASIS IMBANACO"
+    },
+    {
+      "nombre": "OASIS",
+      "patrones_todos": ["OASIS"],
+      "cc": "10-16",
+      "comentario": "Cualquier mención de OASIS (la CC OASIS IMBANACO)"
+    },
+    {
+      "nombre": "DE LOLITA CC SAN DIEGO",
+      "patrones_todos": ["LOLITA"],
+      "patrones_cualquiera": ["CC SAN DIEGO", "CCSD"],
+      "cc": "10-19",
+      "comentario": "DE LOLITA CCSD"
+    },
+    {
+      "nombre": "DE LOLITA ROSARIO POBLADO",
+      "patrones_todos": ["LOLITA", "ROSARIO POBLADO"],
+      "cc": "10-02",
+      "comentario": "DE LOLITA en sede Rosario Poblado"
+    },
+    {
+      "nombre": "DE LOLITA ROSARIO TESORO",
+      "patrones_todos": ["LOLITA"],
+      "patrones_cualquiera": ["ROSARIO TESORO", "EL ROSARIO TESORO"],
+      "cc": "10-06",
+      "comentario": "DE LOLITA en Rosario Tesoro (Centro)"
+    },
+    {
+      "nombre": "DE LOLITA TORRE MEDICA / TMLA",
+      "patrones_todos": ["LOLITA"],
+      "patrones_cualquiera": ["TMLA", "TORRE MEDICA LAS AMERICAS"],
+      "cc": "10-18",
+      "comentario": "DE LOLITA TMLA - estricto: requiere TMLA o TORRE MEDICA LAS AMERICAS completa"
+    },
+    {
+      "nombre": "DE LOLITA CLINICA LAS AMERICAS (sede)",
+      "patrones_todos": ["LOLITA", "CLINICA LAS AMERICAS"],
+      "cc": "10-18",
+      "comentario": "DE LOLITA en sede Clínica Las Américas. Requiere 'CLINICA LAS AMERICAS' completa para evitar falsos positivos del sufijo común 'CLINCA AMERI'"
+    },
+    {
+      "nombre": "DE LOLITA IMBANACO",
+      "patrones_todos": ["LOLITA", "IMBANACO"],
+      "cc": "10-16",
+      "comentario": "DE LOLITA en Imbanaco (mismo CC que OASIS)"
+    },
+    {
+      "nombre": "DE LOLITA CASITA AZUL",
+      "patrones_todos": ["LOLITA", "CASITA AZUL"],
+      "cc": "10-18",
+      "comentario": "Casita Azul es bodega anexa a Las Américas"
+    },
+    {
+      "nombre": "CC SAN DIEGO (sin LOLITA)",
+      "patrones_cualquiera": ["CENTRO COMERCIAL SAN DIEGO", "SAN DIEGO LC 5022", "CC SAN DIEGO"],
+      "cc": "10-12",
+      "comentario": "SMC = San Diego"
+    },
+    {
+      "nombre": "CLINICA LAS AMERICAS (sin LOLITA)",
+      "patrones_cualquiera": ["CLINICA LAS AMERICAS", "CLINICAS LAS AMERICAS"],
+      "cc": "10-07",
+      "comentario": "CC original CLINICA LAS AMERICAS - solo si está completo"
+    },
+    {
+      "nombre": "ROSARIO POBLADO",
+      "patrones_cualquiera": ["ROSARIO POBLADO"],
+      "cc": "10-02"
+    },
+    {
+      "nombre": "ROSARIO CENTRO",
+      "patrones_cualquiera": ["ROSARIO CENTRO", "EL ROSARIO TESORO"],
+      "cc": "10-06"
+    },
+    {
+      "nombre": "PLAZA MAYOR",
+      "patrones_cualquiera": ["PLAZA MAYOR"],
+      "cc": "10-03"
+    },
+    {
+      "nombre": "FCVL",
+      "patrones_cualquiera": ["FCVL", "FUNDACION VALLE LILI", "VALLE DEL LILI", "CAFETERIA DE LOLITA"],
+      "cc": "10-04",
+      "comentario": "FCVL = Fundación Valle del Lili. La cafetería de Lolita en CR 98 también es FCVL"
+    },
+    {
+      "nombre": "OLAYA HERRERA / AOH",
+      "patrones_cualquiera": ["OLAYA HERRERA", "AEROPUERTO OLAYA"],
+      "cc": "10-14"
+    },
+    {
+      "nombre": "OFTAMOLOGICA SAN DIEGO",
+      "patrones_cualquiera": ["OFTAMOLOGICA", "OFTALMOLOGICA"],
+      "cc": "10-08"
+    },
+    {
+      "nombre": "QUINTO SENTIDO",
+      "patrones_cualquiera": ["QUINTO SENTIDO"],
+      "cc": "10-09"
+    },
+    {
+      "nombre": "LAURELES",
+      "patrones_cualquiera": ["LAURELES"],
+      "cc": "10-13"
+    },
+    {
+      "nombre": "EPM",
+      "patrones_cualquiera": ["SEDE EPM", "EDIFICIO EPM"],
+      "cc": "10-15",
+      "comentario": "Cuidado: 'EPM' solo en proveedores eléctricos NO debe matchear. Por eso requiere 'SEDE EPM' o 'EDIFICIO EPM'."
+    },
+    {
+      "nombre": "OBELISCO",
+      "patrones_cualquiera": ["OBELISCO"],
+      "cc": "10-11"
+    },
+    {
+      "nombre": "LAS AMERICAS SEDE SUR / CLAS",
+      "patrones_cualquiera": ["LAS AMERICAS SEDE SUR", "CLAS SUR", "AMERICAS SEDE SUR CLAS"],
+      "cc": "10-17"
+    }
+  ],
+
+  "_palabras_a_ignorar_por_si_solas": [
+    "Estas palabras NO deben matchear como pistas si aparecen aisladas:",
+    "SILLA TRES, SILLA 3 - es el nombre de la empresa receptora, no un CC",
+    "DE LOLITA - es el nombre del proveedor o producto, requiere palabras complementarias",
+    "CTS1, CTS2 - son etiquetas del proveedor, no aportan CC",
+    "EPM aislado - puede aparecer como proveedor, requiere SEDE EPM"
+  ]
+}

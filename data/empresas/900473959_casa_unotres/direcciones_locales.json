@@ -1,0 +1,10 @@
+{
+  "_descripcion": "Mapeo dirección de entrega (Delivery del XML) → Centro de costo de Casa UnoTres. Vacío al inicio.",
+  "_instrucciones": [
+    "Cada clave es una dirección NORMALIZADA (sin puntos, # ni guiones).",
+    "Edita el campo \"cc\" para que apunte al CC correcto según la operación.",
+    "Si una dirección no está aquí, el sistema usará el cc_default del NIT en mapeo_nits.json.",
+    "Si tampoco hay cc_default del NIT, usa el centro_costo_default de empresa.json (ADMIN)."
+  ],
+  "direcciones": {}
+}
