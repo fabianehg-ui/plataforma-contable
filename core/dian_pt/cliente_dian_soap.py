@@ -196,6 +196,45 @@ class ClienteDIAN:
         # Parsear respuesta
         return self._parsear_consulta(resp.xml_respuesta_raw, track_id)
 
+    def enviar_factura(
+        self,
+        xml_firmado: bytes,
+        nombre_archivo: str = "factura.xml",
+    ) -> RespuestaDIAN:
+        """
+        Envía una FACTURA electrónica ya firmada al endpoint SendBillSync.
+
+        A diferencia de enviar_evento() (que usa SendEventUpdateStatus para
+        eventos RADIAN), las facturas electrónicas de venta se envían con la
+        operación SendBillSync, que DIAN exige con DOS parámetros en el body:
+        fileName y contentFile.
+
+        Args:
+            xml_firmado: bytes del XML de la factura con firma XAdES-EPES ya aplicada.
+            nombre_archivo: nombre base del archivo (sin .zip). El nombre del
+                ZIP que DIAN espera suele seguir la convención
+                "<NombreXML>.zip"; aquí usamos nombre_archivo + ".zip".
+
+        Returns:
+            RespuestaDIAN con TrackId si fue aceptada, error si no.
+        """
+        # 1) Comprimir el XML en ZIP (DIAN lo exige, un solo .xml por ZIP)
+        zip_bytes = self._empaquetar_zip(xml_firmado, nombre_archivo)
+
+        # 2) Base64 del ZIP
+        contenido_b64 = base64.b64encode(zip_bytes).decode("ascii")
+
+        # 3) Construir SOAP envelope con WSSecurity firmado.
+        #    SendBillSync requiere fileName + contentFile.
+        soap_envelope = self._construir_soap_envelope_bill(
+            operacion="SendBillSync",
+            file_name=nombre_archivo + ".zip",
+            contenido_b64=contenido_b64,
+        )
+
+        # 4) POST a DIAN
+        return self._enviar_post(soap_envelope, action="SendBillSync")
+
     # ════════════════════════════════════════════════════════════════════
     # Construcción del SOAP
     # ════════════════════════════════════════════════════════════════════
@@ -297,7 +336,89 @@ class ClienteDIAN:
 
         return etree.tostring(envelope, xml_declaration=True, encoding="UTF-8")
 
-    def _construir_soap_envelope_consulta(self, track_id: str) -> bytes:
+    def _construir_soap_envelope_bill(
+        self,
+        operacion: str,
+        file_name: str,
+        contenido_b64: str,
+    ) -> bytes:
+        """
+        Construye el sobre SOAP para SendBillSync (envío de facturas).
+
+        Idéntico a _construir_soap_envelope() salvo que el body lleva DOS
+        sub-elementos en el orden que exige DIAN: fileName y contentFile.
+        """
+        token_id = f"X509-{uuid.uuid4()}"
+        timestamp_id = f"TS-{uuid.uuid4()}"
+        body_id = f"id-{uuid.uuid4()}"
+        sig_id = f"SIG-{uuid.uuid4()}"
+
+        now = datetime.now(timezone.utc)
+        created = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        expires = (now + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+        cert_der = self.certificado.certificate.public_bytes(serialization.Encoding.DER)
+        cert_b64 = base64.b64encode(cert_der).decode("ascii")
+
+        envelope = etree.Element(_t("s", "Envelope"), nsmap=NSMAP_SOAP)
+
+        # ── Header ──
+        header = etree.SubElement(envelope, _t("s", "Header"))
+
+        action = etree.SubElement(header, _t("wsa", "Action"))
+        action.set(_t("s", "mustUnderstand"), "1")
+        action.text = f"http://wcf.dian.colombia/IWcfDianCustomerServices/{operacion}"
+
+        to = etree.SubElement(header, _t("wsa", "To"))
+        to.set(_t("s", "mustUnderstand"), "1")
+        to.set(_t("wsu", "Id"), "id-To")
+        to.text = self.endpoint
+
+        msgid = etree.SubElement(header, _t("wsa", "MessageID"))
+        msgid.text = f"urn:uuid:{uuid.uuid4()}"
+
+        security = etree.SubElement(header, _t("wsse", "Security"))
+        security.set(_t("s", "mustUnderstand"), "1")
+
+        bst = etree.SubElement(security, _t("wsse", "BinarySecurityToken"))
+        bst.set("EncodingType",
+                "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary")
+        bst.set("ValueType",
+                "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3")
+        bst.set(_t("wsu", "Id"), token_id)
+        bst.text = cert_b64
+
+        ts = etree.SubElement(security, _t("wsu", "Timestamp"))
+        ts.set(_t("wsu", "Id"), timestamp_id)
+        ts_created = etree.SubElement(ts, _t("wsu", "Created"))
+        ts_created.text = created
+        ts_expires = etree.SubElement(ts, _t("wsu", "Expires"))
+        ts_expires.text = expires
+
+        sig_placeholder = etree.SubElement(security, _t("ds", "Signature"))
+        sig_placeholder.set("Id", sig_id)
+
+        # ── Body: SendBillSync(fileName, contentFile) ──
+        body = etree.SubElement(envelope, _t("s", "Body"))
+        body.set(_t("wsu", "Id"), body_id)
+
+        op_elem = etree.SubElement(body, _t("wcf", operacion))
+        fn = etree.SubElement(op_elem, _t("wcf", "fileName"))
+        fn.text = file_name
+        cf = etree.SubElement(op_elem, _t("wcf", "contentFile"))
+        cf.text = contenido_b64
+
+        # ── Firmar el SOAP (WSSecurity) ──
+        self._firmar_soap(
+            envelope=envelope,
+            sig_placeholder=sig_placeholder,
+            token_id=token_id,
+            timestamp_id=timestamp_id,
+            body_id=body_id,
+        )
+
+        return etree.tostring(envelope, xml_declaration=True, encoding="UTF-8")
+
         """Construye SOAP para GetStatus."""
         # Similar a enviar pero con operation = GetStatus y trackId en el body
         token_id = f"X509-{uuid.uuid4()}"
