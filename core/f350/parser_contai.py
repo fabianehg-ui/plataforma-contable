@@ -105,6 +105,18 @@ def parsear_auxiliar_contai(fuente):
                     or ('Cuenta' in linea and 'Nombre' in linea and 'NIT' in linea)):
                     continue
 
+                # Cuando una cuenta se parte entre páginas, Contai repite el
+                # encabezado precedido de "Continua con la cuenta : ". Si no se
+                # normaliza, la línea no matchea el encabezado y se pierden TODOS
+                # los movimientos de esa cuenta en las páginas siguientes.
+                m_continua = re.match(
+                    r'^Continua\s+con\s+la\s+cuenta\s*:?\s*(.+)$',
+                    linea,
+                    re.IGNORECASE,
+                )
+                if m_continua:
+                    linea = m_continua.group(1).strip()
+
                 # Detectar línea de encabezado de cuenta: "23-65-25-05 NOMBRE..."
                 m_cuenta = re.match(r'^(\d{2}-\d{2}-\d{2}-\d{2})\s+(.+)$', linea)
                 if m_cuenta:
@@ -147,6 +159,23 @@ def parsear_auxiliar_contai(fuente):
                                 for n in re.findall(r'[\d,\.]+', numeros_str)
                             ]
 
+                            # El encabezado del reporte es:
+                            #   Débitos | Créditos(=Retención) | Base | % | NIT | Nombre
+                            # La columna que importa para el F350 es la RETENCIÓN,
+                            # que SIEMPRE es el número inmediatamente anterior a la
+                            # base (el último de la lista).
+                            #
+                            #   2 números → "retención base"
+                            #               (no hay débito; débito = 0)
+                            #   3 números → "débito retención base"
+                            #               (el débito es un ajuste interno que NO
+                            #                se resta de la retención)
+                            #
+                            # OJO: la retención NO es creditos - debitos. En las
+                            # líneas de 3 números el primer valor es un débito de
+                            # ajuste que se reporta aparte; restarlo subvalúa la
+                            # retención (bug histórico que partía las cuentas que
+                            # continúan de página).
                             if len(nums) == 2:
                                 debitos = 0.0
                                 creditos, base = nums
@@ -155,7 +184,7 @@ def parsear_auxiliar_contai(fuente):
                             else:
                                 continue
 
-                            retencion = creditos - debitos
+                            retencion = creditos
 
                             movimientos.append({
                                 'cuenta': cuenta_actual,
