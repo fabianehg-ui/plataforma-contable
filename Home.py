@@ -18,7 +18,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st
-from auth.login import login_form, is_authenticated, current_user
+from auth.login import (
+    login_form,
+    is_authenticated,
+    current_user,
+    bootstrap_session,
+)
 
 
 # ============================================================
@@ -31,6 +36,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+# ============================================================
+# Restaurar sesión desde la cookie (si la hay) antes de decidir
+# si mostrar el login. Esto evita que un descanso o un cambio de
+# proceso cierre la sesión por la caída del WebSocket.
+# ============================================================
+
+bootstrap_session()
 
 
 # ============================================================
