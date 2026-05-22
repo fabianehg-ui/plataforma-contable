@@ -160,22 +160,19 @@ def parsear_auxiliar_contai(fuente):
                             ]
 
                             # El encabezado del reporte es:
-                            #   Débitos | Créditos(=Retención) | Base | % | NIT | Nombre
-                            # La columna que importa para el F350 es la RETENCIÓN,
-                            # que SIEMPRE es el número inmediatamente anterior a la
-                            # base (el último de la lista).
+                            #   Débitos | Créditos | Base | % | NIT | Nombre
+                            # La columna de RETENCIÓN es la que está
+                            # inmediatamente antes de la base (la "Créditos").
                             #
-                            #   2 números → "retención base"
-                            #               (no hay débito; débito = 0)
-                            #   3 números → "débito retención base"
-                            #               (el débito es un ajuste interno que NO
-                            #                se resta de la retención)
+                            #   2 números → "crédito base"          (débito = 0)
+                            #   3 números → "débito crédito base"
                             #
-                            # OJO: la retención NO es creditos - debitos. En las
-                            # líneas de 3 números el primer valor es un débito de
-                            # ajuste que se reporta aparte; restarlo subvalúa la
-                            # retención (bug histórico que partía las cuentas que
-                            # continúan de página).
+                            # En las líneas de 3 números el débito es una
+                            # REVERSIÓN/anulación de retención del mismo período
+                            # (p.ej. una factura anulada). Para el F350 lo que se
+                            # declara es la retención NETA = crédito - débito,
+                            # porque a la DIAN solo se le entrega lo efectivamente
+                            # retenido tras descontar lo reversado.
                             if len(nums) == 2:
                                 debitos = 0.0
                                 creditos, base = nums
@@ -184,7 +181,7 @@ def parsear_auxiliar_contai(fuente):
                             else:
                                 continue
 
-                            retencion = creditos
+                            retencion = creditos - debitos
 
                             movimientos.append({
                                 'cuenta': cuenta_actual,
