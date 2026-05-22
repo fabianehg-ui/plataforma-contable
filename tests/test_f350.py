@@ -213,5 +213,110 @@ class TestPdfF350:
         assert len(pdf) > 2000     # algo de contenido real
 
 
+# =============================================================================
+# parser_contai — regresión de los bugs de continuación de página y
+# de interpretación de la columna de retención
+# =============================================================================
+
+class TestParserContaiRegresion:
+    """
+    Reproduce con un PDF sintético (formato Contai) los dos bugs que hacían
+    que se perdieran/subvaluaran retenciones:
+
+      1. Cuentas que continúan en la página siguiente con el prefijo
+         "Continua con la cuenta : ..." perdían TODOS sus movimientos de
+         las páginas posteriores.
+
+      2. Las líneas con 3 columnas numéricas (débito, retención, base) se
+         interpretaban como retención = créditos - débitos, subvaluando la
+         retención real. La retención correcta es la columna inmediatamente
+         anterior a la base.
+    """
+
+    def _construir_pdf_dos_paginas(self):
+        """Genera en memoria un PDF que imita el auxiliar de Contai con una
+        cuenta de arrendamientos partida entre dos páginas."""
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        import io
+
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf, pagesize=letter)
+        c.setFont("Courier", 9)
+
+        def escribir(lineas):
+            y = 750
+            for ln in lineas:
+                c.drawString(40, y, ln)
+                y -= 12
+
+        # ---- Página 1 ----
+        escribir([
+            "==============================================================",
+            "May-22-2026 *** PAGINA : 1",
+            "EMPRESA DE PRUEBA S.A.S - 900.307.969-5",
+            "Analisis de % de Retencion e IVA - Resumido",
+            "Cuenta Nombre Cuenta Debitos Creditos Base Retencion % NIT Nombre",
+            "--------------------------------------------------------------",
+            "23-65-30-01 ARRENDAMIENTOS 3.5%",
+            # línea de 3 columnas: debito 150,512 / retencion 301,024 / base 4,300,339
+            "150,512.00 301,024.00 4,300,339.00 3.50 42890751 ROSA VERONICA",
+            # línea de 2 columnas: retencion 57,274 / base 1,636,413
+            "57,274.00 1,636,413.00 3.50 43869549 ANA MARIA GIRALDO",
+        ])
+        c.showPage()
+
+        # ---- Página 2 (la cuenta CONTINÚA) ----
+        c.setFont("Courier", 9)
+        escribir([
+            "==============================================================",
+            "May-22-2026 *** PAGINA : 2",
+            "EMPRESA DE PRUEBA S.A.S - 900.307.969-5",
+            "Cuenta Nombre Cuenta Debitos Creditos Base Retencion % NIT Nombre",
+            "--------------------------------------------------------------",
+            "Continua con la cuenta : 23-65-30-01 ARRENDAMIENTOS 3.5%",
+            "262,570.00 7,502,000.00 3.50 800142245 CIUDADELA COMERCIAL",
+            "284,052.00 8,115,768.00 3.50 901156140 RAZEM S.A.S",
+            "--------------------------------------------------------------",
+            "Total Cuenta 150,512.00 904,920.00 21,554,520.00",
+        ])
+        c.showPage()
+        c.save()
+        return buf.getvalue()
+
+    def test_continuacion_pagina_no_pierde_movimientos(self):
+        from core.f350.parser_contai import parsear_auxiliar_contai
+        pdf = self._construir_pdf_dos_paginas()
+        r = parsear_auxiliar_contai(pdf)
+        movs = [m for m in r["movimientos"] if m["cuenta"] == "23-65-30-01"]
+        # 2 de la página 1 + 2 de la página 2 = 4 (antes del fix solo salían 2)
+        assert len(movs) == 4, f"Se esperaban 4 movimientos, salieron {len(movs)}"
+
+    def test_retencion_columna_correcta(self):
+        from core.f350.parser_contai import parsear_auxiliar_contai
+        pdf = self._construir_pdf_dos_paginas()
+        r = parsear_auxiliar_contai(pdf)
+        por_nit = {m["nit"]: m for m in r["movimientos"]}
+
+        # Línea de 3 columnas: la retención es la 2ª (301,024), NO 301,024-150,512
+        assert por_nit["42890751"]["retencion"] == 301_024
+        assert por_nit["42890751"]["base"] == 4_300_339
+
+        # Línea de 2 columnas: la retención es la 1ª (57,274)
+        assert por_nit["43869549"]["retencion"] == 57_274
+        assert por_nit["43869549"]["base"] == 1_636_413
+
+    def test_total_cuenta_cuadra(self):
+        from core.f350.parser_contai import parsear_auxiliar_contai
+        pdf = self._construir_pdf_dos_paginas()
+        r = parsear_auxiliar_contai(pdf)
+        movs = [m for m in r["movimientos"] if m["cuenta"] == "23-65-30-01"]
+        suma_ret = sum(m["retencion"] for m in movs)
+        suma_base = sum(m["base"] for m in movs)
+        # 301,024 + 57,274 + 262,570 + 284,052 = 904,920 (= "Total Cuenta" créditos)
+        assert suma_ret == 904_920
+        assert suma_base == 21_554_520
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
