@@ -298,11 +298,13 @@ class TestParserContaiRegresion:
         r = parsear_auxiliar_contai(pdf)
         por_nit = {m["nit"]: m for m in r["movimientos"]}
 
-        # Línea de 3 columnas: la retención es la 2ª (301,024), NO 301,024-150,512
-        assert por_nit["42890751"]["retencion"] == 301_024
+        # Línea de 3 columnas (débito | crédito | base): el débito es una
+        # reversión del mismo período, así que la retención NETA del F350 es
+        # crédito - débito = 301,024 - 150,512 = 150,512.
+        assert por_nit["42890751"]["retencion"] == 150_512
         assert por_nit["42890751"]["base"] == 4_300_339
 
-        # Línea de 2 columnas: la retención es la 1ª (57,274)
+        # Línea de 2 columnas (crédito | base): no hay débito, retención = 57,274
         assert por_nit["43869549"]["retencion"] == 57_274
         assert por_nit["43869549"]["base"] == 1_636_413
 
@@ -313,8 +315,11 @@ class TestParserContaiRegresion:
         movs = [m for m in r["movimientos"] if m["cuenta"] == "23-65-30-01"]
         suma_ret = sum(m["retencion"] for m in movs)
         suma_base = sum(m["base"] for m in movs)
-        # 301,024 + 57,274 + 262,570 + 284,052 = 904,920 (= "Total Cuenta" créditos)
-        assert suma_ret == 904_920
+        # Retención NETA (crédito - débito por línea):
+        #   (301,024-150,512) + 57,274 + 262,570 + 284,052 = 754,408
+        # Nota: el "Total Cuenta·Créditos" de Contai (904,920) es BRUTO, sin
+        # descontar el débito de reversión; el F350 lleva el neto.
+        assert suma_ret == 754_408
         assert suma_base == 21_554_520
 
 
