@@ -323,5 +323,65 @@ class TestParserContaiRegresion:
         assert suma_base == 21_554_520
 
 
+class TestParserContaiNombreNumerico:
+    """
+    Regresión del bug de overflow numeric(7,4):
+
+    Cuando el NOMBRE del tercero empieza con dígitos (p.ej. "5968 - TWO OF
+    YOU SA"), la regex antigua confundía el NIT con la tarifa y producía una
+    'tarifa' gigantesca (= el NIT), que luego reventaba el INSERT en la BD
+    con "numeric field overflow". La regex debe anclar la tarifa a un número
+    con decimales y el NIT a 6-11 dígitos para no dejarse engañar.
+    """
+
+    def _pdf_con_nombre_numerico(self):
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        import io
+
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf, pagesize=letter)
+        c.setFont("Courier", 9)
+        y = 750
+        for ln in [
+            "May-22-2026 *** PAGINA : 1",
+            "EMPRESA DE PRUEBA S.A.S - 900.307.969-5",
+            "Analisis de % de Retencion e IVA - Resumido",
+            "Cuenta Nombre Cuenta Debitos Creditos Base Retencion % NIT Nombre",
+            "--------------------------------------------------------------",
+            "23-65-40-05 COMPRAS 2.5%",
+            # nombre del tercero EMPIEZA con dígitos
+            "27,547.00 1,101,865.00 2.50 900472910 5968 - TWO OF YOU SA",
+            # tercero normal (control)
+            "163,299.00 6,531,951.00 2.50 901915640 HH 3M SAS",
+        ]:
+            c.drawString(40, y, ln)
+            y -= 12
+        c.showPage()
+        c.save()
+        return buf.getvalue()
+
+    def test_nombre_con_prefijo_numerico_no_rompe(self):
+        from core.f350.parser_contai import parsear_auxiliar_contai
+        r = parsear_auxiliar_contai(self._pdf_con_nombre_numerico())
+
+        # No debe haber líneas descartadas: ambas son válidas.
+        assert len(r["lineas_sospechosas"]) == 0
+        assert len(r["movimientos"]) == 2
+
+        por_nit = {m["nit"]: m for m in r["movimientos"]}
+
+        # El tercero con nombre numérico se lee correctamente:
+        two = por_nit["900472910"]
+        assert two["tarifa_mov"] == 2.5          # NO 900472910
+        assert two["base"] == 1_101_865
+        assert two["retencion"] == 27_547
+        assert two["nombre_tercero"] == "5968 - TWO OF YOU SA"
+
+        # Y la tarifa nunca supera el rango de numeric(7,4) (< 1000).
+        for m in r["movimientos"]:
+            assert m["tarifa_mov"] < 1000
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
