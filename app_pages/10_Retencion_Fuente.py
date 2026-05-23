@@ -494,6 +494,7 @@ with tab_nueva:
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 if st.button("💾 Guardar declaración", type="primary"):
+                  try:
                     with st.spinner("Guardando..."):
                         decl = svc.crear_declaracion(
                             sb, empresa["id"], anio_g, mes_g,
@@ -557,6 +558,14 @@ with tab_nueva:
                     st.balloons()
                     # Limpiar el resultado para no volver a guardar
                     st.session_state.pop("__resultado_proc", None)
+                  except Exception as e:
+                    # Mostrar el mensaje real (incluido APIError de PostgREST/RLS)
+                    # de forma controlada, sin desactivar showErrorDetails global.
+                    msg = getattr(e, "message", None) or str(e)
+                    st.error(f"No se pudo guardar la declaración: {msg}")
+                    detalles = getattr(e, "details", None) or getattr(e, "hint", None)
+                    if detalles:
+                        st.caption(f"Detalle: {detalles}")
             with col_g2:
                 if st.button("🗑️ Descartar resultado"):
                     st.session_state.pop("__resultado_proc", None)
