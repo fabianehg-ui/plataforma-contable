@@ -58,8 +58,9 @@ def get_supabase() -> Client:
     Retorna el cliente Supabase de la SESIÓN ACTUAL.
 
     - Se crea uno por sesión y se guarda en st.session_state (no global).
-    - Si hay tokens del usuario en sesión, se aplican al cliente para que
-      todas las queries respeten RLS con la identidad correcta.
+    - Si hay token del usuario en sesión, se inyecta en PostgREST para que
+      todas las queries (incluidos INSERT/UPDATE) viajen con el JWT del
+      usuario y RLS lo reconozca como admin de su empresa.
     """
     cliente = st.session_state.get(_SESSION_KEY)
     if cliente is None:
@@ -67,23 +68,19 @@ def get_supabase() -> Client:
         cliente = create_client(cred["url"], cred["anon"])
         st.session_state[_SESSION_KEY] = cliente
 
-    # Aplicar el token del usuario actual (si bootstrap/login ya lo puso).
+    # Inyectar el token del usuario en PostgREST en CADA llamada.
+    #
+    # Este es el punto crítico para RLS: las políticas de las tablas f350_*
+    # usan auth.uid() / es_admin_de_empresa(). Si el token no viaja en el
+    # header Authorization, PostgREST actúa como 'anon' y los INSERT son
+    # rechazados con APIError. postgrest.auth(token) fija ese header de forma
+    # explícita y barata (no llama a la red), evitando depender del estado
+    # interno de auth del cliente.
     access_token = st.session_state.get("access_token")
-    refresh_token = st.session_state.get("refresh_token")
-    if access_token and refresh_token:
+    if access_token:
         try:
-            # Solo re-aplica si el cliente aún no tiene esta sesión, para no
-            # llamar a la API en cada rerun.
-            sesion_actual = None
-            try:
-                sesion_actual = cliente.auth.get_session()
-            except Exception:
-                sesion_actual = None
-            tok_actual = getattr(sesion_actual, "access_token", None)
-            if tok_actual != access_token:
-                cliente.auth.set_session(access_token, refresh_token)
+            cliente.postgrest.auth(access_token)
         except Exception:
-            # Si falla (token vencido), las funciones de auth lo manejan.
             pass
 
     return cliente
