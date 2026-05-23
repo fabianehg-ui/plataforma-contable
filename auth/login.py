@@ -40,9 +40,14 @@ _COOKIE_NAME = "pc_session"          # nombre de la cookie
 _COOKIE_MAX_AGE_DAYS = 7             # cuántos días dura la sesión persistida
 
 
-@st.cache_resource
 def _get_cookie_controller():
-    """Controlador de cookies único por proceso."""
+    """Controlador de cookies.
+
+    NO se cachea con @st.cache_resource: CookieController monta internamente
+    un componente/widget de Streamlit, y los widgets no pueden crearse dentro
+    de funciones cacheadas (lanza CachedWidgetWarning). Debe instanciarse en
+    cada ejecución del script.
+    """
     from streamlit_cookies_controller import CookieController
     return CookieController()
 
@@ -115,38 +120,79 @@ def _set_session_state(user_obj, session_obj):
     _guardar_cookie_sesion(session_obj.access_token, session_obj.refresh_token)
 
 
-def bootstrap_session():
-    """
-    Restaura la sesión desde la cookie si session_state está vacío.
+def _token_por_expirar(margen_seg: int = 120) -> bool:
+    """True si el access_token vence dentro de `margen_seg` segundos."""
+    import time
+    import base64
 
-    Llamar UNA vez al inicio de Home.py, ANTES de is_authenticated().
-    Es idempotente y barata: si ya hay sesión en memoria, no hace nada.
-    """
-    if is_authenticated():
-        return
+    tok = st.session_state.get("access_token")
+    if not tok:
+        return True
+    try:
+        # JWT: header.payload.signature -> decodificar el payload (claim exp)
+        payload_b64 = tok.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)  # padding
+        claims = json.loads(base64.urlsafe_b64decode(payload_b64))
+        exp = claims.get("exp", 0)
+        return (exp - time.time()) < margen_seg
+    except Exception:
+        # Si no se puede leer, asumir que conviene refrescar.
+        return True
 
-    datos = _leer_cookie_sesion()
-    if not datos:
-        return
 
-    refresh_token = datos.get("refresh_token")
+def _refrescar_sesion():
+    """Renueva la sesión con el refresh_token y actualiza estado + cookie."""
+    refresh_token = st.session_state.get("refresh_token")
     if not refresh_token:
-        return
-
+        return False
     sb = get_supabase()
     try:
-        # set_session valida el access_token y, si expiró, lo renueva con
-        # el refresh_token (rotándolo). Devuelve la sesión vigente.
-        resp = sb.auth.set_session(
-            datos.get("access_token", ""), refresh_token
-        )
+        resp = sb.auth.refresh_session(refresh_token)
     except Exception:
-        # refresh_token vencido o revocado -> limpiar cookie y pedir login.
-        _borrar_cookie_sesion()
-        return
-
+        return False
     if getattr(resp, "user", None) and getattr(resp, "session", None):
         _set_session_state(resp.user, resp.session)
+        return True
+    return False
+
+
+def bootstrap_session():
+    """
+    Garantiza una sesión válida al inicio de cada carga de página.
+
+    Llamar al inicio de Home.py y vía require_auth(). Es idempotente:
+      1. Si NO hay sesión en memoria, intenta restaurarla desde la cookie.
+      2. Si SÍ hay sesión pero el access_token está por vencer, lo refresca
+         (rota el refresh_token y actualiza la cookie).
+    """
+    # ---- Caso 1: sin sesión en memoria -> restaurar desde cookie ----
+    if not is_authenticated():
+        datos = _leer_cookie_sesion()
+        if not datos:
+            return
+        refresh_token = datos.get("refresh_token")
+        if not refresh_token:
+            return
+
+        sb = get_supabase()
+        try:
+            # set_session valida el access_token y, si expiró, lo renueva con
+            # el refresh_token. Devuelve la sesión vigente.
+            resp = sb.auth.set_session(
+                datos.get("access_token", ""), refresh_token
+            )
+        except Exception:
+            # refresh_token vencido o revocado -> limpiar cookie, pedir login.
+            _borrar_cookie_sesion()
+            return
+
+        if getattr(resp, "user", None) and getattr(resp, "session", None):
+            _set_session_state(resp.user, resp.session)
+        return
+
+    # ---- Caso 2: sesión en memoria pero token por vencer -> refrescar ----
+    if _token_por_expirar():
+        _refrescar_sesion()
 
 
 # ============================================================
