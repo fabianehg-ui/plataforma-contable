@@ -66,6 +66,7 @@ def parsear_auxiliar_contai(fuente):
         nit, nombre_tercero
     """
     movimientos = []
+    lineas_sospechosas = []
     empresa = None
     nit_empresa = None
     periodo = None
@@ -141,10 +142,22 @@ def parsear_auxiliar_contai(fuente):
                     cuenta_actual = None
                     continue
 
-                # Línea de movimiento dentro de una cuenta
+                # Línea de movimiento dentro de una cuenta.
+                #
+                # Formato Contai: <montos...> <tarifa> <NIT> <nombre tercero>
+                #   - montos: 2 o 3 números (con comas y decimales)
+                #   - tarifa: porcentaje, SIEMPRE con punto decimal (2.50, 11.00)
+                #   - NIT: entero de 6 a 11 dígitos
+                #   - nombre: el resto (¡puede empezar con dígitos! p.ej.
+                #             "5968 - TWO OF YOU SA")
+                #
+                # Anclar la tarifa a "\d+\.\d+" y el NIT a "\d{6,11}" es lo que
+                # evita que un nombre que empieza con número (5968...) haga que
+                # la regex tome el NIT como tarifa y produzca un valor enorme
+                # (que además reventaba el INSERT por overflow de numeric(7,4)).
                 if cuenta_actual:
                     m_mov = re.match(
-                        r'^([\d,\.]+(?:\s+[\d,\.]+){1,2})\s+(\d+(?:\.\d+)?)\s+(\d+)\s+(.+)$',
+                        r'^([\d,\.]+(?:\s+[\d,\.]+){1,2})\s+(\d+\.\d+)\s+(\d{6,11})\s+(.+)$',
                         linea,
                     )
                     if m_mov:
@@ -183,6 +196,26 @@ def parsear_auxiliar_contai(fuente):
 
                             retencion = creditos - debitos
 
+                            # La tarifa es un porcentaje de retención: en la
+                            # práctica está entre 0 y ~35. Un valor >= 100 (y
+                            # desde luego >= 1000) NO es una tarifa real: es
+                            # señal de que la regex emparejó mal la línea (p.ej.
+                            # un NIT sin separador, o un número pegado a otro).
+                            #
+                            # La columna tarifa es numeric(7,4) en la BD, así que
+                            # cualquier valor >= 1000 revienta el INSERT con
+                            # "numeric field overflow". Saneamos aquí: si la
+                            # tarifa es imposible, registramos la línea como
+                            # sospechosa y la saltamos en vez de romper todo el
+                            # guardado con un dato basura.
+                            if tarifa_mov >= 100:
+                                lineas_sospechosas.append({
+                                    'cuenta': cuenta_actual,
+                                    'linea': linea.strip(),
+                                    'tarifa_leida': tarifa_mov,
+                                })
+                                continue
+
                             movimientos.append({
                                 'cuenta': cuenta_actual,
                                 'nombre_cuenta': nombre_cuenta_actual,
@@ -203,6 +236,7 @@ def parsear_auxiliar_contai(fuente):
         'nit_empresa': nit_empresa,
         'periodo':     periodo,
         'movimientos': movimientos,
+        'lineas_sospechosas': lineas_sospechosas,
     }
 
 

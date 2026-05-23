@@ -71,6 +71,16 @@ def procesar_declaracion(
     if not balance["cuentas"]:
         advertencias.append("El balance no contiene cuentas parseables.")
 
+    # Líneas que el parser descartó por tener una tarifa imposible (>=100%).
+    # Suelen indicar una línea mal leída del PDF; el usuario debe revisarlas
+    # manualmente porque podrían contener una retención real.
+    for ls in auxiliar.get("lineas_sospechosas", []):
+        advertencias.append(
+            f"Línea no incluida (tarifa leída {ls['tarifa_leida']:.2f}% "
+            f"fuera de rango) en cuenta {ls['cuenta']}: «{ls['linea']}». "
+            f"Revísala manualmente."
+        )
+
     # ---- 2. Procesar cada movimiento del auxiliar ----
     movimientos = []
     total_ret_renta = 0
