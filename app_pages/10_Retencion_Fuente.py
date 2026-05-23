@@ -63,31 +63,6 @@ sb = get_supabase()
 user = current_user()
 
 
-# ─── DIAGNÓSTICO TEMPORAL (quitar cuando se resuelva el APIError) ───────────
-with st.expander("🔧 Diagnóstico de sesión (temporal)"):
-    import time as _t, base64 as _b64, json as _json
-    tok = st.session_state.get("access_token")
-    st.write("¿Hay access_token en sesión?:", bool(tok))
-    if tok:
-        try:
-            _p = tok.split(".")[1]; _p += "=" * (-len(_p) % 4)
-            _claims = _json.loads(_b64.urlsafe_b64decode(_p))
-            _exp = _claims.get("exp", 0)
-            _seg = int(_exp - _t.time())
-            st.write("sub (uid en token):", _claims.get("sub"))
-            st.write("role:", _claims.get("role"))
-            st.write("¿token vigente?:", _seg > 0, f"({_seg}s restantes)")
-        except Exception as _e:
-            st.write("No se pudo leer el token:", _e)
-    # Probar quién soy según la base de datos (RLS real)
-    try:
-        _r = sb.rpc("es_admin_de_empresa", {"p_empresa_id": empresa["id"]}).execute()
-        st.write("es_admin_de_empresa(empresa) según la BD:", _r.data)
-    except Exception as _e:
-        st.write("Error llamando es_admin_de_empresa:", str(_e))
-# ────────────────────────────────────────────────────────────────────────────
-
-
 # =============================================================================
 # CABECERA
 # =============================================================================
