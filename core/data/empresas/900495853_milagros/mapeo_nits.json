@@ -1,10 +1,14 @@
 {
-  "_comentario": "Mapeo NIT->cuenta+CC de MILAGROS GROUP SAS, generado del balance de prueba.",
+  "_comentario": "Mapeo de MILAGROS GROUP SAS desde balance. 'mapeo'=compras (por NIT emisor/proveedor); 'mapeo_ventas'=ventas (por NIT receptor/cliente).",
   "_fallback_global": {
     "cuenta": "519095",
     "centro_costo": "001001",
-    "concepto": "PENDIENTE DE MAPEO - REVISAR",
-    "_nota": "Se usa cuando el NIT del emisor NO está en el catálogo."
+    "concepto": "PENDIENTE DE MAPEO - REVISAR"
+  },
+  "_fallback_ventas": {
+    "cuenta": "41401520",
+    "centro_costo": "001003",
+    "concepto": "VENTA PENDIENTE DE MAPEO - REVISAR"
   },
   "mapeo": {
     "1001268814": {
@@ -653,6 +657,108 @@
         "centro_costo": "001204",
         "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
       },
+      "reglas_item": []
+    }
+  },
+  "mapeo_ventas": {
+    "890900608": {
+      "razon_social": "ALMACENES EXITO",
+      "default": {
+        "cuenta": "41401520",
+        "centro_costo": "001003",
+        "concepto": "VENTAS GRAVADAS CON IVA"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "900522508": {
+      "razon_social": "INVERSIONES SUPERVAQUITA LA 33",
+      "default": {
+        "cuenta": "41401520",
+        "centro_costo": "001003",
+        "concepto": "VENTAS GRAVADAS CON IVA"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "901446831": {
+      "razon_social": "COMERCIALIZADORA TORREALTA SAS",
+      "default": {
+        "cuenta": "41401520",
+        "centro_costo": "001003",
+        "concepto": "VENTAS GRAVADAS CON IVA"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "901760889": {
+      "razon_social": "COMERCIAL DE EXPERIENCIAS",
+      "default": {
+        "cuenta": "41401520",
+        "centro_costo": "001003",
+        "concepto": "VENTAS GRAVADAS CON IVA"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "901038325": {
+      "razon_social": "JIPER SAS",
+      "default": {
+        "cuenta": "42050501",
+        "centro_costo": "001003",
+        "concepto": "OTRAS VENTAS GRAVADAS 19%"
+      },
+      "cuenta_por_cobrar": "13809502",
+      "reglas_item": []
+    },
+    "890903407": {
+      "razon_social": "SEGUROS GENERALES SURAMERICANA",
+      "default": {
+        "cuenta": "42501501",
+        "centro_costo": "001004",
+        "concepto": "RECUPERACION RECLAMOS"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "890903858": {
+      "razon_social": "INDUSTRIA NACIONAL DE GASEOSAS",
+      "default": {
+        "cuenta": "42503001",
+        "centro_costo": "001207",
+        "concepto": "DESCUENTOS CONCEDIDOS"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "830114921": {
+      "razon_social": "COLOMBIA MOVILM S.A EPS",
+      "default": {
+        "cuenta": "42505001",
+        "centro_costo": "001001",
+        "concepto": "REINTEGRO DE COSTOS Y GASTOS"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "860002964": {
+      "razon_social": "BANCO DE BOGOTA",
+      "default": {
+        "cuenta": "42958101",
+        "centro_costo": "001001",
+        "concepto": "AJUSTE AL PESO"
+      },
+      "cuenta_por_cobrar": "13050505",
+      "reglas_item": []
+    },
+    "890904996": {
+      "razon_social": "EMPRESAS PUBLICAS DE MEDELLIN",
+      "default": {
+        "cuenta": "42958101",
+        "centro_costo": "001001",
+        "concepto": "AJUSTE AL PESO"
+      },
+      "cuenta_por_cobrar": "13050505",
       "reglas_item": []
     }
   }

@@ -1,7 +1,7 @@
 {
   "_version": "0.1.0",
   "_actualizado": "2026-05-19",
-  "_comentario": "Configuración base de MILAGROS GROUP SAS, generada desde balance. Verificar cuentas IVA/retención con el contador.",
+  "_comentario": "Config base de MILAGROS GROUP SAS generada del balance. VERIFICAR con contador: cuentas IVA, retención, IVA generado en ventas y comprobantes.",
   "nit": "900495853",
   "dv": "4",
   "razon_social": "MILAGROS GROUP SAS",
@@ -107,5 +107,11 @@
   },
   "cc_default": "001001",
   "cc_default_nombre": "ADMINISTRACION",
-  "_comentario_cc": "CC default cuando no hay palabra clave, dirección ni NIT mapeado. 001001 = ADMINISTRACION (verificado en histórico de JIPER)."
+  "_comentario_cc": "CC default cuando no hay palabra clave, dirección ni NIT mapeado. 001001 = ADMINISTRACION (verificado en histórico de JIPER).",
+  "cuentas_venta": {
+    "_comentario": "VERIFICAR con contador.",
+    "cuenta_por_cobrar_default": "13050505",
+    "iva_generado": "PENDIENTE_VERIFICAR",
+    "comprobante_venta": "PENDIENTE_VERIFICAR"
+  }
 }
