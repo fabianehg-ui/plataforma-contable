@@ -857,6 +857,25 @@ def _q(v: Decimal) -> Decimal:
     return v.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
+def empresa_dominante_en(docs: list, registry) -> str | None:
+    """Id de la empresa configurada presente en MÁS documentos (como emisor o
+    receptor). Un token DIAN es de una sola empresa, así que esto identifica al
+    dueño del token para mandar TODO a esa empresa (compras y ventas) sin
+    repartir documentos a otras empresas configuradas (p.ej. un cliente)."""
+    cont: dict[str, int] = defaultdict(int)
+    for d in docs:
+        ids = set()
+        for nit in (getattr(d, "nit_receptor", ""), getattr(d, "nit_emisor", "")):
+            emp = registry.buscar_por_nit(nit)
+            if emp:
+                ids.add(emp["id"])
+        for i in ids:
+            cont[i] += 1
+    if not cont:
+        return None
+    return max(cont, key=lambda k: cont[k])
+
+
 class GeneradorPlano:
     """Genera líneas de plano contable a partir de DocumentoDIAN ya mapeados.
 
@@ -1295,17 +1314,22 @@ def procesar_zip(
             ph.advertencias.append(ph.razon_pendiente)
             docs.append(ph)
 
-    # Agrupar por empresa receptora
+    # Agrupar por empresa. Si no se fuerza, se detecta la empresa dueña del
+    # token (la más presente) y se le asigna TODO, para no repartir a otras.
     if empresa_id_forzada:
         empresas_docs = {empresa_id_forzada: docs}
     else:
+        dom = empresa_dominante_en(docs, registry)
         empresas_docs = defaultdict(list)
         for d in docs:
-            emp = registry.buscar_por_nit(d.nit_receptor)      # compra: empresa = receptor
-            if not emp:
-                emp = registry.buscar_por_nit(d.nit_emisor)    # venta/DS: empresa = emisor
-            if emp:
-                empresas_docs[emp["id"]].append(d)
+            er = registry.buscar_por_nit(d.nit_receptor)
+            ee = registry.buscar_por_nit(d.nit_emisor)
+            if dom and ((er and er["id"] == dom) or (ee and ee["id"] == dom)):
+                empresas_docs[dom].append(d)
+            elif er:
+                empresas_docs[er["id"]].append(d)
+            elif ee:
+                empresas_docs[ee["id"]].append(d)
             else:
                 empresas_docs.setdefault("__sin_empresa__", []).append(d)
 
@@ -1582,17 +1606,21 @@ def procesar_multiples_zips(
     if not docs_unicos:
         return [], resumen
 
-    # Agrupar por empresa receptora
+    # Agrupar por empresa. Sin forzar: detectar empresa dueña del token.
     if empresa_id_forzada:
         empresas_docs = {empresa_id_forzada: docs_unicos}
     else:
+        dom = empresa_dominante_en(docs_unicos, registry)
         empresas_docs = defaultdict(list)
         for d in docs_unicos:
-            emp = registry.buscar_por_nit(d.nit_receptor)
-            if not emp:
-                emp = registry.buscar_por_nit(d.nit_emisor)
-            if emp:
-                empresas_docs[emp["id"]].append(d)
+            er = registry.buscar_por_nit(d.nit_receptor)
+            ee = registry.buscar_por_nit(d.nit_emisor)
+            if dom and ((er and er["id"] == dom) or (ee and ee["id"] == dom)):
+                empresas_docs[dom].append(d)
+            elif er:
+                empresas_docs[er["id"]].append(d)
+            elif ee:
+                empresas_docs[ee["id"]].append(d)
             else:
                 empresas_docs.setdefault("__sin_empresa__", []).append(d)
 
