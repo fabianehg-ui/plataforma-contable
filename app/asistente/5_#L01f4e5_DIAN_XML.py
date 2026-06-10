@@ -424,14 +424,14 @@ with tab_proc:
             key="modo_filtro_fecha"
         )
     with col_c:
+        _opciones_emp = [f"{e['nit']} — {e['razon_social']}" for e in empresas]
         empresa_forzada = st.selectbox(
-            "Empresa",
-            options=["(detector por receptor NIT)"] + [
-                f"{e['nit']} — {e['razon_social']}" for e in empresas
-            ],
+            "Empresa a procesar",
+            options=_opciones_emp + ["(Automático — detectar por NIT · puede mezclar empresas)"],
             index=0,
             key="empresa_forzada",
-            help="Por defecto detecta la empresa según el NIT receptor de cada XML"
+            help="Procesa SOLO la empresa seleccionada (sus compras y ventas). "
+                 "El modo automático del final puede repartir documentos entre varias empresas."
         )
         modo_plano = st.radio(
             "Plano resultante",

@@ -214,7 +214,36 @@ def descargar_xml(
     return contenido
 
 
-# ─── Descarga de un lote completo ────────────────────────────
+# Reintentos ante errores transitorios de DIAN (timeout, 5xx, ZIP corrupto)
+DEFAULT_REINTENTOS = 3
+DEFAULT_BACKOFF = 1.0  # segundos, creciente: 1s, 2s, ...
+
+
+def descargar_xml_con_reintentos(
+    session: requests.Session,
+    cufe: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    reintentos: int = DEFAULT_REINTENTOS,
+    backoff: float = DEFAULT_BACKOFF,
+) -> bytes:
+    """Descarga un XML reintentando ante errores transitorios.
+
+    Reintenta en ValueError / RequestException (timeout puntual, status 5xx,
+    respuesta corta o ZIP corrupto). NO reintenta en SesionExpirada: si la
+    sesión del Token murió, reintentar no ayuda y hay que renovar el Token.
+    """
+    ultimo_error: Exception | None = None
+    for intento in range(1, max(1, reintentos) + 1):
+        try:
+            return descargar_xml(session, cufe, timeout=timeout)
+        except SesionExpirada:
+            raise
+        except (ValueError, requests.RequestException) as e:
+            ultimo_error = e
+            if intento < reintentos:
+                time.sleep(backoff * intento)
+    # Agotados los reintentos: propagar el último error con contexto
+    raise ValueError(f"{ultimo_error} (tras {reintentos} intentos)")
 def descargar_lote(
     session: requests.Session,
     cufes: list[str],
@@ -257,7 +286,7 @@ def descargar_lote(
             continue
 
         try:
-            zip_bytes = descargar_xml(session, cufe, timeout=timeout)
+            zip_bytes = descargar_xml_con_reintentos(session, cufe, timeout=timeout)
             res.exitosos[cufe] = zip_bytes
             res.procesados += 1
             if on_progress:
@@ -405,7 +434,7 @@ def descargar_paralelo_por_bloques(
                 continue
 
             try:
-                zip_bytes = descargar_xml(sess, cufe, timeout=timeout)
+                zip_bytes = descargar_xml_con_reintentos(sess, cufe, timeout=timeout)
                 resultado["exitosos"][cufe] = zip_bytes
                 progreso.exitosos += 1
                 progreso.procesados += 1
