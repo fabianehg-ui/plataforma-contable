@@ -48,7 +48,7 @@ from core.utils.nits import normalizar_nit
 
 CUENTAS_IVA_DESCONTABLE = ("24080201", "24080308")
 PREFIJO_RETEFUENTE = "2365"
-PREFIJOS_GASTO = ("5", "6")
+PREFIJOS_GASTO = ("5", "6", "7")   # 5/6 gasto y venta, 7 costos de producción
 
 # NITs genéricos del sistema (no se incluyen en el conocimiento)
 NITS_GENERICOS = {"222222222", "22222222222", "999", "99"}
@@ -61,6 +61,16 @@ NOMBRE_ARCHIVO_CONOCIMIENTO = "conocimiento_balance.json"
 # ============================================================
 # Helpers privados
 # ============================================================
+
+def _norm_cc(cc) -> str:
+    """Normaliza un centro de costo: sin guiones del medio ni espacios.
+
+    '00-10-01' -> '001001'   (igual que como queda en el token / plano)
+    '10-10'    -> '1010'
+    'ADMIN'    -> 'ADMIN'
+    """
+    return str(cc or "").strip().replace("-", "").replace(" ", "")
+
 
 def _es_nit_generico(nit_normalizado: str) -> bool:
     """True si el NIT es uno de los genéricos del sistema."""
@@ -124,28 +134,70 @@ def procesar_balance(archivo) -> dict:
     wb = load_workbook(bio, data_only=True, read_only=True)
     ws = wb.active
 
-    # Las primeras 2 filas suelen tener nombre de empresa y fecha del balance
-    empresa = ""
-    fecha_balance = ""
-    for i, fila in enumerate(ws.iter_rows(values_only=True)):
-        if i == 0 and fila and fila[0]:
-            empresa = str(fila[0]).strip()
-        if i == 1 and fila and fila[0]:
-            fecha_balance = str(fila[0]).strip()
-        if i >= 2:
+    # Leer todas las filas una sola vez (read_only es un iterador)
+    filas = [list(f) for f in ws.iter_rows(values_only=True)]
+    wb.close()
+
+    # Las primeras filas suelen traer nombre de empresa y fecha del balance
+    empresa = str(filas[0][0]).strip() if filas and filas[0] and filas[0][0] else ""
+    fecha_balance = str(filas[1][0]).strip() if len(filas) > 1 and filas[1] and filas[1][0] else ""
+
+    # --- Detección de columnas por encabezado (header-driven) ---
+    # Funciona con balances de 8 columnas (sin CC) y con balances
+    # "por NIT con CC" (que insertan Centro de Costos / Nombre CC).
+    def _n(s):
+        return str(s or "").strip().lower()
+
+    idx_hdr = None
+    for i, fila in enumerate(filas[:8]):
+        celdas = [_n(c) for c in fila]
+        if "cuenta" in celdas and "nit" in celdas and (
+                any(c in ("débitos", "debitos") for c in celdas)):
+            idx_hdr = i
             break
+
+    col = {}
+    if idx_hdr is not None:
+        enc = [_n(c) for c in filas[idx_hdr]]
+
+        def _find(*nombres):
+            for nm in nombres:
+                if nm in enc:
+                    return enc.index(nm)
+            return None
+
+        col = {
+            "cuenta": _find("cuenta"),
+            "nombre_nit": _find("nombre nit", "nombre tercero"),
+            "nit": _find("nit", "nit tercero"),
+            "cc": _find("centro de costos", "centro de costo", "cc"),
+            "debitos": _find("débitos", "debitos"),
+            "creditos": _find("créditos", "creditos"),
+        }
+    # Si no se detectó encabezado, caer al layout fijo histórico (8 columnas)
+    if not col or col.get("cuenta") is None or col.get("nit") is None \
+            or col.get("debitos") is None or col.get("creditos") is None:
+        col = {"cuenta": 0, "nombre_nit": 4, "nit": 3, "debitos": 6, "creditos": 7}
+        idx_hdr = 2          # datos desde la fila 4 (índice 3)
+
+    fila_ini = (idx_hdr + 1) if idx_hdr is not None else 3
 
     # Acumuladores por NIT
     nit_cuentas_gasto = defaultdict(lambda: defaultdict(float))
     nit_iva = defaultdict(lambda: defaultdict(float))
     nit_retefuente = defaultdict(lambda: defaultdict(float))
+    nit_centros = defaultdict(lambda: defaultdict(float))
     nit_nombres = {}
 
-    # Leer desde la fila 4 (después de encabezado + título de columnas)
-    for fila in ws.iter_rows(min_row=4, values_only=True):
-        if not fila or len(fila) < 8:
+    n_max = max(v for v in col.values() if v is not None)
+    c_cc = col.get("cc")
+    for fila in filas[fila_ini:]:
+        if not fila or len(fila) <= n_max:
             continue
-        cuenta, equiv, nombre_cta, nit, nombre_nit, saldo_ant, debitos, creditos = fila[:8]
+        cuenta = fila[col["cuenta"]]
+        nit = fila[col["nit"]]
+        nombre_nit = fila[col["nombre_nit"]] if col.get("nombre_nit") is not None \
+            and col["nombre_nit"] < len(fila) else ""
 
         if not cuenta or not nit:
             continue
@@ -157,8 +209,8 @@ def procesar_balance(archivo) -> dict:
             continue
 
         try:
-            deb = float(debitos or 0)
-            cre = float(creditos or 0)
+            deb = float(fila[col["debitos"]] or 0)
+            cre = float(fila[col["creditos"]] or 0)
         except (ValueError, TypeError):
             continue
 
@@ -168,6 +220,11 @@ def procesar_balance(archivo) -> dict:
         # Cuentas de gasto / compra (grupo 5 o 6, débitos)
         if c.startswith(PREFIJOS_GASTO) and deb > 0:
             nit_cuentas_gasto[nit_norm][c] += deb
+            # Centro de costo asociado (normalizado sin guiones)
+            if c_cc is not None and c_cc < len(fila):
+                cc_norm = _norm_cc(fila[c_cc])
+                if cc_norm:
+                    nit_centros[nit_norm][cc_norm] += deb
 
         # IVA descontable (débitos)
         if c in CUENTAS_IVA_DESCONTABLE and deb > 0:
@@ -201,12 +258,21 @@ def procesar_balance(archivo) -> dict:
         if retfs:
             cuenta_ret_usada = max(retfs.items(), key=lambda x: x[1])[0]
 
+        centros = nit_centros.get(nit, {})
+        centro_costo_sugerido = ""
+        if centros:
+            centro_costo_sugerido = max(centros.items(), key=lambda x: x[1])[0]
+        centros_usados = [cc for cc, _ in sorted(
+            centros.items(), key=lambda x: -x[1])]
+
         resultado_nits[nit] = {
             "nombre": nit_nombres.get(nit, ""),
             "cuentas_gasto": cuentas_gasto,
             "cuenta_iva_recurrente": cuenta_iva_recurrente,
             "tiene_retefuente_historica": tiene_retefuente,
             "cuenta_retefuente_usada": cuenta_ret_usada,
+            "centro_costo_sugerido": centro_costo_sugerido,
+            "centros_usados": centros_usados,
         }
 
     # Estadísticas
@@ -361,6 +427,12 @@ def cuenta_gasto_sugerida(conocimiento: Optional[dict], nit) -> str:
     if not info or not info.get("cuentas_gasto"):
         return ""
     return info["cuentas_gasto"][0]
+
+
+def centro_costo_sugerido(conocimiento: Optional[dict], nit) -> str:
+    """Centro de costo (sin guiones) más usado con este NIT en el balance."""
+    info = info_nit(conocimiento, nit)
+    return info.get("centro_costo_sugerido", "") if info else ""
 
 
 def es_nit_conocido(conocimiento: Optional[dict], nit) -> bool:
