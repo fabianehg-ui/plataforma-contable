@@ -2,12 +2,12 @@
   "_comentario": "Mapeo de MILAGROS GROUP SAS desde balance. 'mapeo'=compras (por NIT emisor/proveedor); 'mapeo_ventas'=ventas (por NIT receptor/cliente).",
   "_fallback_global": {
     "cuenta": "519095",
-    "centro_costo": "001001",
+    "centro_costo": "001204",
     "concepto": "PENDIENTE DE MAPEO - REVISAR"
   },
   "_fallback_ventas": {
     "cuenta": "41401520",
-    "centro_costo": "001003",
+    "centro_costo": "001204",
     "concepto": "VENTA PENDIENTE DE MAPEO - REVISAR"
   },
   "mapeo": {

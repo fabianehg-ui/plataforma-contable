@@ -104,8 +104,8 @@
       "descripcion": "Revisar"
     }
   },
-  "cc_default": "001001",
-  "cc_default_nombre": "ADMINISTRACION",
+  "cc_default": "001204",
+  "cc_default_nombre": "ML LAURELES",
   "_comentario_cc": "CC default cuando no hay palabra clave, dirección ni NIT mapeado. 001001 = ADMINISTRACION (verificado en histórico de JIPER).",
   "cuentas_venta": {
     "_comentario": "IVA generado 19% verificado (24080503). Cuenta por cobrar default 13050505.",
@@ -139,5 +139,10 @@
     },
     "bien_vs_servicio": "servicios_por_defecto; bienes si la cuenta es mercancia/insumo/inventario",
     "tarifas_distintas_19": "marcar para revisar (pendiente subcuentas 5%/exento)"
+  },
+  "formato_documento_ref": {
+    "_comentario": "Recibidos (compras): número de factura SIN prefijo. Emitidos (ventas): CON prefijo.",
+    "recibidos": "sin_prefijo",
+    "emitidos": "con_prefijo"
   }
 }
