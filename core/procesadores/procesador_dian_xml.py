@@ -194,6 +194,10 @@ class DocumentoDIAN:
     telefono_emisor: str = ""
     actividad_economica_emisor: str = ""   # código CIIU si viene en el XML
 
+    # Clasificación compra/venta (se setea según el rol de la empresa procesada)
+    operacion: str = "compra"          # "compra" | "venta"
+    contraparte_nit: str = ""          # proveedor (compra) o cliente (venta)
+
 
 @dataclass
 class LineaPlano:
@@ -821,6 +825,33 @@ def aplicar_mapeo(doc: DocumentoDIAN, bundle_empresa: dict) -> DocumentoDIAN:
 # GENERACIÓN DE PLANO CONTABLE
 # ============================================================================
 
+def _norm_nit_cmp(nit: str) -> str:
+    """NIT a solo dígitos, sin DV (para comparar empresa vs emisor/receptor)."""
+    return re.sub(r"[^0-9]", "", str(nit or "").split("-")[0])
+
+
+def clasificar_operacion(doc: DocumentoDIAN, empresa_nit: str) -> tuple[str, str]:
+    """Determina si el documento es compra o venta para la empresa dada.
+
+    Reglas (confirmadas con el usuario):
+      - Empresa = EMISOR y el tipo NO es Documento Soporte  → VENTA (cliente = receptor)
+      - Empresa = EMISOR y el tipo ES Documento Soporte      → COMPRA (proveedor = receptor)
+      - Empresa = RECEPTOR (factura/NC/ND recibida)          → COMPRA (proveedor = emisor)
+
+    Devuelve (operacion, contraparte_nit).
+    """
+    e = _norm_nit_cmp(empresa_nit)
+    emisor = _norm_nit_cmp(doc.nit_emisor)
+    receptor = _norm_nit_cmp(doc.nit_receptor)
+    es_ds = "documento_soporte" in (doc.tipo_nombre or "")
+
+    if e and e == emisor and not es_ds:
+        return "venta", doc.nit_receptor
+    if e and e == emisor and es_ds:
+        return "compra", doc.nit_receptor      # DS emitido: el proveedor es el receptor
+    return "compra", doc.nit_emisor             # recibido: el proveedor es el emisor
+
+
 def _q(v: Decimal) -> Decimal:
     """Redondear a peso (0 decimales) — formato Casa UnoTres."""
     return v.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
@@ -836,6 +867,8 @@ class GeneradorPlano:
     def __init__(self, bundle_empresa: dict, anio_mes: str):
         """anio_mes formato 'YYYYMM' — para los consecutivos."""
         self.empresa = bundle_empresa["empresa"]
+        self.mapeo = bundle_empresa.get("mapeo", {}) or {}
+        self.empresa_nit = self.empresa.get("nit", "")
         self.anio_mes = anio_mes
         self._consecutivos: dict[str, int] = defaultdict(int)
         self._consecutivo_inicial = self.empresa.get("consecutivo_inicial", 1)
@@ -849,10 +882,89 @@ class GeneradorPlano:
 
     def generar(self, doc: DocumentoDIAN) -> list[LineaPlano]:
         """Genera todas las líneas del plano para un documento."""
+        if getattr(doc, "operacion", "compra") == "venta":
+            return self._generar_venta(doc)
+        return self._generar_compra(doc)
+
+    def _generar_venta(self, doc: DocumentoDIAN) -> list[LineaPlano]:
+        """Asiento de venta: ingreso (Cr) + IVA generado (Cr) + por cobrar (Db).
+
+        Cliente = receptor. Comprobante de ventas (4 factura, 5 NC). Documento
+        de referencia CON prefijo. Centro de costo genérico (cc_default).
+        """
+        es_nc = doc.tipo_codigo == "91"
+        comp_cfg = self.empresa.get("comprobantes_venta", {})
+        comp = comp_cfg.get("nota_credito_emitida", "5") if es_nc else comp_cfg.get("factura_emitida", "4")
+        consecutivo = self._siguiente_consecutivo(comp)
+        fecha = doc.fecha_emision.replace("-", "/")
+        doc_ref = f"{doc.prefijo}{doc.numero}"          # ventas CON prefijo
+        cc = self.empresa.get("cc_default", "001204")   # CC genérico para ventas
+        cliente = re.sub(r"[^0-9]", "", doc.nit_receptor or "")
+
+        ventas = self.mapeo.get("mapeo_ventas", {})
+        fb = self.mapeo.get("_fallback_ventas", {
+            "cuenta": "41401520", "centro_costo": cc, "concepto": "VENTA PENDIENTE DE MAPEO - REVISAR"})
+        ent = ventas.get(cliente)
+        if ent:
+            d = ent.get("default", fb)
+            cuenta_ing = d.get("cuenta", fb["cuenta"])
+            concepto = d.get("concepto", "Venta")
+            cuenta_cobrar = ent.get("cuenta_por_cobrar", "13050505")
+        else:
+            cuenta_ing = fb.get("cuenta", "41401520")
+            concepto = fb.get("concepto", "VENTA PENDIENTE DE MAPEO - REVISAR")
+            cuenta_cobrar = "13050505"
+            doc.pendiente_revision = True
+            doc.razon_pendiente = f"Cliente {cliente} ({doc.nombre_receptor}) no está en mapeo_ventas"
+            doc.advertencias.append(doc.razon_pendiente)
+
+        neto = _q(doc.valor_base_gravable) if doc.valor_base_gravable else \
+            _q(sum((it.valor_neto for it in doc.items), Decimal(0)))
+        iva = _q(doc.iva_total)
+
+        lineas: list[LineaPlano] = []
+        # Ingreso (crédito; débito si NC)
+        if neto != 0:
+            lineas.append(LineaPlano(
+                fecha=fecha, comprobante=comp, consecutivo=consecutivo,
+                cuenta=cuenta_ing, centro_costo=cc, nit_tercero=doc.nit_receptor,
+                descripcion=concepto or doc.nombre_receptor, documento_referencia=doc_ref,
+                debito=neto if es_nc else Decimal(0),
+                credito=Decimal(0) if es_nc else neto))
+        # IVA generado (crédito; débito si NC)
+        if iva != 0:
+            cuenta_iva_gen = (self.empresa.get("cuentas_venta", {})
+                              .get("iva_generado", {}).get("19", "24080503"))
+            lineas.append(LineaPlano(
+                fecha=fecha, comprobante=comp, consecutivo=consecutivo,
+                cuenta=cuenta_iva_gen, centro_costo=cc, nit_tercero=doc.nit_receptor,
+                descripcion="IVA generado 19%" if not es_nc else "Reverso IVA generado (NC)",
+                documento_referencia=doc_ref,
+                debito=iva if es_nc else Decimal(0),
+                credito=Decimal(0) if es_nc else iva))
+        # Cuenta por cobrar (contrapartida; débito en venta, crédito en NC)
+        total_db = sum((l.debito for l in lineas), Decimal(0))
+        total_cr = sum((l.credito for l in lineas), Decimal(0))
+        contra = total_cr - total_db
+        if contra != 0:
+            lineas.append(LineaPlano(
+                fecha=fecha, comprobante=comp, consecutivo=consecutivo,
+                cuenta=cuenta_cobrar, centro_costo=cc, nit_tercero=doc.nit_receptor,
+                descripcion=(doc.nombre_receptor or "")[:60], documento_referencia=doc_ref,
+                debito=contra if contra > 0 else Decimal(0),
+                credito=Decimal(0) if contra > 0 else abs(contra)))
+        return lineas
+
+    def _generar_compra(self, doc: DocumentoDIAN) -> list[LineaPlano]:
+        """Genera todas las líneas del plano para un documento de compra."""
         comp = self._comprobante_para(doc)
         consecutivo = self._siguiente_consecutivo(comp)
         fecha_plano = doc.fecha_emision.replace("-", "/")
-        doc_ref = f"{doc.prefijo}{doc.numero}"
+        # Documento de referencia: recibidos SIN prefijo (config), si no CON prefijo
+        if self.empresa.get("formato_documento_ref", {}).get("recibidos") == "sin_prefijo":
+            doc_ref = doc.numero
+        else:
+            doc_ref = f"{doc.prefijo}{doc.numero}"
         es_nc = doc.tipo_codigo == "91"
 
         lineas: list[LineaPlano] = []
@@ -898,6 +1010,22 @@ class GeneradorPlano:
             cuenta_iva_legacy_serv = cuentas_iva_cfg.get("servicios", "24080308")
             cuenta_reverso_nc = cuentas_iva_cfg.get("reverso_iva_nc", "24080204")
 
+            # Política "IVA mayor valor" (Milagros): el IVA de compras NO va a
+            # descontable del balance (2408); va dentro de la clase del gasto/costo.
+            politica_mv = self.empresa.get("iva_compras_politica") or {}
+            modo_mv = politica_mv.get("modo") == "mayor_valor_en_clase"
+            por_clase_mv = politica_mv.get("por_clase", {})
+            arr_mv = politica_mv.get("arrendamiento", {})
+            cuentas_exp = [(it.cuenta or "") for it in doc.items if it.cuenta]
+            cta_arr = arr_mv.get("cuenta", "")
+            es_arrendamiento = bool(cta_arr) and any(c.startswith(cta_arr[:4]) for c in cuentas_exp)
+            # clase de gasto dominante (por valor neto), entre 5/6/7
+            clase_val: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+            for it in doc.items:
+                if it.cuenta and it.cuenta[:1] in ("5", "6", "7"):
+                    clase_val[it.cuenta[:1]] += abs(it.valor_neto)
+            clase_dom = max(clase_val, key=lambda k: clase_val[k]) if clase_val else "7"
+
             # Agrupar IVA por (porcentaje, es_servicio)
             grupos_iva: dict[tuple[str, bool], Decimal] = defaultdict(lambda: Decimal(0))
             for it in doc.items:
@@ -929,10 +1057,23 @@ class GeneradorPlano:
                     else:
                         cuenta_iva = tarifa_cfg.get("bienes", cuenta_iva_legacy_bienes)
 
+                # Override: IVA mayor valor dentro de la clase del gasto/costo
+                if modo_mv:
+                    if es_arrendamiento and cta_arr:
+                        cuenta_iva = cta_arr
+                    else:
+                        clase_cfg = por_clase_mv.get(clase_dom, {})
+                        cuenta_iva = clase_cfg.get(
+                            "servicios" if es_serv else "bienes", cuenta_iva)
+                    if pct_key not in ("19", "0"):
+                        doc.advertencias.append(
+                            f"IVA al {pct_key}% — revisar subcuenta de mayor valor (config solo 19%).")
+
                 tipo_label = "servicios" if es_serv else "bienes"
                 desc_iva = (
                     f"Reverso IVA NC {tipo_label} ({pct_key}%)" if es_nc
-                    else f"IVA descontable {tipo_label} {pct_key}%"
+                    else (f"IVA mayor valor {tipo_label} {pct_key}%" if modo_mv
+                          else f"IVA descontable {tipo_label} {pct_key}%")
                 )
 
                 cc_iva = (self._cc_dominante_servicios(doc.items) if es_serv
@@ -1160,7 +1301,9 @@ def procesar_zip(
     else:
         empresas_docs = defaultdict(list)
         for d in docs:
-            emp = registry.buscar_por_nit(d.nit_receptor)
+            emp = registry.buscar_por_nit(d.nit_receptor)      # compra: empresa = receptor
+            if not emp:
+                emp = registry.buscar_por_nit(d.nit_emisor)    # venta/DS: empresa = emisor
             if emp:
                 empresas_docs[emp["id"]].append(d)
             else:
@@ -1170,17 +1313,17 @@ def procesar_zip(
 
     for emp_id, docs_emp in empresas_docs.items():
         if emp_id == "__sin_empresa__":
-            # Documentos cuyo NIT receptor no coincide con ninguna empresa configurada
+            # Documentos cuya empresa (emisor/receptor) no está configurada
             res = ResultadoProcesamiento(
                 empresa_id="(no identificada)",
                 empresa_nit="",
-                empresa_razon_social="(NIT receptor no coincide con ninguna empresa configurada)",
+                empresa_razon_social="(NIT no coincide con ninguna empresa configurada)",
                 documentos=docs_emp,
                 lineas_plano=[],
                 nits_pendientes=[],
                 advertencias=[
-                    f"{len(docs_emp)} documento(s) con NIT receptor no configurado: " +
-                    ", ".join(sorted({d.nit_receptor for d in docs_emp}))
+                    f"{len(docs_emp)} documento(s) sin empresa configurada (emisor/receptor): " +
+                    ", ".join(sorted({d.nit_receptor for d in docs_emp} | {d.nit_emisor for d in docs_emp}))
                 ],
                 cuadre_db=Decimal(0),
                 cuadre_cr=Decimal(0),
@@ -1190,8 +1333,13 @@ def procesar_zip(
             continue
 
         bundle = registry.cargar(emp_id)
+        emp_nit = bundle["empresa"].get("nit", "")
         for d in docs_emp:
-            aplicar_mapeo(d, bundle)
+            op, contra = clasificar_operacion(d, emp_nit)
+            d.operacion = op
+            d.contraparte_nit = contra
+            if op == "compra":
+                aplicar_mapeo(d, bundle)
 
         gen = GeneradorPlano(bundle, anio_mes)
         lineas: list[LineaPlano] = []
@@ -1441,6 +1589,8 @@ def procesar_multiples_zips(
         empresas_docs = defaultdict(list)
         for d in docs_unicos:
             emp = registry.buscar_por_nit(d.nit_receptor)
+            if not emp:
+                emp = registry.buscar_por_nit(d.nit_emisor)
             if emp:
                 empresas_docs[emp["id"]].append(d)
             else:
@@ -1469,8 +1619,13 @@ def procesar_multiples_zips(
             continue
 
         bundle = registry.cargar(emp_id)
+        emp_nit = bundle["empresa"].get("nit", "")
         for d in docs_emp:
-            aplicar_mapeo(d, bundle)
+            op, contra = clasificar_operacion(d, emp_nit)
+            d.operacion = op
+            d.contraparte_nit = contra
+            if op == "compra":
+                aplicar_mapeo(d, bundle)
 
         gen = GeneradorPlano(bundle, anio_mes)
         lineas: list[LineaPlano] = []
