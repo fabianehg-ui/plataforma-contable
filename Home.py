@@ -258,6 +258,20 @@ trib_factura_e = st.Page(
     url_path="factura-electronica",
 )
 
+# ----- Sección: Reportes -----
+rep_centros_costos = st.Page(
+    "app_pages/14_Reportes_Centros_Costos.py",
+    title="Centros de Costos",
+    icon="📊",
+    url_path="reportes-centros-costos",
+)
+rep_pyg_detallado = st.Page(
+    "app_pages/15_PyG_Detallado_CC.py",
+    title="P&G Detallado por CC",
+    icon="📑",
+    url_path="reportes-pyg-detallado-cc",
+)
+
 # ----- Sección: Sistema -----
 sistema_panel_admin = st.Page(
     "app_pages/0_Panel_Admin.py",
@@ -298,6 +312,10 @@ nav = st.navigation(
             trib_iva,
             trib_retencion,
             trib_saludables,
+        ],
+        "📈 Reportes": [
+            rep_centros_costos,
+            rep_pyg_detallado,
         ],
         "⚙️ Sistema": [
             sistema_panel_admin,
