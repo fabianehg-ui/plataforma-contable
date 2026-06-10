@@ -48,7 +48,7 @@ from core.utils.nits import normalizar_nit
 
 CUENTAS_IVA_DESCONTABLE = ("24080201", "24080308")
 PREFIJO_RETEFUENTE = "2365"
-PREFIJOS_GASTO = ("5", "6")
+PREFIJOS_GASTO = ("5", "6", "7")   # 5/6 gasto y venta, 7 costos de producción
 
 # NITs genéricos del sistema (no se incluyen en el conocimiento)
 NITS_GENERICOS = {"222222222", "22222222222", "999", "99"}
@@ -61,6 +61,16 @@ NOMBRE_ARCHIVO_CONOCIMIENTO = "conocimiento_balance.json"
 # ============================================================
 # Helpers privados
 # ============================================================
+
+def _norm_cc(cc) -> str:
+    """Normaliza un centro de costo: sin guiones del medio ni espacios.
+
+    '00-10-01' -> '001001'   (igual que como queda en el token / plano)
+    '10-10'    -> '1010'
+    'ADMIN'    -> 'ADMIN'
+    """
+    return str(cc or "").strip().replace("-", "").replace(" ", "")
+
 
 def _es_nit_generico(nit_normalizado: str) -> bool:
     """True si el NIT es uno de los genéricos del sistema."""
@@ -160,6 +170,7 @@ def procesar_balance(archivo) -> dict:
             "cuenta": _find("cuenta"),
             "nombre_nit": _find("nombre nit", "nombre tercero"),
             "nit": _find("nit", "nit tercero"),
+            "cc": _find("centro de costos", "centro de costo", "cc"),
             "debitos": _find("débitos", "debitos"),
             "creditos": _find("créditos", "creditos"),
         }
@@ -175,9 +186,11 @@ def procesar_balance(archivo) -> dict:
     nit_cuentas_gasto = defaultdict(lambda: defaultdict(float))
     nit_iva = defaultdict(lambda: defaultdict(float))
     nit_retefuente = defaultdict(lambda: defaultdict(float))
+    nit_centros = defaultdict(lambda: defaultdict(float))
     nit_nombres = {}
 
-    n_max = max(col.values())
+    n_max = max(v for v in col.values() if v is not None)
+    c_cc = col.get("cc")
     for fila in filas[fila_ini:]:
         if not fila or len(fila) <= n_max:
             continue
@@ -207,6 +220,11 @@ def procesar_balance(archivo) -> dict:
         # Cuentas de gasto / compra (grupo 5 o 6, débitos)
         if c.startswith(PREFIJOS_GASTO) and deb > 0:
             nit_cuentas_gasto[nit_norm][c] += deb
+            # Centro de costo asociado (normalizado sin guiones)
+            if c_cc is not None and c_cc < len(fila):
+                cc_norm = _norm_cc(fila[c_cc])
+                if cc_norm:
+                    nit_centros[nit_norm][cc_norm] += deb
 
         # IVA descontable (débitos)
         if c in CUENTAS_IVA_DESCONTABLE and deb > 0:
@@ -240,12 +258,21 @@ def procesar_balance(archivo) -> dict:
         if retfs:
             cuenta_ret_usada = max(retfs.items(), key=lambda x: x[1])[0]
 
+        centros = nit_centros.get(nit, {})
+        centro_costo_sugerido = ""
+        if centros:
+            centro_costo_sugerido = max(centros.items(), key=lambda x: x[1])[0]
+        centros_usados = [cc for cc, _ in sorted(
+            centros.items(), key=lambda x: -x[1])]
+
         resultado_nits[nit] = {
             "nombre": nit_nombres.get(nit, ""),
             "cuentas_gasto": cuentas_gasto,
             "cuenta_iva_recurrente": cuenta_iva_recurrente,
             "tiene_retefuente_historica": tiene_retefuente,
             "cuenta_retefuente_usada": cuenta_ret_usada,
+            "centro_costo_sugerido": centro_costo_sugerido,
+            "centros_usados": centros_usados,
         }
 
     # Estadísticas
@@ -400,6 +427,12 @@ def cuenta_gasto_sugerida(conocimiento: Optional[dict], nit) -> str:
     if not info or not info.get("cuentas_gasto"):
         return ""
     return info["cuentas_gasto"][0]
+
+
+def centro_costo_sugerido(conocimiento: Optional[dict], nit) -> str:
+    """Centro de costo (sin guiones) más usado con este NIT en el balance."""
+    info = info_nit(conocimiento, nit)
+    return info.get("centro_costo_sugerido", "") if info else ""
 
 
 def es_nit_conocido(conocimiento: Optional[dict], nit) -> bool:
