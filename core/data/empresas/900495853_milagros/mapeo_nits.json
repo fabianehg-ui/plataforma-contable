@@ -1,0 +1,659 @@
+{
+  "_comentario": "Mapeo NIT->cuenta+CC de MILAGROS GROUP SAS, generado del balance de prueba.",
+  "_fallback_global": {
+    "cuenta": "519095",
+    "centro_costo": "001001",
+    "concepto": "PENDIENTE DE MAPEO - REVISAR",
+    "_nota": "Se usa cuando el NIT del emisor NO está en el catálogo."
+  },
+  "mapeo": {
+    "1001268814": {
+      "razon_social": "LINA MARCELA TORRES SANCHEZ",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001207",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "1033179032": {
+      "razon_social": "JANSI PAULINA RIOS CEBALLOS",
+      "default": {
+        "cuenta": "73954501",
+        "centro_costo": "001206",
+        "concepto": "TAXIS Y BUSES"
+      },
+      "reglas_item": []
+    },
+    "1035419224": {
+      "razon_social": "GLORIA ELENA PALACIOS",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001203",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "1037501045": {
+      "razon_social": "PABLO ANDRES FRANCO VALENCIA",
+      "default": {
+        "cuenta": "73500501",
+        "centro_costo": "001204",
+        "concepto": "INSTALACIONES ELECTRICAS"
+      },
+      "reglas_item": []
+    },
+    "1037946450": {
+      "razon_social": "MARYMAR ZAPATA MUÑOZ",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001207",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "1040747830": {
+      "razon_social": "MARIA CAMILA HENAO GRAJALES",
+      "default": {
+        "cuenta": "73959502",
+        "centro_costo": "001206",
+        "concepto": "MENAJE, LENCERIA Y CRISTALERI"
+      },
+      "reglas_item": []
+    },
+    "1045423018": {
+      "razon_social": "LIZETH MILENA SAENZ NAVARRO",
+      "default": {
+        "cuenta": "73954501",
+        "centro_costo": "001204",
+        "concepto": "TAXIS Y BUSES"
+      },
+      "reglas_item": []
+    },
+    "1128394459": {
+      "razon_social": "KELLY JOHANNA RIOS PINEDA",
+      "default": {
+        "cuenta": "73959502",
+        "centro_costo": "001204",
+        "concepto": "MENAJE, LENCERIA Y CRISTALERI"
+      },
+      "reglas_item": []
+    },
+    "1128403335": {
+      "razon_social": "GIRSELA IDARRAGA HOYOS",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001206",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "1152210289": {
+      "razon_social": "JOSE DAVID ATEHORTUA LOPEZ",
+      "default": {
+        "cuenta": "73959502",
+        "centro_costo": "001204",
+        "concepto": "MENAJE, LENCERIA Y CRISTALERI"
+      },
+      "reglas_item": []
+    },
+    "1152437102": {
+      "razon_social": "JESSICA ANDREA MONTOYA ZULUAGA",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001207",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "1193485151": {
+      "razon_social": "DELCY CAMILA GAFARO GARCES",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001003",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "32352648": {
+      "razon_social": "NYNY JOHANA CARO MONTOYA",
+      "default": {
+        "cuenta": "71050101",
+        "centro_costo": "001206",
+        "concepto": "ALIMENTOS"
+      },
+      "reglas_item": []
+    },
+    "43008748": {
+      "razon_social": "GLORIA MARIA HERRERA ESCOBAR",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001003",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "43051374": {
+      "razon_social": "MARIA EUGENIA ESPINAL DE LONDO",
+      "default": {
+        "cuenta": "73959502",
+        "centro_costo": "001204",
+        "concepto": "MENAJE, LENCERIA Y CRISTALERI"
+      },
+      "reglas_item": []
+    },
+    "43975199": {
+      "razon_social": "DIANA CRISTINA AGUDELO GALEANO",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001207",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "444444442": {
+      "razon_social": "DGNET Ltd",
+      "default": {
+        "cuenta": "52356001",
+        "centro_costo": "001201",
+        "concepto": "PUBLICIDAD,PROPAGANDA PLATAFOM"
+      },
+      "reglas_item": []
+    },
+    "444444444": {
+      "razon_social": "FACEBOOK",
+      "default": {
+        "cuenta": "52356001",
+        "centro_costo": "001203",
+        "concepto": "PUBLICIDAD,PROPAGANDA PLATAFOM"
+      },
+      "reglas_item": []
+    },
+    "444444445": {
+      "razon_social": "PADDLE.NET",
+      "default": {
+        "cuenta": "52356001",
+        "centro_costo": "001203",
+        "concepto": "PUBLICIDAD,PROPAGANDA PLATAFOM"
+      },
+      "reglas_item": []
+    },
+    "444444446": {
+      "razon_social": "SPOTIFY AB",
+      "default": {
+        "cuenta": "52252002",
+        "centro_costo": "001203",
+        "concepto": "AFILIACIONES Y SOSTENIMIENTO"
+      },
+      "reglas_item": []
+    },
+    "444444448": {
+      "razon_social": "JT ADS PERFONMANCE LLC",
+      "default": {
+        "cuenta": "52356001",
+        "centro_costo": "001203",
+        "concepto": "PUBLICIDAD,PROPAGANDA PLATAFOM"
+      },
+      "reglas_item": []
+    },
+    "444444449": {
+      "razon_social": "GOOGLE",
+      "default": {
+        "cuenta": "52356001",
+        "centro_costo": "001203",
+        "concepto": "PUBLICIDAD,PROPAGANDA PLATAFOM"
+      },
+      "reglas_item": []
+    },
+    "4550660": {
+      "razon_social": "MARIA ALEJANDRA GUERRA ROSALES",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001204",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "71687744": {
+      "razon_social": "NELSON HERNAN VELASQUEZ MONTOY",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001003",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "71732332": {
+      "razon_social": "DUBER ARLEX MARQUEZ SANCHEZ",
+      "default": {
+        "cuenta": "73350501",
+        "centro_costo": "001206",
+        "concepto": "ASEO Y VIGILANCIA"
+      },
+      "reglas_item": []
+    },
+    "75103271": {
+      "razon_social": "JOAQUIN ELIAS HERNANDEZ TORRES",
+      "default": {
+        "cuenta": "73355001",
+        "centro_costo": "001203",
+        "concepto": "TRANSPORTE, FLETES Y ACARREOS"
+      },
+      "reglas_item": []
+    },
+    "800049104": {
+      "razon_social": "LABORATORIO CLINICO COLMÉDICOS",
+      "default": {
+        "cuenta": "72058401",
+        "centro_costo": "001001",
+        "concepto": "GASTOS MEDICOS Y DROGAS"
+      },
+      "reglas_item": []
+    },
+    "800153993": {
+      "razon_social": "COMCEL SA",
+      "default": {
+        "cuenta": "73353501",
+        "centro_costo": "001001",
+        "concepto": "TELEFONO"
+      },
+      "reglas_item": []
+    },
+    "800242106": {
+      "razon_social": "SODIMAC COLOMBIA SA",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001203",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "805006014": {
+      "razon_social": "DIRECTV COLOMBIA LTDA",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001204",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "811003948": {
+      "razon_social": "COMERCIALIZADORA DE FRUTAS Y L",
+      "default": {
+        "cuenta": "71050101",
+        "centro_costo": "001003",
+        "concepto": "ALIMENTOS"
+      },
+      "reglas_item": []
+    },
+    "811036875": {
+      "razon_social": "SERVICIOS GENERALES SURAMERICA",
+      "default": {
+        "cuenta": "53052001",
+        "centro_costo": "001001",
+        "concepto": "INTERES PRESTAMO BANCARIO"
+      },
+      "reglas_item": []
+    },
+    "8153548": {
+      "razon_social": "JESUS HORACIO ARANGO ROLDAN",
+      "default": {
+        "cuenta": "71050101",
+        "centro_costo": "001003",
+        "concepto": "ALIMENTOS"
+      },
+      "reglas_item": []
+    },
+    "830048145": {
+      "razon_social": "SIIGO S.A.S",
+      "default": {
+        "cuenta": "51352001",
+        "centro_costo": "001001",
+        "concepto": "PROCESAMIENTO ELECTRON.DATOS"
+      },
+      "reglas_item": []
+    },
+    "830053812": {
+      "razon_social": "ALIANZA FIDUCIARIA S.A.",
+      "default": {
+        "cuenta": "51251001",
+        "centro_costo": "001001",
+        "concepto": "ADMINISTRACIONES CENTRO COMERC"
+      },
+      "reglas_item": []
+    },
+    "830070527": {
+      "razon_social": "REDEBAN MULTICOLOR S.A.",
+      "default": {
+        "cuenta": "53050501",
+        "centro_costo": "001001",
+        "concepto": "GASTOS BANCARIOS (SERVICIOS)"
+      },
+      "reglas_item": []
+    },
+    "830114921": {
+      "razon_social": "COLOMBIA MOVILM S.A EPS",
+      "default": {
+        "cuenta": "51353601",
+        "centro_costo": "001001",
+        "concepto": "INTERNET"
+      },
+      "reglas_item": []
+    },
+    "860002964": {
+      "razon_social": "BANCO DE BOGOTA",
+      "default": {
+        "cuenta": "53059501",
+        "centro_costo": "001001",
+        "concepto": "GRAVAMEN 4 X 1.000"
+      },
+      "reglas_item": []
+    },
+    "860035827": {
+      "razon_social": "BANCO COMERCIAL AV VILLAS S.A",
+      "default": {
+        "cuenta": "53051501",
+        "centro_costo": "001001",
+        "concepto": "COMISIONES"
+      },
+      "reglas_item": []
+    },
+    "890300279": {
+      "razon_social": "BANCO DE OCCIDENTE",
+      "default": {
+        "cuenta": "53059501",
+        "centro_costo": "001001",
+        "concepto": "GRAVAMEN 4 X 1.000"
+      },
+      "reglas_item": []
+    },
+    "890900608": {
+      "razon_social": "ALMACENES EXITO",
+      "default": {
+        "cuenta": "55959501",
+        "centro_costo": "001001",
+        "concepto": "AJUSTE AL PESO"
+      },
+      "reglas_item": []
+    },
+    "890903407": {
+      "razon_social": "SEGUROS GENERALES SURAMERICANA",
+      "default": {
+        "cuenta": "51304001",
+        "centro_costo": "001001",
+        "concepto": "SEGURO FLOTA Y EQUIPO DE TRANS"
+      },
+      "reglas_item": []
+    },
+    "890903858": {
+      "razon_social": "INDUSTRIA NACIONAL DE GASEOSAS",
+      "default": {
+        "cuenta": "71050201",
+        "centro_costo": "001203",
+        "concepto": "BEBIDAS, VINOS Y LICORES\""
+      },
+      "reglas_item": []
+    },
+    "890903939": {
+      "razon_social": "POSTOBON S.A.",
+      "default": {
+        "cuenta": "71050201",
+        "centro_costo": "001201",
+        "concepto": "BEBIDAS, VINOS Y LICORES\""
+      },
+      "reglas_item": []
+    },
+    "890904996": {
+      "razon_social": "EMPRESAS PUBLICAS DE MEDELLIN",
+      "default": {
+        "cuenta": "73353001",
+        "centro_costo": "001203",
+        "concepto": "ENERGIA ELECTRICA"
+      },
+      "reglas_item": []
+    },
+    "890905211": {
+      "razon_social": "MUNICIPIO DE MEDELLIN",
+      "default": {
+        "cuenta": "73159502",
+        "centro_costo": "001001",
+        "concepto": "APROV.ESPACIO PUBLICO"
+      },
+      "reglas_item": []
+    },
+    "890907106": {
+      "razon_social": "MUNICIPIO DE ENVIGADO",
+      "default": {
+        "cuenta": "73150501",
+        "centro_costo": "001203",
+        "concepto": "INDUSTRIA Y COMERCIO"
+      },
+      "reglas_item": []
+    },
+    "890908822": {
+      "razon_social": "IGLU",
+      "default": {
+        "cuenta": "71050201",
+        "centro_costo": "001204",
+        "concepto": "BEBIDAS, VINOS Y LICORES\""
+      },
+      "reglas_item": []
+    },
+    "890919267": {
+      "razon_social": "ALARMAR LTDA",
+      "default": {
+        "cuenta": "73350501",
+        "centro_costo": "001204",
+        "concepto": "ASEO Y VIGILANCIA"
+      },
+      "reglas_item": []
+    },
+    "890927034": {
+      "razon_social": "COLTEFINANCIERA S.A",
+      "default": {
+        "cuenta": "53050501",
+        "centro_costo": "001001",
+        "concepto": "GASTOS BANCARIOS (SERVICIOS)"
+      },
+      "reglas_item": []
+    },
+    "890980112": {
+      "razon_social": "MUNICIPIO DE BELLO",
+      "default": {
+        "cuenta": "73150501",
+        "centro_costo": "001205",
+        "concepto": "INDUSTRIA Y COMERCIO"
+      },
+      "reglas_item": []
+    },
+    "900092385": {
+      "razon_social": "UNE EPM TELECOMUNICACIONES SA",
+      "default": {
+        "cuenta": "73353601",
+        "centro_costo": "001204",
+        "concepto": "INTERNET"
+      },
+      "reglas_item": []
+    },
+    "900154900": {
+      "razon_social": "FAMILIAR DE REPUESTOS LTDA",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001203",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    },
+    "900191090": {
+      "razon_social": "ARRENDAMIENTOS LONDOÑO GOMEZ S",
+      "default": {
+        "cuenta": "73201001",
+        "centro_costo": "001207",
+        "concepto": "ARRENDAM. CONSTRUCCIONES Y EDI"
+      },
+      "reglas_item": []
+    },
+    "900368510": {
+      "razon_social": "KLAXEN S.A.S.",
+      "default": {
+        "cuenta": "71050401",
+        "centro_costo": "001003",
+        "concepto": "COMPRAS ASEO"
+      },
+      "reglas_item": []
+    },
+    "900374053": {
+      "razon_social": "LOGIFOODS S.A.S.",
+      "default": {
+        "cuenta": "71050101",
+        "centro_costo": "001203",
+        "concepto": "ALIMENTOS"
+      },
+      "reglas_item": []
+    },
+    "900522508": {
+      "razon_social": "INVERSIONES SUPERVAQUITA LA 33",
+      "default": {
+        "cuenta": "53053501",
+        "centro_costo": "001001",
+        "concepto": "DSCTOS CCIALES GNRALES"
+      },
+      "reglas_item": []
+    },
+    "900843898": {
+      "razon_social": "RAPPI",
+      "default": {
+        "cuenta": "52202501",
+        "centro_costo": "001204",
+        "concepto": "ARRENDAM.PLATAFORMAS DIG."
+      },
+      "reglas_item": []
+    },
+    "900916830": {
+      "razon_social": "COMERCIALIZADORA Y PRODUCTORA",
+      "default": {
+        "cuenta": "71050201",
+        "centro_costo": "001203",
+        "concepto": "BEBIDAS, VINOS Y LICORES\""
+      },
+      "reglas_item": []
+    },
+    "901036248": {
+      "razon_social": "DISEÑO EJECUTIVO S.A.S.",
+      "default": {
+        "cuenta": "72055101",
+        "centro_costo": "001204",
+        "concepto": "DOTACION Y SUMIN. A TRABAJADOR"
+      },
+      "reglas_item": []
+    },
+    "901038325": {
+      "razon_social": "JIPER SAS",
+      "default": {
+        "cuenta": "51157004",
+        "centro_costo": "001001",
+        "concepto": "IVA 19% SERVICIOS DESCONTABLE"
+      },
+      "reglas_item": []
+    },
+    "901193417": {
+      "razon_social": "ACCESORIOS Y DETALLES SAS",
+      "default": {
+        "cuenta": "52356001",
+        "centro_costo": "001204",
+        "concepto": "PUBLICIDAD,PROPAGANDA PLATAFOM"
+      },
+      "reglas_item": []
+    },
+    "901304654": {
+      "razon_social": "AVACCOUNTRIB S.A.S.",
+      "default": {
+        "cuenta": "51101001",
+        "centro_costo": "001001",
+        "concepto": "REVISORIA FISCAL"
+      },
+      "reglas_item": []
+    },
+    "901308064": {
+      "razon_social": "PREVENIR SOLUCIONES INTEGRALES",
+      "default": {
+        "cuenta": "73103501",
+        "centro_costo": "001004",
+        "concepto": "ASESORIA TECNICA"
+      },
+      "reglas_item": []
+    },
+    "901431398": {
+      "razon_social": "MUNDO CONTROL EXPERTOS S.A.S.",
+      "default": {
+        "cuenta": "73350501",
+        "centro_costo": "001001",
+        "concepto": "ASEO Y VIGILANCIA"
+      },
+      "reglas_item": []
+    },
+    "901461076": {
+      "razon_social": "ASESORIAS DF SAS",
+      "default": {
+        "cuenta": "52202501",
+        "centro_costo": "001203",
+        "concepto": "ARRENDAM.PLATAFORMAS DIG."
+      },
+      "reglas_item": []
+    },
+    "901719394": {
+      "razon_social": "CONSTRUELECTRO JD SAS",
+      "default": {
+        "cuenta": "73500501",
+        "centro_costo": "001204",
+        "concepto": "INSTALACIONES ELECTRICAS"
+      },
+      "reglas_item": []
+    },
+    "901782767": {
+      "razon_social": "MR CERDO FOOD S.A.S",
+      "default": {
+        "cuenta": "71050101",
+        "centro_costo": "001003",
+        "concepto": "ALIMENTOS"
+      },
+      "reglas_item": []
+    },
+    "901850389": {
+      "razon_social": "ABASTECIMIENTO GASTRONÓMICO S.",
+      "default": {
+        "cuenta": "71050101",
+        "centro_costo": "001206",
+        "concepto": "ALIMENTOS"
+      },
+      "reglas_item": []
+    },
+    "901859501": {
+      "razon_social": "INVERSIONES PULSO S.A.S.",
+      "default": {
+        "cuenta": "71050301",
+        "centro_costo": "001206",
+        "concepto": "CAFETERIA Y EMPAQUE"
+      },
+      "reglas_item": []
+    },
+    "98625489": {
+      "razon_social": "OCTAVIO ANDRES MORENO LAYOS",
+      "default": {
+        "cuenta": "73509501",
+        "centro_costo": "001204",
+        "concepto": "OTRAS REPARACIONES"
+      },
+      "reglas_item": []
+    },
+    "9911946": {
+      "razon_social": "BERMUDEZ TAPASCO RENZO DARIO",
+      "default": {
+        "cuenta": "55959502",
+        "centro_costo": "001204",
+        "concepto": "OTROS GTOS DIVERSOS NO OPERACI"
+      },
+      "reglas_item": []
+    }
+  }
+}
