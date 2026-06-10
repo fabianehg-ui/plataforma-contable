@@ -305,7 +305,9 @@ def construir_pyg(balances: List[BalanceCC], balances_milagros: Optional[List[Ba
     `balances_milagros`: BalanceCC mensuales de la empresa de operación a
        incorporar por concepto (mismos códigos de CC).
     `cc`: código de centro de costo, o None para consolidado.
-    `inventarios`: dict {(grupo, mes_num): {"ini": x, "fin": y}} (solo consolidado).
+    `inventarios`: dict {(grupo, cc_code, mes_num): {"ini": x, "fin": y}} con el
+       inventario inicial/final por centro y mes. Para una hoja de CC usa ese
+       CC; para el consolidado suma todos los CC. grupo ∈ {"alim","aseo"}.
     `traslados`: dict {(grupo, cc_code, mes_num): valor} con el traslado desde
        producción capturado manualmente. grupo ∈ {"alim","aseo"}. Para una hoja
        de CC usa el valor de ese CC; para el consolidado suma todos los CC.
@@ -356,12 +358,17 @@ def construir_pyg(balances: List[BalanceCC], balances_milagros: Optional[List[Ba
                     vals[i] = sgn * _suma_codigos(d, opts["cod"], opts.get("otros_menos"))
 
         elif kind == "inv":
-            if cc is None:
-                grupo, tipo = opts["grupo"], opts["tipo"]
-                signo = 1.0 if tipo == "ini" else -1.0
-                for i, mnum in enumerate(nums_mes):
-                    info = inventarios.get((grupo, mnum), {})
+            grupo, tipo = opts["grupo"], opts["tipo"]
+            signo = 1.0 if tipo == "ini" else -1.0
+            for i, mnum in enumerate(nums_mes):
+                if cc is not None:
+                    info = inventarios.get((grupo, cc, mnum), {})
                     vals[i] = signo * float(info.get(tipo, 0.0) or 0.0)
+                else:
+                    tot = sum(float(d.get(tipo, 0.0) or 0.0)
+                              for (g, _c, m), d in inventarios.items()
+                              if g == grupo and m == mnum)
+                    vals[i] = signo * tot
 
         elif kind == "trasl":
             grupo = opts["grupo"]

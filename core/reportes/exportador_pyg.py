@@ -21,7 +21,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 from .reporte_centros_costos import BalanceCC, fusionar_prr
-from .pyg_detallado import construir_pyg, _mes_de_periodo
+from .pyg_detallado import construir_pyg, _mes_de_periodo, _plantilla
 
 FUENTE = "Calibri"
 FMT_NUM = '#,##0;(#,##0);"-"'
@@ -44,9 +44,11 @@ def _sheet_name(nombre: str, usados: set) -> str:
     return s
 
 
-def _escribir_hoja(ws, df: pd.DataFrame, titulo1: str, titulo2: str, titulo3: str):
+def _escribir_hoja(ws, df: pd.DataFrame, titulo1: str, titulo2: str, titulo3: str,
+                   plantilla=None, con_formulas: bool = True):
     meses = [c for c in df.columns if c not in ("Concepto", "Acumulado", "A.V.", "_tipo")]
     columnas = ["Concepto"] + meses + ["Acumulado", "A.V."]
+    nmes = len(meses)
 
     ws.cell(row=1, column=1, value=titulo1).font = Font(name=FUENTE, bold=True, size=12)
     ws.cell(row=2, column=1, value=titulo2).font = Font(name=FUENTE, italic=True, size=9, color=GRIS)
@@ -59,50 +61,101 @@ def _escribir_hoja(ws, df: pd.DataFrame, titulo1: str, titulo2: str, titulo3: st
         c.fill = PatternFill("solid", fgColor=AZUL)
         c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    fila = fila_enc + 1
-    for _, r in df.iterrows():
+    fila0 = fila_enc + 1                       # primera fila de datos (Excel)
+    col_mes = [get_column_letter(2 + j) for j in range(nmes)]   # letras de meses
+    col_acum = get_column_letter(2 + nmes)
+    col_av = get_column_letter(3 + nmes)
+
+    usar_formulas = con_formulas and plantilla is not None and len(plantilla) == len(df)
+
+    # mapa label -> fila Excel (para referencias de fórmulas)
+    label2row = {}
+    if usar_formulas:
+        for i, (kind, label, opts) in enumerate(plantilla):
+            label2row[label] = fila0 + i
+    # fila base del A.V. (Total ingresos operacionales netos)
+    base_row = label2row.get("Total ingresos operacionales (netos)")
+
+    def _expr(refs_mas, refs_menos, col):
+        partes = []
+        for lb in refs_mas:
+            r = label2row.get(lb)
+            if r:
+                partes.append(f"+{col}{r}")
+        for lb in refs_menos:
+            r = label2row.get(lb)
+            if r:
+                partes.append(f"-{col}{r}")
+        if not partes:
+            return None
+        s = "".join(partes)
+        if s.startswith("+"):
+            s = s[1:]
+        return "=" + s
+
+    fila = fila0
+    for idx, (_, r) in enumerate(df.iterrows()):
         tipo = r["_tipo"]
+        spec = plantilla[idx] if usar_formulas else (tipo, r["Concepto"], {})
+        opts = spec[2] if usar_formulas else {}
         ws.cell(row=fila, column=1, value=r["Concepto"])
 
         if tipo not in ("header", "subhdr", "blank"):
-            for j, col in enumerate(meses, start=2):
-                v = r[col]
-                if v is not None:
-                    cell = ws.cell(row=fila, column=j, value=float(v))
-                    cell.number_format = FMT_NUM
-                    cell.alignment = Alignment(horizontal="right")
-            jac = 2 + len(meses)
-            if r["Acumulado"] is not None:
-                cell = ws.cell(row=fila, column=jac, value=float(r["Acumulado"]))
+            es_calc = tipo in ("sub", "ebitda")
+            # --- meses ---
+            for j, col in enumerate(meses):
+                L = col_mes[j]
+                if usar_formulas and es_calc:
+                    f = _expr(opts.get("mas", []), opts.get("menos", []), L)
+                    cell = ws.cell(row=fila, column=2 + j, value=f if f else 0)
+                else:
+                    v = r[col]
+                    cell = ws.cell(row=fila, column=2 + j,
+                                   value=(float(v) if v is not None else 0.0))
                 cell.number_format = FMT_NUM
                 cell.alignment = Alignment(horizontal="right")
-            if r["A.V."] is not None:
-                cell = ws.cell(row=fila, column=jac + 1, value=float(r["A.V."]))
+            # --- Acumulado ---
+            jac = 2 + nmes
+            if usar_formulas and es_calc:
+                f = _expr(opts.get("mas", []), opts.get("menos", []), col_acum)
+                cell = ws.cell(row=fila, column=jac, value=f if f else 0)
+            elif usar_formulas:
+                # suma de los meses de esta misma fila
+                rng = f"{col_mes[0]}{fila}:{col_mes[-1]}{fila}" if nmes > 1 else f"{col_mes[0]}{fila}"
+                cell = ws.cell(row=fila, column=jac, value=f"=SUM({rng})")
+            else:
+                v = r["Acumulado"]
+                cell = ws.cell(row=fila, column=jac, value=(float(v) if v is not None else 0.0))
+            cell.number_format = FMT_NUM
+            cell.alignment = Alignment(horizontal="right")
+            # --- A.V. ---
+            if r["A.V."] is not None or (usar_formulas and base_row):
+                if usar_formulas and base_row:
+                    f = f'=IFERROR({col_acum}{fila}/{col_acum}${base_row},"")'
+                    cell = ws.cell(row=fila, column=jac + 1, value=f)
+                else:
+                    cell = ws.cell(row=fila, column=jac + 1, value=float(r["A.V."]))
                 cell.number_format = FMT_PCT
                 cell.alignment = Alignment(horizontal="right")
 
         # estilos por tipo
         es_sub = tipo in ("sub", "ebitda")
-        es_header = tipo in ("header",)
-        es_subhdr = tipo in ("subhdr",)
-        es_inv = tipo == "inv"
-        es_mil = tipo == "mil"
         for j in range(1, len(columnas) + 1):
             c = ws.cell(row=fila, column=j)
-            if es_header:
+            if tipo == "header":
                 c.font = Font(name=FUENTE, bold=True, size=10, color=AZUL)
-            elif es_subhdr:
+            elif tipo == "subhdr":
                 c.font = Font(name=FUENTE, bold=True, italic=True, size=9)
             elif es_sub:
                 c.font = Font(name=FUENTE, bold=True, size=10)
                 c.fill = PatternFill("solid", fgColor=AZUL_CLARO)
-            elif es_inv:
-                c.font = Font(name=FUENTE, size=9, color=AZUL_INPUT)  # editable
+            elif tipo == "inv":
+                c.font = Font(name=FUENTE, size=9, color=AZUL_INPUT)   # editable
             elif tipo == "trasl":
-                c.font = Font(name=FUENTE, size=9, color=AZUL_INPUT)  # editable (manual)
-            elif es_mil:
+                c.font = Font(name=FUENTE, size=9, color=AZUL_INPUT)   # editable (manual)
+            elif tipo == "mil":
                 c.font = Font(name=FUENTE, size=9, italic=True)
-                c.fill = PatternFill("solid", fgColor=NARANJA_FILL)   # Milagros
+                c.fill = PatternFill("solid", fgColor=NARANJA_FILL)    # Milagros
             else:
                 c.font = Font(name=FUENTE, size=9)
         fila += 1
@@ -119,8 +172,15 @@ def exportar_pyg_excel(balances: List[BalanceCC],
                        traslados: Optional[Dict] = None,
                        mil_label: str = "Milagros",
                        fusionar_prr_cc: bool = True,
+                       con_formulas: bool = True,
                        solo_con_actividad: bool = True) -> bytes:
-    """Genera el workbook completo (consolidado + una hoja por CC)."""
+    """Genera el workbook completo (consolidado + una hoja por CC).
+
+    `con_formulas=True`: los subtotales, utilidades, EBITDA, Acumulado y A.V.
+    salen como fórmulas de Excel que referencian las celdas; las celdas de
+    inventario y traslados son las entradas editables. Así, al cambiar un dato
+    a mano, Excel recalcula todo automáticamente.
+    """
     if not balances:
         raise ValueError("Se requiere al menos un balance mensual.")
 
@@ -133,6 +193,8 @@ def exportar_pyg_excel(balances: List[BalanceCC],
     empresa, nit = bal_ref.empresa, bal_ref.nit
     t1 = f"{empresa}  ·  {nit}"
     t3 = "Cifras en COP · Mensual = movimiento del mes · Acumulado = suma de meses · A.V. = % sobre ingresos netos"
+    # plantilla alineada con las filas del DataFrame (para construir fórmulas)
+    plantilla = _plantilla(con_mil=bool(balances_milagros), mil=mil_label)
 
     wb = Workbook()
     usados = set()
@@ -147,7 +209,8 @@ def exportar_pyg_excel(balances: List[BalanceCC],
     sub2 = "Estado de Resultados — CONSOLIDADO (todos los centros)"
     if balances_milagros:
         sub2 += f" · incluye {mil_label}"
-    _escribir_hoja(ws_cons, df_cons, t1, sub2, t3)
+    _escribir_hoja(ws_cons, df_cons, t1, sub2, t3,
+                   plantilla=plantilla, con_formulas=con_formulas)
 
     # --- CC con actividad (unión de centros de TODOS los meses y ambas empresas) ---
     etq = dict(bal_ref.etiqueta_cc())
@@ -164,7 +227,7 @@ def exportar_pyg_excel(balances: List[BalanceCC],
     info_index = []
     for cc in ccs:
         df = construir_pyg(balances, balances_milagros=balances_milagros,
-                           cc=cc, inventarios=None, traslados=traslados,
+                           cc=cc, inventarios=inventarios, traslados=traslados,
                            mil_label=mil_label)
         ing = df.loc[df["Concepto"] == "Total ingresos operacionales (netos)", "Acumulado"]
         cost = df.loc[df["Concepto"] == "TOTAL COSTO DE VENTAS Y DE PRODUCCIÓN", "Acumulado"]
@@ -175,7 +238,8 @@ def exportar_pyg_excel(balances: List[BalanceCC],
         nombre = etq.get(cc, cc)
         hoja = _sheet_name(nombre, usados)
         ws = wb.create_sheet(hoja)
-        _escribir_hoja(ws, df, t1, f"Estado de Resultados — {nombre}  [{cc}]", t3)
+        _escribir_hoja(ws, df, t1, f"Estado de Resultados — {nombre}  [{cc}]", t3,
+                       plantilla=plantilla, con_formulas=con_formulas)
         un = df.loc[df["Concepto"] == "UTILIDAD (PÉRDIDA) NETA DEL EJERCICIO", "Acumulado"]
         info_index.append((cc, nombre, hoja, ingv,
                            float(un.iloc[0]) if not un.empty else 0.0))
