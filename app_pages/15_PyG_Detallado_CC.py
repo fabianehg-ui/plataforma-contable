@@ -28,6 +28,7 @@ from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from core.reportes.reporte_centros_costos import cargar_balance, fusionar_prr
 from core.reportes.pyg_detallado import construir_pyg, _mes_de_periodo
 from core.reportes.exportador_pyg import exportar_pyg_excel
+from core.reportes.plantilla_datos import generar_plantilla_datos, leer_plantilla_datos
 
 
 st.set_page_config(page_title="P&G Detallado por CC", page_icon="📑", layout="wide")
@@ -134,71 +135,47 @@ if fusionar:
                    + ", ".join(f"{c} {n}" for c, n in ne))
 
 # ============================================================
-# 2) Formulario de inventario (para el consolidado)
+# 2) Plantilla de datos manuales (inventario + traslados) por CC
 # ============================================================
 
-st.markdown("### 2️⃣ Inventario para el costo de materia prima (opcional)")
+st.markdown("### 2️⃣ Inventario y traslados por centro de costo (plantilla)")
 st.caption(
-    "La cuenta de inventarios (14) no viene por centro de costo, así que en las "
-    "hojas por CC va en blanco. Aquí captura el inventario inicial y final por mes "
-    "para el **consolidado**: Costo = Inv. inicial + Compras − Inv. final."
-)
-
-inventarios = {}
-with st.expander("Capturar inventario por mes", expanded=False):
-    for b in bals:
-        mnum, mnombre = _mes_de_periodo(b.periodo)
-        st.markdown(f"**{mnombre}**")
-        c1, c2, c3, c4 = st.columns(4)
-        ini_a = c1.number_input(f"Inv. inicial alimentos/bebidas · {mnombre}",
-                                min_value=0.0, value=0.0, step=1000.0,
-                                key=f"ia_{mnum}", format="%.0f")
-        fin_a = c2.number_input(f"Inv. final alimentos/bebidas · {mnombre}",
-                                min_value=0.0, value=0.0, step=1000.0,
-                                key=f"fa_{mnum}", format="%.0f")
-        ini_s = c3.number_input(f"Inv. inicial aseo/cafetería · {mnombre}",
-                                min_value=0.0, value=0.0, step=1000.0,
-                                key=f"is_{mnum}", format="%.0f")
-        fin_s = c4.number_input(f"Inv. final aseo/cafetería · {mnombre}",
-                                min_value=0.0, value=0.0, step=1000.0,
-                                key=f"fs_{mnum}", format="%.0f")
-        if ini_a or fin_a:
-            inventarios[("alim", mnum)] = {"ini": ini_a, "fin": fin_a}
-        if ini_s or fin_s:
-            inventarios[("aseo", mnum)] = {"ini": ini_s, "fin": fin_s}
-
-# ------- Traslados desde producción (por CC y mes) -------
-st.markdown("#### Traslados desde producción (por centro y mes)")
-st.caption(
-    "No existe cuenta de clase 6 para el traslado, así que se captura manualmente. "
-    "Asigna a cada punto el costo de alimentos y de aseo trasladado desde producción."
+    "El inventario y los traslados desde producción van por centro de costo, así "
+    "que se capturan en una plantilla de Excel: descárgala con tus centros y meses, "
+    "diligénciala y vuelve a subirla. Lo que dejes en 0 no afecta."
 )
 
 etq_t = bals[-1].etiqueta_cc()
 ccs_t = sorted(bals[-1].detalle["cc"].unique())
-mes_nums = [_mes_de_periodo(b.periodo)[0] for b in bals]
 mes_noms = [_mes_de_periodo(b.periodo)[1] for b in bals]
+centros_plant = [(c, etq_t.get(c, c)) for c in ccs_t]
 
-traslados = {}
-with st.expander("Capturar traslados desde producción", expanded=False):
-    base = pd.DataFrame(
-        {"Centro de Costo": [etq_t.get(c, c) for c in ccs_t]}
+colp1, colp2 = st.columns(2)
+with colp1:
+    st.markdown("**a) Descargar plantilla en blanco**")
+    plantilla_bytes = generar_plantilla_datos(centros_plant, mes_noms)
+    st.download_button(
+        "⬇️ Descargar plantilla de inventario y traslados",
+        data=plantilla_bytes,
+        file_name=f"Plantilla_datos_{bals[-1].empresa.split()[0]}.xlsx".replace(" ", "_"),
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    for mn in mes_noms:
-        base[mn] = 0.0
-    for grupo, etiqueta in [("alim", "Alimentos"), ("aseo", "Aseo y cafetería")]:
-        st.markdown(f"**Traslado de {etiqueta}**")
-        edit = st.data_editor(
-            base.copy(), hide_index=True, use_container_width=True,
-            key=f"trasl_{grupo}",
-            column_config={"Centro de Costo": st.column_config.TextColumn(disabled=True)},
+with colp2:
+    st.markdown("**b) Subir plantilla diligenciada**")
+    archivo_plant = st.file_uploader(
+        "Plantilla diligenciada (.xlsx)", type=["xlsx"], key="plant_datos",
+    )
+
+inventarios, traslados = {}, {}
+if archivo_plant is not None:
+    try:
+        inventarios, traslados = leer_plantilla_datos(io.BytesIO(archivo_plant.getvalue()))
+        st.success(
+            f"Plantilla leída: {len(inventarios)} datos de inventario y "
+            f"{len(traslados)} traslados cargados."
         )
-        for _, row in edit.iterrows():
-            cc_code = ccs_t[list(edit["Centro de Costo"]).index(row["Centro de Costo"])]
-            for mn, mnom in zip(mes_nums, mes_noms):
-                val = float(row[mnom] or 0.0)
-                if val:
-                    traslados[(grupo, cc_code, mn)] = val
+    except Exception as e:  # noqa: BLE001
+        st.error(f"No pude leer la plantilla: {e}")
 
 # ============================================================
 # 3) Previsualización
@@ -214,8 +191,7 @@ sel = st.selectbox("Centro de costo a previsualizar", opciones)
 
 cc_sel = None if sel.startswith("CONSOLIDADO") else nombre_a_cod[sel]
 df = construir_pyg(bals, balances_milagros=bals_milagros, cc=cc_sel,
-                   inventarios=(inventarios if cc_sel is None else None),
-                   traslados=traslados, mil_label=mil_label)
+                   inventarios=inventarios, traslados=traslados, mil_label=mil_label)
 
 
 def _fmt(v):
@@ -271,13 +247,21 @@ st.dataframe(sty, use_container_width=True, hide_index=True, height=700)
 # ============================================================
 
 st.markdown("### 4️⃣ Descargar Excel (Índice + Consolidado + una hoja por CC)")
-solo_act = st.checkbox("Generar solo centros con actividad", value=True)
+col_a, col_b = st.columns(2)
+solo_act = col_a.checkbox("Generar solo centros con actividad", value=True)
+con_formulas = col_b.checkbox(
+    "Excel con fórmulas (recalcula al editar a mano)", value=True,
+    help="Los subtotales, utilidades, EBITDA, Acumulado y A.V. salen como "
+         "fórmulas. Las celdas de inventario y traslados son las entradas: "
+         "al cambiarlas en Excel, todo se recalcula solo.",
+)
 
 if st.button("⚙️ Generar Excel", type="primary"):
     with st.spinner("Generando hojas por centro de costo..."):
         xls = exportar_pyg_excel(bals, balances_milagros=bals_milagros,
                                  inventarios=inventarios, traslados=traslados,
                                  mil_label=mil_label, fusionar_prr_cc=False,
+                                 con_formulas=con_formulas,
                                  solo_con_actividad=solo_act)
     nombre = f"PYG_Detallado_CC_{bals[-1].empresa.split()[0]}.xlsx".replace(" ", "_")
     st.download_button(
