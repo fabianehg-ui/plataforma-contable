@@ -124,16 +124,52 @@ def procesar_balance(archivo) -> dict:
     wb = load_workbook(bio, data_only=True, read_only=True)
     ws = wb.active
 
-    # Las primeras 2 filas suelen tener nombre de empresa y fecha del balance
-    empresa = ""
-    fecha_balance = ""
-    for i, fila in enumerate(ws.iter_rows(values_only=True)):
-        if i == 0 and fila and fila[0]:
-            empresa = str(fila[0]).strip()
-        if i == 1 and fila and fila[0]:
-            fecha_balance = str(fila[0]).strip()
-        if i >= 2:
+    # Leer todas las filas una sola vez (read_only es un iterador)
+    filas = [list(f) for f in ws.iter_rows(values_only=True)]
+    wb.close()
+
+    # Las primeras filas suelen traer nombre de empresa y fecha del balance
+    empresa = str(filas[0][0]).strip() if filas and filas[0] and filas[0][0] else ""
+    fecha_balance = str(filas[1][0]).strip() if len(filas) > 1 and filas[1] and filas[1][0] else ""
+
+    # --- Detección de columnas por encabezado (header-driven) ---
+    # Funciona con balances de 8 columnas (sin CC) y con balances
+    # "por NIT con CC" (que insertan Centro de Costos / Nombre CC).
+    def _n(s):
+        return str(s or "").strip().lower()
+
+    idx_hdr = None
+    for i, fila in enumerate(filas[:8]):
+        celdas = [_n(c) for c in fila]
+        if "cuenta" in celdas and "nit" in celdas and (
+                any(c in ("débitos", "debitos") for c in celdas)):
+            idx_hdr = i
             break
+
+    col = {}
+    if idx_hdr is not None:
+        enc = [_n(c) for c in filas[idx_hdr]]
+
+        def _find(*nombres):
+            for nm in nombres:
+                if nm in enc:
+                    return enc.index(nm)
+            return None
+
+        col = {
+            "cuenta": _find("cuenta"),
+            "nombre_nit": _find("nombre nit", "nombre tercero"),
+            "nit": _find("nit", "nit tercero"),
+            "debitos": _find("débitos", "debitos"),
+            "creditos": _find("créditos", "creditos"),
+        }
+    # Si no se detectó encabezado, caer al layout fijo histórico (8 columnas)
+    if not col or col.get("cuenta") is None or col.get("nit") is None \
+            or col.get("debitos") is None or col.get("creditos") is None:
+        col = {"cuenta": 0, "nombre_nit": 4, "nit": 3, "debitos": 6, "creditos": 7}
+        idx_hdr = 2          # datos desde la fila 4 (índice 3)
+
+    fila_ini = (idx_hdr + 1) if idx_hdr is not None else 3
 
     # Acumuladores por NIT
     nit_cuentas_gasto = defaultdict(lambda: defaultdict(float))
@@ -141,11 +177,14 @@ def procesar_balance(archivo) -> dict:
     nit_retefuente = defaultdict(lambda: defaultdict(float))
     nit_nombres = {}
 
-    # Leer desde la fila 4 (después de encabezado + título de columnas)
-    for fila in ws.iter_rows(min_row=4, values_only=True):
-        if not fila or len(fila) < 8:
+    n_max = max(col.values())
+    for fila in filas[fila_ini:]:
+        if not fila or len(fila) <= n_max:
             continue
-        cuenta, equiv, nombre_cta, nit, nombre_nit, saldo_ant, debitos, creditos = fila[:8]
+        cuenta = fila[col["cuenta"]]
+        nit = fila[col["nit"]]
+        nombre_nit = fila[col["nombre_nit"]] if col.get("nombre_nit") is not None \
+            and col["nombre_nit"] < len(fila) else ""
 
         if not cuenta or not nit:
             continue
@@ -157,8 +196,8 @@ def procesar_balance(archivo) -> dict:
             continue
 
         try:
-            deb = float(debitos or 0)
-            cre = float(creditos or 0)
+            deb = float(fila[col["debitos"]] or 0)
+            cre = float(fila[col["creditos"]] or 0)
         except (ValueError, TypeError):
             continue
 
