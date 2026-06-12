@@ -28,7 +28,7 @@ from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from core.reportes.reporte_centros_costos import cargar_balance, fusionar_prr
 from core.reportes.pyg_detallado import construir_pyg, _mes_de_periodo
 from core.reportes.exportador_pyg import exportar_pyg_excel
-from core.reportes.ventas_informe import cargar_ventas_eeff
+from core.reportes.ventas_informe import cargar_ventas, combinar_ventas
 
 
 st.set_page_config(page_title="P&G Detallado por CC", page_icon="📑", layout="wide")
@@ -135,30 +135,47 @@ if fusionar:
                    + ", ".join(f"{c} {n}" for c, n in ne))
 
 # ============================================================
-# 2) Ventas del informe (EEFF por punto)
+# 2) Ventas del informe administrativo
 # ============================================================
 
-st.markdown("### 2️⃣ Sube el informe de ventas (EEFF – P&G por punto)")
+st.markdown("### 2️⃣ Sube los informes administrativos (ventas)")
 st.caption(
-    "Los **ingresos** del P&G se toman de este informe (no de libros). Los "
-    "**inventarios** (cuenta 14) y los **traslados CDP** (cuenta 614095) se leen "
-    "automáticamente de los balances que subiste arriba, por centro de costo. "
-    "Si no subes el EEFF, las ventas quedan en 0."
+    "Los **ingresos** del P&G se toman del informe administrativo (no de libros). "
+    "Sube uno o varios archivos: sirve el informe **mensual** (RESULTADOS, como el "
+    "de abril) y también el **EEFF por punto** (varios meses en un archivo); el "
+    "formato se detecta solo. Los **inventarios** (cuenta 14) y los **traslados "
+    "CDP** (cuenta 614095) se leen automáticamente de los balances del paso 1. "
+    "Si no subes informes, las ventas quedan en 0."
 )
-archivo_eeff = st.file_uploader(
-    "Informe EEFF (.xlsx)", type=["xlsx"], key="eeff_ventas",
+archivos_inf = st.file_uploader(
+    "Informes administrativos (.xlsx) — puedes subir varios",
+    type=["xlsx"], key="informes_ventas", accept_multiple_files=True,
 )
 
 ventas_eeff = {}
-if archivo_eeff is not None:
-    try:
-        ventas_eeff = cargar_ventas_eeff(io.BytesIO(archivo_eeff.getvalue()))
-        ccs_v = sorted({cc for cc, _m in ventas_eeff})
+if archivos_inf:
+    dicts, errores = [], []
+    for a in archivos_inf:
+        try:
+            d = cargar_ventas(io.BytesIO(a.getvalue()))
+            if d:
+                dicts.append(d)
+            else:
+                errores.append(f"**{a.name}**: no encontré ventas (¿formato distinto?)")
+        except Exception as e:  # noqa: BLE001
+            errores.append(f"**{a.name}**: {e}")
+    ventas_eeff = combinar_ventas(*dicts)
+    if ventas_eeff:
+        meses_v = sorted({m for _c, m in ventas_eeff})
+        ccs_v = sorted({c for c, _m in ventas_eeff})
+        nombres_meses = {1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May", 6: "Jun",
+                         7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"}
         st.success(
-            f"EEFF leído: ventas de {len(ccs_v)} centros de costo cargadas."
+            f"Ventas cargadas: {len(ccs_v)} centros · meses "
+            + ", ".join(nombres_meses.get(m, str(m)) for m in meses_v)
         )
-    except Exception as e:  # noqa: BLE001
-        st.error(f"No pude leer el EEFF: {e}")
+    for msg_err in errores:
+        st.warning(msg_err)
 
 # ============================================================
 # 3) Previsualización
