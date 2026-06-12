@@ -30,6 +30,10 @@ from core.reportes.pyg_detallado import construir_pyg, _mes_de_periodo
 from core.reportes.exportador_pyg import exportar_pyg_excel
 from core.reportes.detalle_cuentas import exportar_detalle_cuentas
 from core.reportes.ventas_informe import cargar_ventas, combinar_ventas
+from core.reportes.archivos_pyg import (
+    listar_archivos, descargar_archivo, guardar_archivo, eliminar_archivo,
+    limpiar_nombre,
+)
 
 
 st.set_page_config(page_title="P&G Detallado por CC", page_icon="📑", layout="wide")
@@ -51,12 +55,52 @@ st.markdown("---")
 # ============================================================
 
 st.markdown("### 1️⃣ Sube los Balances de Prueba por CC (uno por mes)")
+
+empresa_id = str(emp.get("id", "") or "")
+usar_repo = st.checkbox(
+    "📦 Usar el repositorio de la plataforma (guarda los archivos para no re-subirlos cada mes)",
+    value=True,
+    help="Los balances e informes se guardan por empresa. El próximo mes solo "
+         "subes los archivos nuevos y el informe se acumula con lo guardado. "
+         "Si subes un archivo con el mismo nombre, reemplaza al guardado.",
+)
+
+guardados_bal = listar_archivos(empresa_id, "balances") if usar_repo else []
+if guardados_bal:
+    with st.expander(f"📦 Balances guardados en la plataforma ({len(guardados_bal)})", expanded=False):
+        for n in guardados_bal:
+            c1, c2 = st.columns([6, 1])
+            c1.write(f"· {n}")
+            if c2.button("🗑", key=f"del_bal_{n}", help=f"Eliminar {n} del repositorio"):
+                eliminar_archivo(empresa_id, "balances", n)
+                st.rerun()
+
 archivos = st.file_uploader(
-    "Puedes subir varios meses a la vez (.xlsx)",
+    "Puedes subir varios meses a la vez (.xlsx)" +
+    (" — se guardarán en el repositorio" if usar_repo else ""),
     type=["xlsx"], accept_multiple_files=True,
 )
 
-if not archivos:
+# autoguardar los nuevos en el repositorio (upsert por nombre)
+if usar_repo and archivos:
+    ya = st.session_state.setdefault("_pyg_guardados_bal", set())
+    for a in archivos:
+        n = limpiar_nombre(a.name)
+        if n not in ya:
+            if guardar_archivo(empresa_id, "balances", n, a.getvalue()):
+                ya.add(n)
+
+# fuente de datos = guardados + subidos (lo subido reemplaza al guardado homónimo)
+nombres_y_bytes = {}
+if usar_repo:
+    for n in guardados_bal:
+        contenido = descargar_archivo(empresa_id, "balances", n)
+        if contenido:
+            nombres_y_bytes[n] = contenido
+for a in (archivos or []):
+    nombres_y_bytes[limpiar_nombre(a.name)] = a.getvalue()
+
+if not nombres_y_bytes:
     st.info("👆 Sube al menos un balance mensual para empezar.")
     st.stop()
 
@@ -73,7 +117,7 @@ def _cargar(nombres_y_bytes):
     return bals
 
 
-bals_all = _cargar([(a.name, a.getvalue()) for a in archivos])
+bals_all = _cargar(tuple(sorted(nombres_y_bytes.items())))
 if not bals_all:
     st.error("Ningún archivo se pudo leer.")
     st.stop()
@@ -148,23 +192,51 @@ st.caption(
     "CDP** (cuenta 614095) se leen automáticamente de los balances del paso 1. "
     "Si no subes informes, las ventas quedan en 0."
 )
+guardados_inf = listar_archivos(empresa_id, "informes") if usar_repo else []
+if guardados_inf:
+    with st.expander(f"📦 Informes guardados en la plataforma ({len(guardados_inf)})", expanded=False):
+        for n in guardados_inf:
+            c1, c2 = st.columns([6, 1])
+            c1.write(f"· {n}")
+            if c2.button("🗑", key=f"del_inf_{n}", help=f"Eliminar {n} del repositorio"):
+                eliminar_archivo(empresa_id, "informes", n)
+                st.rerun()
+
 archivos_inf = st.file_uploader(
-    "Informes administrativos (.xlsx) — puedes subir varios",
+    "Informes administrativos (.xlsx) — puedes subir varios" +
+    (" — se guardarán en el repositorio" if usar_repo else ""),
     type=["xlsx"], key="informes_ventas", accept_multiple_files=True,
 )
 
-ventas_eeff = {}
-if archivos_inf:
-    dicts, errores = [], []
+if usar_repo and archivos_inf:
+    ya_inf = st.session_state.setdefault("_pyg_guardados_inf", set())
     for a in archivos_inf:
+        n = limpiar_nombre(a.name)
+        if n not in ya_inf:
+            if guardar_archivo(empresa_id, "informes", n, a.getvalue()):
+                ya_inf.add(n)
+
+fuentes_inf = {}
+if usar_repo:
+    for n in guardados_inf:
+        contenido = descargar_archivo(empresa_id, "informes", n)
+        if contenido:
+            fuentes_inf[n] = contenido
+for a in (archivos_inf or []):
+    fuentes_inf[limpiar_nombre(a.name)] = a.getvalue()
+
+ventas_eeff = {}
+if fuentes_inf:
+    dicts, errores = [], []
+    for nombre_inf, contenido in sorted(fuentes_inf.items()):
         try:
-            d = cargar_ventas(io.BytesIO(a.getvalue()))
+            d = cargar_ventas(io.BytesIO(contenido))
             if d:
                 dicts.append(d)
             else:
-                errores.append(f"**{a.name}**: no encontré ventas (¿formato distinto?)")
+                errores.append(f"**{nombre_inf}**: no encontré ventas (¿formato distinto?)")
         except Exception as e:  # noqa: BLE001
-            errores.append(f"**{a.name}**: {e}")
+            errores.append(f"**{nombre_inf}**: {e}")
     ventas_eeff = combinar_ventas(*dicts)
     if ventas_eeff:
         meses_v = sorted({m for _c, m in ventas_eeff})
