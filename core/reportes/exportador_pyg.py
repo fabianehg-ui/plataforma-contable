@@ -173,7 +173,8 @@ def exportar_pyg_excel(balances: List[BalanceCC],
                        mil_label: str = "Milagros",
                        fusionar_prr_cc: bool = True,
                        con_formulas: bool = True,
-                       solo_con_actividad: bool = True) -> bytes:
+                       solo_con_actividad: bool = True,
+                       ventas_eeff: Optional[Dict] = None) -> bytes:
     """Genera el workbook completo (consolidado + una hoja por CC).
 
     `con_formulas=True`: los subtotales, utilidades, EBITDA, Acumulado y A.V.
@@ -205,7 +206,7 @@ def exportar_pyg_excel(balances: List[BalanceCC],
     usados.add("consolidado")
     df_cons = construir_pyg(balances, balances_milagros=balances_milagros,
                             cc=None, inventarios=inventarios, traslados=traslados,
-                            mil_label=mil_label)
+                            mil_label=mil_label, ventas_eeff=ventas_eeff)
     sub2 = "Estado de Resultados — CONSOLIDADO (todos los centros)"
     if balances_milagros:
         sub2 += f" · incluye {mil_label}"
@@ -228,7 +229,7 @@ def exportar_pyg_excel(balances: List[BalanceCC],
     for cc in ccs:
         df = construir_pyg(balances, balances_milagros=balances_milagros,
                            cc=cc, inventarios=inventarios, traslados=traslados,
-                           mil_label=mil_label)
+                           mil_label=mil_label, ventas_eeff=ventas_eeff)
         ing = df.loc[df["Concepto"] == "Total ingresos operacionales (netos)", "Acumulado"]
         cost = df.loc[df["Concepto"] == "TOTAL COSTO DE VENTAS Y DE PRODUCCIÓN", "Acumulado"]
         ingv = float(ing.iloc[0]) if not ing.empty else 0.0

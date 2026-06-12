@@ -28,7 +28,7 @@ from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from core.reportes.reporte_centros_costos import cargar_balance, fusionar_prr
 from core.reportes.pyg_detallado import construir_pyg, _mes_de_periodo
 from core.reportes.exportador_pyg import exportar_pyg_excel
-from core.reportes.plantilla_datos import generar_plantilla_datos, leer_plantilla_datos
+from core.reportes.ventas_informe import cargar_ventas_eeff
 
 
 st.set_page_config(page_title="P&G Detallado por CC", page_icon="📑", layout="wide")
@@ -135,47 +135,30 @@ if fusionar:
                    + ", ".join(f"{c} {n}" for c, n in ne))
 
 # ============================================================
-# 2) Plantilla de datos manuales (inventario + traslados) por CC
+# 2) Ventas del informe (EEFF por punto)
 # ============================================================
 
-st.markdown("### 2️⃣ Inventario y traslados por centro de costo (plantilla)")
+st.markdown("### 2️⃣ Sube el informe de ventas (EEFF – P&G por punto)")
 st.caption(
-    "El inventario y los traslados desde producción van por centro de costo, así "
-    "que se capturan en una plantilla de Excel: descárgala con tus centros y meses, "
-    "diligénciala y vuelve a subirla. Lo que dejes en 0 no afecta."
+    "Los **ingresos** del P&G se toman de este informe (no de libros). Los "
+    "**inventarios** (cuenta 14) y los **traslados CDP** (cuenta 614095) se leen "
+    "automáticamente de los balances que subiste arriba, por centro de costo. "
+    "Si no subes el EEFF, las ventas quedan en 0."
+)
+archivo_eeff = st.file_uploader(
+    "Informe EEFF (.xlsx)", type=["xlsx"], key="eeff_ventas",
 )
 
-etq_t = bals[-1].etiqueta_cc()
-ccs_t = sorted(bals[-1].detalle["cc"].unique())
-mes_noms = [_mes_de_periodo(b.periodo)[1] for b in bals]
-centros_plant = [(c, etq_t.get(c, c)) for c in ccs_t]
-
-colp1, colp2 = st.columns(2)
-with colp1:
-    st.markdown("**a) Descargar plantilla en blanco**")
-    plantilla_bytes = generar_plantilla_datos(centros_plant, mes_noms)
-    st.download_button(
-        "⬇️ Descargar plantilla de inventario y traslados",
-        data=plantilla_bytes,
-        file_name=f"Plantilla_datos_{bals[-1].empresa.split()[0]}.xlsx".replace(" ", "_"),
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-with colp2:
-    st.markdown("**b) Subir plantilla diligenciada**")
-    archivo_plant = st.file_uploader(
-        "Plantilla diligenciada (.xlsx)", type=["xlsx"], key="plant_datos",
-    )
-
-inventarios, traslados = {}, {}
-if archivo_plant is not None:
+ventas_eeff = {}
+if archivo_eeff is not None:
     try:
-        inventarios, traslados = leer_plantilla_datos(io.BytesIO(archivo_plant.getvalue()))
+        ventas_eeff = cargar_ventas_eeff(io.BytesIO(archivo_eeff.getvalue()))
+        ccs_v = sorted({cc for cc, _m in ventas_eeff})
         st.success(
-            f"Plantilla leída: {len(inventarios)} datos de inventario y "
-            f"{len(traslados)} traslados cargados."
+            f"EEFF leído: ventas de {len(ccs_v)} centros de costo cargadas."
         )
     except Exception as e:  # noqa: BLE001
-        st.error(f"No pude leer la plantilla: {e}")
+        st.error(f"No pude leer el EEFF: {e}")
 
 # ============================================================
 # 3) Previsualización
@@ -191,7 +174,7 @@ sel = st.selectbox("Centro de costo a previsualizar", opciones)
 
 cc_sel = None if sel.startswith("CONSOLIDADO") else nombre_a_cod[sel]
 df = construir_pyg(bals, balances_milagros=bals_milagros, cc=cc_sel,
-                   inventarios=inventarios, traslados=traslados, mil_label=mil_label)
+                   mil_label=mil_label, ventas_eeff=ventas_eeff)
 
 
 def _fmt(v):
@@ -252,17 +235,18 @@ solo_act = col_a.checkbox("Generar solo centros con actividad", value=True)
 con_formulas = col_b.checkbox(
     "Excel con fórmulas (recalcula al editar a mano)", value=True,
     help="Los subtotales, utilidades, EBITDA, Acumulado y A.V. salen como "
-         "fórmulas. Las celdas de inventario y traslados son las entradas: "
+         "fórmulas. Las celdas de inventario (cuenta 14) y traslados CDP "
+         "(cuenta 614095) vienen de libros pero quedan editables: "
          "al cambiarlas en Excel, todo se recalcula solo.",
 )
 
 if st.button("⚙️ Generar Excel", type="primary"):
     with st.spinner("Generando hojas por centro de costo..."):
         xls = exportar_pyg_excel(bals, balances_milagros=bals_milagros,
-                                 inventarios=inventarios, traslados=traslados,
                                  mil_label=mil_label, fusionar_prr_cc=False,
                                  con_formulas=con_formulas,
-                                 solo_con_actividad=solo_act)
+                                 solo_con_actividad=solo_act,
+                                 ventas_eeff=ventas_eeff)
     nombre = f"PYG_Detallado_CC_{bals[-1].empresa.split()[0]}.xlsx".replace(" ", "_")
     st.download_button(
         "⬇️ Descargar Excel",

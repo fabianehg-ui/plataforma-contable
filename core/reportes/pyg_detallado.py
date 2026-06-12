@@ -77,25 +77,18 @@ def _plantilla(con_mil: bool = False, mil: str = "Milagros"):
             feeds.append(mil_label)
         en_subtotal.extend(feeds)
 
-    A(("header", "INGRESOS OPERACIONALES", {}))
+    # Ingresos tomados del INFORME (EEFF por punto), no de libros.
+    A(("header", "INGRESOS OPERACIONALES (informe)", {}))
     ing_feed = []
-    A(("line", "   Industrias manufactureras (panadería) [4120]", {"cod": ["4120"], "s": "ing"}))
-    ing_feed.append("   Industrias manufactureras (panadería) [4120]")
-    A(("line", "   Hoteles y restaurantes [4140]", {"cod": ["4140"], "s": "ing"}))
-    ing_feed.append("   Hoteles y restaurantes [4140]")
-    A(("line", "   (–) Devoluciones en ventas [4175]", {"cod": ["4175"], "s": "ing"}))
-    ing_feed.append("   (–) Devoluciones en ventas [4175]")
-    A(("line", "   Otros ingresos operacionales", {"cod": ["41"], "s": "ing",
-                                                   "otros_menos": ["4120", "4140", "4175"]}))
-    ing_feed.append("   Otros ingresos operacionales")
-    if con_mil:
-        A(("mil", f"   Ventas restaurantes {mil}", {"cod": ["41"], "s": "ing"}))
-        ing_feed.append(f"   Ventas restaurantes {mil}")
+    A(("vinf", "   Ventas (informe)", {"tipo": "ventas"}))
+    ing_feed.append("   Ventas (informe)")
+    A(("vinf", "   (–) Devoluciones en ventas (informe)", {"tipo": "devol"}))
+    ing_feed.append("   (–) Devoluciones en ventas (informe)")
     A(("sub", "Total ingresos operacionales (netos)", {"mas": list(ing_feed)}))
     A(("blank", "", {}))
 
     A(("header", "COSTO DE VENTAS Y DE PRODUCCIÓN", {}))
-    A(("header", "Costo de materia prima (cuentas 14 y 71)", {}))
+    A(("header", "Costo de materia prima (inventarios 14 de libros, compras 71 y traslados CDP 614095)", {}))
     A(("subhdr", "   Alimentos y bebidas", {}))
     alim_feed = []
     A(("inv", "      (+) Inventario inicial alimentos/bebidas [14050501]", {"grupo": "alim", "tipo": "ini"}))
@@ -109,6 +102,8 @@ def _plantilla(con_mil: bool = False, mil: str = "Milagros"):
         alim_feed.append(f"      (+) Compras alimentos y bebidas {mil}")
     A(("inv", "      (–) Inventario final alimentos/bebidas [14050501]", {"grupo": "alim", "tipo": "fin"}))
     alim_feed.append("      (–) Inventario final alimentos/bebidas [14050501]")
+    A(("trasl", "      (+) Traslado CDP alimentos [61409501]", {"grupo": "alim"}))
+    alim_feed.append("      (+) Traslado CDP alimentos [61409501]")
     A(("sub", "   Costo alimentos y bebidas", {"mas": list(alim_feed)}))
 
     A(("subhdr", "   Aseo y cafetería", {}))
@@ -124,12 +119,15 @@ def _plantilla(con_mil: bool = False, mil: str = "Milagros"):
         aseo_feed.append(f"      (+) Compras cafetería y aseo {mil}")
     A(("inv", "      (–) Inventario final aseo/cafetería [14050502]", {"grupo": "aseo", "tipo": "fin"}))
     aseo_feed.append("      (–) Inventario final aseo/cafetería [14050502]")
+    A(("trasl", "      (+) Traslado CDP aseo/cafetería [61409502]", {"grupo": "aseo"}))
+    aseo_feed.append("      (+) Traslado CDP aseo/cafetería [61409502]")
     A(("sub", "   Costo aseo y cafetería", {"mas": list(aseo_feed)}))
-    A(("line", "   Traslados de alimentos / otras compras [710595]",
-       {"cod": ["71"], "s": "egr", "otros_menos": ["710501", "710502", "710503", "710504"]}))
+    A(("line", "   (+) Otro costo de ventas (clase 6 restante)",
+       {"cod": ["6"], "s": "egr",
+        "otros_menos": ["61400501", "61401001", "61409501", "61409502"]}))
     A(("sub", "Total costo de materia prima",
        {"mas": ["   Costo alimentos y bebidas", "   Costo aseo y cafetería",
-                "   Traslados de alimentos / otras compras [710595]"]}))
+                "   (+) Otro costo de ventas (clase 6 restante)"]}))
     A(("blank", "", {}))
 
     A(("header", "Costo de mano de obra (cuenta 72)", {}))
@@ -163,19 +161,9 @@ def _plantilla(con_mil: bool = False, mil: str = "Milagros"):
     A(("sub", "Total costos indirectos de fabricación", {"mas": list(cif_feed)}))
     A(("blank", "", {}))
 
-    A(("header", "Costo de ventas — mercancía (clase 6)", {}))
-    c6_feed = []
-    A(("line", "   Costo de mercancía vendida [6]", {"cod": ["6"], "s": "egr"})); c6_feed.append("   Costo de mercancía vendida [6]")
-    if con_mil:
-        A(("mil", f"   Costo de mercancía {mil}", {"cod": ["6"], "s": "egr"})); c6_feed.append(f"   Costo de mercancía {mil}")
-    A(("trasl", "   (+) Traslado alimentos desde producción", {"grupo": "alim"})); c6_feed.append("   (+) Traslado alimentos desde producción")
-    A(("trasl", "   (+) Traslado aseo desde producción", {"grupo": "aseo"})); c6_feed.append("   (+) Traslado aseo desde producción")
-    A(("sub", "Total costo de ventas (clase 6) y traslados", {"mas": list(c6_feed)}))
-    A(("blank", "", {}))
-
     A(("sub", "TOTAL COSTO DE VENTAS Y DE PRODUCCIÓN",
        {"mas": ["Total costo de materia prima", "Total costo de mano de obra",
-                "Total costos indirectos de fabricación", "Total costo de ventas (clase 6) y traslados"]}))
+                "Total costos indirectos de fabricación"]}))
     A(("blank", "", {}))
     A(("sub", "UTILIDAD BRUTA",
        {"mas": ["Total ingresos operacionales (netos)"],
@@ -296,9 +284,56 @@ def _suma_codigos(d: pd.DataFrame, codigos, otros_menos=None) -> float:
     return float(total)
 
 
+# ------------------------------------------------------------------
+# Inventarios y traslados desde LIBROS (cuentas 14 y 614095)
+# ------------------------------------------------------------------
+
+_INV_CTA = {"alim": "14050501", "aseo": "14050502"}
+_TRASL_CTA = {"alim": "61409501", "aseo": "61409502"}
+
+
+def inventarios_de_balances(balances: List[BalanceCC]) -> Dict:
+    """Inventario inicial/final por (grupo, cc, mes) leído de LIBROS.
+
+    inicial = Saldo Anterior de la cuenta 14; final = Nuevo Saldo.
+    grupo \"alim\" -> 14050501, \"aseo\" -> 14050502 (suma de cuentas hoja que
+    empiezan por ese código, por centro de costo).
+    """
+    out: Dict = {}
+    for b in balances:
+        mnum = _mes_de_periodo(b.periodo)[0]
+        d = b.detalle
+        for grupo, pref in _INV_CTA.items():
+            sub = d[d["cuenta"].str.startswith(pref)]
+            if sub.empty:
+                continue
+            for ccx, g in sub.groupby("cc"):
+                e = out.setdefault((grupo, ccx, mnum), {"ini": 0.0, "fin": 0.0})
+                e["ini"] += float(g["saldo_ant"].sum())
+                e["fin"] += float(g["nuevo_saldo"].sum())
+    return out
+
+
+def traslados_de_balances(balances: List[BalanceCC]) -> Dict:
+    """Traslado CDP por (grupo, cc, mes) leído de LIBROS: movimiento del
+    periodo (Débitos - Créditos) de 61409501 (alim) / 61409502 (aseo)."""
+    out: Dict = {}
+    for b in balances:
+        mnum = _mes_de_periodo(b.periodo)[0]
+        d = b.detalle
+        for grupo, pref in _TRASL_CTA.items():
+            sub = d[d["cuenta"].str.startswith(pref)]
+            if sub.empty:
+                continue
+            for ccx, g in sub.groupby("cc"):
+                out[(grupo, ccx, mnum)] = out.get((grupo, ccx, mnum), 0.0) + float(g["mov_periodo"].sum())
+    return out
+
+
 def construir_pyg(balances: List[BalanceCC], balances_milagros: Optional[List[BalanceCC]] = None,
                   cc: Optional[str] = None, inventarios: Optional[Dict] = None,
-                  traslados: Optional[Dict] = None, mil_label: str = "Milagros") -> pd.DataFrame:
+                  traslados: Optional[Dict] = None, mil_label: str = "Milagros",
+                  ventas_eeff: Optional[Dict] = None) -> pd.DataFrame:
     """Construye el P&G detallado.
 
     `balances`: BalanceCC mensuales de la empresa principal (Jiper).
@@ -315,8 +350,27 @@ def construir_pyg(balances: List[BalanceCC], balances_milagros: Optional[List[Ba
 
     Devuelve DataFrame: Concepto | <mes1> | ... | Acumulado | A.V. | _tipo
     """
-    inventarios = inventarios or {}
-    traslados = traslados or {}
+    # Inventarios (cta 14) y traslados CDP (cta 614095) SIEMPRE desde libros.
+    # Los parámetros inventarios/traslados se mantienen por compatibilidad pero
+    # solo se usan como complemento si se pasan explícitamente.
+    inv_libros = inventarios_de_balances(balances)
+    tras_libros = traslados_de_balances(balances)
+    if balances_milagros:
+        for k, v in inventarios_de_balances(balances_milagros).items():
+            e = inv_libros.setdefault(k, {"ini": 0.0, "fin": 0.0})
+            e["ini"] += v["ini"]; e["fin"] += v["fin"]
+        for k, v in traslados_de_balances(balances_milagros).items():
+            tras_libros[k] = tras_libros.get(k, 0.0) + v
+    if inventarios:
+        for k, v in inventarios.items():
+            e = inv_libros.setdefault(k, {"ini": 0.0, "fin": 0.0})
+            e["ini"] += float(v.get("ini", 0.0) or 0.0); e["fin"] += float(v.get("fin", 0.0) or 0.0)
+    if traslados:
+        for k, v in traslados.items():
+            tras_libros[k] = tras_libros.get(k, 0.0) + float(v or 0.0)
+    inventarios = inv_libros
+    traslados = tras_libros
+    ventas_eeff = ventas_eeff or {}
     con_mil = bool(balances_milagros)
     plantilla = _plantilla(con_mil=con_mil, mil=mil_label)
 
@@ -349,6 +403,18 @@ def construir_pyg(balances: List[BalanceCC], balances_milagros: Optional[List[Ba
             sgn = _signo(opts["s"])
             for i, d in enumerate(dets):
                 vals[i] = sgn * _suma_codigos(d, opts["cod"], opts.get("otros_menos"))
+
+        elif kind == "vinf":
+            # Ventas/devoluciones tomadas del informe (EEFF) por CC y mes.
+            # devoluciones vienen en negativo, así que el neto = ventas + devol.
+            clave = "ventas" if opts.get("tipo") == "ventas" else "devol"
+            for i, mnum in enumerate(nums_mes):
+                if cc is not None:
+                    cc4 = str(cc).strip()[-4:]
+                    e = ventas_eeff.get((cc4, mnum))
+                    vals[i] = float(e[clave]) if e else 0.0
+                else:
+                    vals[i] = float(sum(e[clave] for (c, m), e in ventas_eeff.items() if m == mnum))
 
         elif kind == "mil":
             sgn = _signo(opts["s"])
@@ -407,7 +473,7 @@ def construir_pyg(balances: List[BalanceCC], balances_milagros: Optional[List[Ba
         base_av = float(fila_base["Acumulado"].iloc[0]) or 0.0
     if base_av:
         df["A.V."] = df.apply(
-            lambda r: (r["Acumulado"] / base_av) if r["_tipo"] in ("line", "mil", "trasl", "sub", "ebitda", "inv")
+            lambda r: (r["Acumulado"] / base_av) if r["_tipo"] in ("line", "mil", "trasl", "sub", "ebitda", "inv", "vinf")
             and r["Acumulado"] is not None else None, axis=1)
 
     cols = ["Concepto"] + nombres_mes + ["Acumulado", "A.V.", "_tipo"]
