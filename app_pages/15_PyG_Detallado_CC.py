@@ -28,6 +28,7 @@ from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from core.reportes.reporte_centros_costos import cargar_balance, fusionar_prr
 from core.reportes.pyg_detallado import construir_pyg, _mes_de_periodo
 from core.reportes.exportador_pyg import exportar_pyg_excel
+from core.reportes.detalle_cuentas import exportar_detalle_cuentas
 from core.reportes.ventas_informe import cargar_ventas, combinar_ventas
 
 
@@ -268,5 +269,24 @@ if st.button("⚙️ Generar Excel", type="primary"):
     st.download_button(
         "⬇️ Descargar Excel",
         data=xls, file_name=nombre,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+st.markdown("### 4️⃣ Detalle por cuenta (4 → 6 dígitos)")
+st.caption(
+    "Informe por centro de costos con las cuentas agrupadas a 4 dígitos y el "
+    "detalle de 6 dígitos contraíble (botones +/− de Excel). Ingresos únicamente "
+    "del informe administrativo (sin cuenta 41), análisis vertical mes a mes, "
+    "Índice con EBITDA y hoja de Conciliación Global contra libros."
+)
+if st.button("⚙️ Generar detalle por cuenta"):
+    with st.spinner("Generando detalle por cuenta..."):
+        xls_det = exportar_detalle_cuentas(bals, balances_milagros=bals_milagros,
+                                           ventas_eeff=ventas_eeff,
+                                           mil_label=mil_label)
+    nombre_det = f"PYG_Detalle_6dig_por_CC_{bals[-1].empresa.split()[0]}.xlsx".replace(" ", "_")
+    st.download_button(
+        "⬇️ Descargar detalle por cuenta",
+        data=xls_det, file_name=nombre_det,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
