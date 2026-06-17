@@ -1,0 +1,17 @@
+# nixpacks.toml  (raíz del repo)
+# Instala libs de Chromium (apt), luego playwright y el navegador.
+
+[phases.setup]
+aptPkgs = [
+  "libnss3", "libnspr4", "libatk1.0-0", "libatk-bridge2.0-0", "libcups2",
+  "libdrm2", "libxkbcommon0", "libxcomposite1", "libxdamage1", "libxrandr2",
+  "libgbm1", "libpango-1.0-0", "libcairo2", "libasound2", "libatspi2.0-0",
+  "libxfixes3", "fonts-liberation"
+]
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "pip install 'playwright>=1.44'",
+  "python -m playwright install chromium"
+]
