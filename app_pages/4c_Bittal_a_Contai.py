@@ -1,18 +1,23 @@
 """
-app_pages/NN_Bittal_a_Contai.py  (ajusta el numero al orden de tu menu)
+app_pages/4c_Bittal_a_Contai.py
 
 Pagina unica: elige informe + rango de fechas -> baja de bittal -> genera el
-plano para Contai. Agregar informes nuevos NO toca esta pagina (vienen del
-registro core/bittal/reportes.py).
+plano para Contai. Los informes vienen del registro core/bittal/reportes.py.
+
+Credenciales: puedes escribirlas aqui (campos de abajo) o, si las dejas vacias,
+se toman de st.secrets['bittal'] o de las variables de entorno BITTAL_*.
+El login lo hace el conector (Playwright) en segundo plano; no hay que abrir
+bittal a mano.
 """
 import datetime as dt
 import streamlit as st
 
 from core.bittal.reportes import INFORMES, generar_plano
+from core.bittal.cliente_bittal import BittalCreds
 
 st.title("Bittal -> Contai")
 
-# Seleccion de informe (las llaves del registro)
+# Informe (llaves del registro)
 opciones = {v["nombre"]: k for k, v in INFORMES.items()}
 nombre = st.selectbox("Informe", list(opciones.keys()))
 informe_key = opciones[nombre]
@@ -22,15 +27,25 @@ hoy = dt.date.today()
 fecha_ini = c1.date_input("Desde", value=hoy.replace(day=1))
 fecha_fin = c2.date_input("Hasta", value=hoy)
 
-st.caption(
-    "Credenciales de bittal en st.secrets['bittal'] (codigo_empresa, usuario, "
-    "password). Para varias empresas, usa un bloque de secrets por empresa."
-)
+with st.expander("Credenciales de bittal", expanded=True):
+    st.caption(
+        "Si las dejas vacias, se usan las de st.secrets['bittal'] o las "
+        "variables de entorno BITTAL_CODIGO_EMPRESA / BITTAL_USUARIO / BITTAL_PASSWORD."
+    )
+    cc1, cc2, cc3 = st.columns(3)
+    codigo = cc1.text_input("Codigo / NIT empresa")
+    usuario = cc2.text_input("Usuario")
+    password = cc3.text_input("Contrasena", type="password")
 
 if st.button("Generar plano", type="primary"):
+    creds = None
+    if codigo and usuario and password:
+        creds = BittalCreds(codigo_empresa=codigo, usuario=usuario, password=password)
     try:
         with st.spinner("Conectando a bittal y generando..."):
-            plano, log, resumen = generar_plano(informe_key, fecha_ini, fecha_fin)
+            plano, log, resumen = generar_plano(
+                informe_key, fecha_ini, fecha_fin, creds=creds
+            )
         st.success("Plano generado.")
         with st.expander("Bitacora"):
             st.code("\n".join(log))
