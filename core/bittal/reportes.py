@@ -40,19 +40,61 @@ def _procesar_recaudos(archivos: dict, log: list):
 
 
 def _procesar_caja_menor(archivos: dict, log: list):
-    # Reusa el procesador existente. OJO: requiere un objeto Configuracion de la
-    # empresa. Hay que enlazarlo a tu cargador de config por NIT.
-    raise NotImplementedError(
-        "Caja menor reusa procesador_caja_menor, pero falta pasarle la "
-        "Configuracion de la empresa. Lo enlazamos cuando definas el cargador."
+    import pandas as pd
+    from core.utils.configuracion_web import Configuracion
+    from core.procesadores.procesador_caja_menor import (
+        procesar_caja_menor, dataframe_a_plano_tsv,
     )
+    # Igual que la pagina de Caja Menor del repo: config vacia (cuentas por defecto).
+    cfg = Configuracion.vacia()
+    df, log_p = procesar_caja_menor(archivos["egresos"], cfg)
+    log.extend(log_p)
+
+    # Este procesador entrega VALOR con signo (tipo 1 negativo / tipo 2 positivo),
+    # asi que el cuadre se verifica como neto == 0.
+    v = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
+    neto = int(v.sum())
+    log.append(f"🧮 Caja menor: {len(df)} líneas. Neto (debe ser 0): ${neto:,}")
+    log.append("   ✅ Cuadra (neto 0)" if neto == 0 else f"   ⚠️ Neto distinto de 0: {neto}")
+    resumen = {"lineas": len(df), "neto": neto}
+    return dataframe_a_plano_tsv(df), resumen
 
 
 def _procesar_compras_ds(archivos: dict, log: list):
-    raise NotImplementedError(
-        "Falta el procesador de Documento Soporte (PurchaseDetailList). "
-        "Definir producto->cuenta, cuenta proveedor (CxP), retefuente y comprobante."
+    import pandas as pd
+    from core.procesadores.procesador_compras_egresos import (
+        _leer_documentos_soporte, cargar_catalogo, _generar_asientos_ds,
+        dataframe_a_plano_tsv, COLUMNAS_PLANO, COMPROBANTE_DS,
     )
+    docs = _leer_documentos_soporte(archivos["listado"])
+    log.append(f"📄 Documento Soporte: {len(docs)} documentos válidos.")
+    cat = cargar_catalogo()
+    base_min = int(cat["uvt"]) * int(cat["base_servicios_uvt"])
+    log.append(
+        f"   UVT ${cat['uvt']:,} × {cat['base_servicios_uvt']} = base retefuente "
+        f"servicios ${base_min:,}"
+    )
+    filas, _mapa, advert = _generar_asientos_ds(docs, cat["productos"], base_min)
+    for a in advert:
+        log.append(a)
+
+    df = pd.DataFrame(filas, columns=COLUMNAS_PLANO)
+    v = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
+    db = int(v[df["TR"].astype(str) == "1"].sum())
+    cr = int(v[df["TR"].astype(str) == "2"].sum())
+    log.append(
+        f"🧮 Comp {COMPROBANTE_DS}: {len(docs)} docs, {len(df)} líneas. "
+        f"Db=${db:,} Cr=${cr:,}"
+    )
+    log.append("   ✅ Cuadre Db = Cr" if db == cr else f"   ⚠️ Descuadre: {db - cr}")
+    resumen = {
+        "documentos": len(docs),
+        "lineas": len(df),
+        "total_db": db,
+        "total_cr": cr,
+        "productos_sin_catalogo": len(advert),
+    }
+    return dataframe_a_plano_tsv(df), resumen
 
 
 INFORMES = {
@@ -78,19 +120,20 @@ INFORMES = {
     "caja_menor": {
         "nombre": "Egresos de caja menor (CEG)",
         "descargas": {
-            "egresos": {"url": PEND, "opcional": False},  # URL de tesorería por capturar
+            "egresos": {"url": f"{BASE}/Treasury/MovementsTreasuryDocumentDetail.aspx",
+                        "opcional": False, "arg_exportar": "1:0"},
         },
         "procesar": _procesar_caja_menor,
-        "estado": "REUSA procesador_caja_menor (falta Configuracion empresa)",
+        "estado": "VALIDADO (config vacía; cuentas por defecto Comp 13)",
     },
     "compras_ds": {
         "nombre": "Compras — documento soporte",
         "descargas": {
             "listado": {"url": f"{BASE}/Purchases/PurchaseDetailList.aspx",
-                        "opcional": False},
+                        "opcional": False, "arg_exportar": "0:0"},
         },
         "procesar": _procesar_compras_ds,
-        "estado": "PENDIENTE procesador",
+        "estado": "VALIDADO (catálogo: SERV017 cae a default si no se agrega)",
     },
 }
 
@@ -117,7 +160,11 @@ def generar_plano(
             raise RuntimeError(
                 f"Falta la URL del rol obligatorio '{rol}' en el informe '{informe_key}'."
             )
-        xlsx = descargar_reporte(creds, url, fecha_ini, fecha_fin, headless=headless, log=log)
+        xlsx = descargar_reporte(
+            creds, url, fecha_ini, fecha_fin,
+            headless=headless, log=log,
+            **({"arg_exportar": cfg["arg_exportar"]} if cfg.get("arg_exportar") else {}),
+        )
         archivos[rol] = io.BytesIO(xlsx)
     plano_bytes, resumen = inf["procesar"](archivos, log)
     return plano_bytes, log, resumen
