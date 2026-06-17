@@ -9,7 +9,7 @@ Lo único que cambia entre informes es la URL (y va en el registro reportes.py).
 
 Cómo funciona la exportación (deducido del tráfico real del portal):
     - La grilla se arma con un postback a 'btnRefreshGrid'.
-    - La exportación es un postback a la barra 'radToolBar' con argumento '0:0',
+    - La exportación es un postback a la barra 'radToolBar' con argumento '1:0',
       y la respuesta es el .xlsx con TODO el listado del rango (no solo la página
       visible: es exportación del lado del servidor).
     Por eso disparamos esos eventos con __doPostBack: es estable aunque cambien
@@ -36,7 +36,7 @@ PICKER_FECHA_INI = "ctl00_FilterPlaceHolder_RadToolBar1_i2_rdpInvoiceStartDate"
 PICKER_FECHA_FIN = "ctl00_FilterPlaceHolder_RadToolBar1_i2_rdpInvoiceEndDate"
 TARGET_REFRESCAR = "ctl00$ListPlaceHolder$btnRefreshGrid"
 TARGET_TOOLBAR = "ctl00$ToolbarPlaceHolder$moduleToolBar$radToolBar"
-ARG_EXPORTAR_DEFAULT = "0:0"  # índice del botón "Exportar a Excel" en la barra
+ARG_EXPORTAR_DEFAULT = "1:0"  # indice del boton "Exportar a Excel" (confirmado en HAR)
 
 TIMEOUT_MS = 90_000
 
@@ -234,7 +234,7 @@ def descargar_reporte(
 
             # 4) Generar la grilla (arma todo el listado en el servidor)
             _l("⚙️ Generando listado...")
-            marco.evaluate("(t) => __doPostBack(t, '')", TARGET_REFRESCAR)
+            marco.evaluate("window.__doPostBack(" + repr(TARGET_REFRESCAR) + ", '')")
             pag.wait_for_load_state("networkidle")
             pag.wait_for_timeout(1500)
 
@@ -245,7 +245,8 @@ def descargar_reporte(
             _l("⬇️ Exportando a Excel (listado completo)...")
             with pag.expect_download() as info:
                 marco.evaluate(
-                    "([t, a]) => __doPostBack(t, a)", [TARGET_TOOLBAR, arg_exportar]
+                    "window.__doPostBack(" + repr(TARGET_TOOLBAR)
+                    + ", " + repr(arg_exportar) + ")"
                 )
             desc = info.value
             with open(desc.path(), "rb") as fh:
