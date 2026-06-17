@@ -28,8 +28,6 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-
 LOGIN_URL = "https://accounts.bittal.co/User/Login"
 
 # Controles del portal (iguales en todos los reportes de listado vistos)
@@ -80,6 +78,16 @@ def descargar_reporte(
     """Loguea, fija el rango, genera y exporta UN reporte de bittal. Devuelve el xlsx en bytes."""
     log = log if log is not None else []
     _l = log.append
+
+    # Import perezoso: la página puede cargar aunque Playwright no esté instalado;
+    # solo se exige al momento de descargar.
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "Falta Playwright. Instálalo: pip install playwright && "
+            "python -m playwright install chromium"
+        ) from e
 
     if not (creds.codigo_empresa and creds.usuario and creds.password):
         raise RuntimeError(
