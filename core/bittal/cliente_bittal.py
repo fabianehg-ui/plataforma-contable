@@ -157,16 +157,33 @@ def descargar_reporte(
             except PWTimeout:
                 pass
 
+            _l(f"  URL tras login: {pag.url}")
+            if "User/Login" in pag.url or pag.url.rstrip("/").endswith("accounts.bittal.co"):
+                _l("  ⚠️ Parece que sigue en login (el acceso pudo fallar).")
+
             # 2) Abrir el reporte
             _l(f"📄 Abriendo {report_url.rsplit('/', 1)[-1]} ...")
             pag.goto(report_url, wait_until="networkidle")
+            _l(f"  URL del reporte: {pag.url}")
 
             # 2b) Ubicar el marco (iframe) donde vive el reporte ASP.NET.
             marco = _frame_con_postback(pag)
             if marco is None:
+                urls = []
+                for fr in pag.frames:
+                    try:
+                        urls.append(fr.url)
+                    except Exception:
+                        pass
+                try:
+                    titulo = pag.title()
+                except Exception:
+                    titulo = ""
                 raise RuntimeError(
                     "No se encontro el reporte en bittal (no aparece __doPostBack). "
-                    "Puede que la sesion no quedara iniciada o que el reporte abra distinto."
+                    f"URL actual: {pag.url} | titulo: {titulo!r} | frames: {urls}. "
+                    "Si la URL es la de login, el acceso no quedo iniciado; "
+                    "si es otra, el reporte abre distinto."
                 )
             if marco is not pag.main_frame:
                 _l("  (reporte dentro de un iframe)")
