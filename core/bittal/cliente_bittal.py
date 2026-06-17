@@ -100,15 +100,44 @@ def descargar_reporte(
         pag = ctx.new_page()
         pag.set_default_timeout(TIMEOUT_MS)
         try:
-            # 1) Login
+            # 1) Login (ASP.NET: los textos NO son <label> reales -> ubicar por
+            #    tipo y posicion. Orden en la pagina: 1) Codigo/Nit  2) Usuario.)
             _l("🔐 Login...")
             pag.goto(LOGIN_URL, wait_until="domcontentloaded")
-            pag.get_by_label("Código/Nit de la Empresa").fill(creds.codigo_empresa)
-            pag.get_by_label("Usuario").fill(creds.usuario)
-            pag.get_by_label("Contraseña").fill(creds.password)
-            # Botón de ingreso: si el texto difiere, ajústalo aquí.
-            pag.get_by_role("button", name="/ingresar|entrar|iniciar|acceder/i").click()
-            pag.wait_for_load_state("networkidle")
+            pag.wait_for_selector("input[type='password']", timeout=TIMEOUT_MS)
+
+            textos = pag.locator(
+                "input[type='text']:visible, input:not([type]):visible, "
+                "input[type='email']:visible, input[type='tel']:visible"
+            )
+            ntex = textos.count()
+            if ntex >= 2:
+                textos.nth(0).fill(creds.codigo_empresa)
+                textos.nth(1).fill(creds.usuario)
+            elif ntex == 1:
+                textos.nth(0).fill(creds.usuario)
+            else:
+                raise RuntimeError(
+                    "No se encontraron los campos de texto del login de bittal "
+                    "(la pagina pudo cambiar)."
+                )
+            pag.locator("input[type='password']:visible").first.fill(creds.password)
+
+            # Enviar: boton submit o, si no existe, Enter en la contrasena.
+            boton = pag.locator(
+                "button[type='submit'], input[type='submit'], "
+                "button:has-text('Ingresar'), button:has-text('Iniciar'), "
+                "button:has-text('Entrar'), a:has-text('Ingresar')"
+            )
+            if boton.count():
+                boton.first.click()
+            else:
+                pag.locator("input[type='password']:visible").first.press("Enter")
+
+            try:
+                pag.wait_for_load_state("networkidle", timeout=30_000)
+            except PWTimeout:
+                pass
 
             # 2) Abrir el reporte
             _l(f"📄 Abriendo {report_url.rsplit('/', 1)[-1]} ...")
