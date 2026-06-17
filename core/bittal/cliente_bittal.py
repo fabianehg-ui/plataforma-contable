@@ -65,6 +65,24 @@ class BittalCreds:
         )
 
 
+def _frame_con_postback(pag, intentos: int = 12, espera_ms: int = 1000):
+    """Devuelve el frame (o la pagina) donde esta definido __doPostBack.
+
+    El reporte de bittal carga dentro de un iframe; ASP.NET define __doPostBack
+    y Telerik $find DENTRO de ese marco, no en la pagina de afuera. Probamos
+    cada frame hasta encontrar el que tiene la funcion.
+    """
+    for _ in range(intentos):
+        for fr in pag.frames:
+            try:
+                if fr.evaluate("() => typeof window.__doPostBack === 'function'"):
+                    return fr
+            except Exception:
+                pass
+        pag.wait_for_timeout(espera_ms)
+    return None
+
+
 def descargar_reporte(
     creds: BittalCreds,
     report_url: str,
@@ -143,12 +161,22 @@ def descargar_reporte(
             _l(f"📄 Abriendo {report_url.rsplit('/', 1)[-1]} ...")
             pag.goto(report_url, wait_until="networkidle")
 
+            # 2b) Ubicar el marco (iframe) donde vive el reporte ASP.NET.
+            marco = _frame_con_postback(pag)
+            if marco is None:
+                raise RuntimeError(
+                    "No se encontro el reporte en bittal (no aparece __doPostBack). "
+                    "Puede que la sesion no quedara iniciada o que el reporte abra distinto."
+                )
+            if marco is not pag.main_frame:
+                _l("  (reporte dentro de un iframe)")
+
             # 3) Activar filtro por fecha y fijar el rango con la API de Telerik
-            chk = pag.locator(f"#{ID_CHK_USAR_FECHA}")
+            chk = marco.locator(f"#{ID_CHK_USAR_FECHA}")
             if chk.count() and not chk.is_checked():
                 chk.check()
             _l(f"📆 {fecha_ini.isoformat()} a {fecha_fin.isoformat()}")
-            pag.evaluate(
+            marco.evaluate(
                 """([idIni, idFin, ini, fin]) => {
                     const set = (id, d) => {
                         const pk = window.$find && window.$find(id);
@@ -164,13 +192,17 @@ def descargar_reporte(
 
             # 4) Generar la grilla (arma todo el listado en el servidor)
             _l("⚙️ Generando listado...")
-            pag.evaluate("(t) => __doPostBack(t, '')", TARGET_REFRESCAR)
+            marco.evaluate("(t) => __doPostBack(t, '')", TARGET_REFRESCAR)
             pag.wait_for_load_state("networkidle")
+            pag.wait_for_timeout(1500)
+
+            # Tras el postback el iframe puede recargarse: re-ubicar el marco.
+            marco = _frame_con_postback(pag) or marco
 
             # 5) Exportar: postback al toolbar -> descarga del xlsx completo
             _l("⬇️ Exportando a Excel (listado completo)...")
             with pag.expect_download() as info:
-                pag.evaluate(
+                marco.evaluate(
                     "([t, a]) => __doPostBack(t, a)", [TARGET_TOOLBAR, arg_exportar]
                 )
             desc = info.value
