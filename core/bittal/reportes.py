@@ -120,7 +120,7 @@ INFORMES = {
     "caja_menor": {
         "nombre": "Egresos de caja menor (CEG)",
         "descargas": {
-            "egresos": {"url": f"{BASE}/Treasury/MovementsTreasuryDocumentDetail.aspx",
+            "egresos": {"url": f"{BASE}/Treasury/MovementsTreasuryDocumentDetail.aspx?DocumentType=8",
                         "opcional": False, "arg_exportar": "1:0"},
         },
         "procesar": _procesar_caja_menor,
