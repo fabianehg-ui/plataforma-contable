@@ -111,6 +111,7 @@ def home_page():
                 "- 📝 Provisiones\n"
                 "- 🛍️ Ventas C13\n"
                 "- 🧾 Ventas POS\n"
+                "- 🏦 Bittal a Contai\n"
                 "- 📎 PILA"
             )
 
@@ -194,6 +195,12 @@ asistente_pos = st.Page(
     title="Ventas POS",
     icon="🧾",
     url_path="ventas-pos",
+)
+asistente_bittal = st.Page(
+    "app_pages/4c_Bittal_a_Contai.py",
+    title="Bittal a Contai",
+    icon="🏦",
+    url_path="bittal-a-contai",
 )
 asistente_pila = st.Page(
     "app_pages/5_PILA.py",
@@ -301,6 +308,7 @@ nav = st.navigation(
             asistente_prov,
             asistente_ventas_c13,
             asistente_pos,
+            asistente_bittal,
             asistente_pila,
         ],
         "📊 Herramientas Tributarias": [
