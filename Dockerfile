@@ -10,11 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Arrancamos Streamlit con "python -m" para no depender del PATH.
-# Railway inyecta $PORT; hay que escuchar en 0.0.0.0 y en ese puerto.
-CMD python -m streamlit run Home.py \
-    --server.port $PORT \
-    --server.address 0.0.0.0 \
-    --server.headless true \
-    --server.enableCORS false \
-    --server.enableXsrfProtection false
+# sh -c hace que la shell expanda ${PORT} en tiempo de ejecución.
+# Si Railway no inyectara PORT, usa 8080 por defecto.
+CMD ["sh", "-c", "python -m streamlit run Home.py --server.port ${PORT:-8080} --server.address 0.0.0.0 --server.headless true --server.enableCORS false --server.enableXsrfProtection false"]
