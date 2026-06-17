@@ -118,76 +118,58 @@ def descargar_reporte(
         pag = ctx.new_page()
         pag.set_default_timeout(TIMEOUT_MS)
         try:
-            # 1) Login (ASP.NET: los textos NO son <label> reales -> ubicar por
-            #    tipo y posicion. Orden en la pagina: 1) Codigo/Nit  2) Usuario.)
+            # 1) Login. IDs reales del form de bittal: #c (codigo), #u (usuario),
+            #    #p (password). El boton INGRESAR es <input type=button onclick=sendLogin()>;
+            #    sendLogin() guarda la empresa y hace login-form.submit() a /User/Prevalidate.
             _l("🔐 Login...")
             pag.goto(LOGIN_URL, wait_until="domcontentloaded")
-            pag.wait_for_selector("input[type='password']", timeout=TIMEOUT_MS)
+            pag.wait_for_selector("#p", timeout=TIMEOUT_MS)
 
-            textos = pag.locator(
-                "input[type='text']:visible, input:not([type]):visible, "
-                "input[type='email']:visible, input[type='tel']:visible"
+            # Llenar por ID via JS (robusto aunque el campo codigo se vuelva
+            # dropdown/hidden cuando el navegador tiene empresas guardadas).
+            pag.evaluate(
+                """([c, u, p]) => {
+                    const set = (id, v) => {
+                        const e = document.getElementById(id);
+                        if (e) {
+                            e.value = v;
+                            e.dispatchEvent(new Event('input', {bubbles: true}));
+                            e.dispatchEvent(new Event('change', {bubbles: true}));
+                        }
+                    };
+                    set('c', c); set('u', u); set('p', p);
+                }""",
+                [creds.codigo_empresa, creds.usuario, creds.password],
             )
-            ntex = textos.count()
-            if ntex >= 2:
-                textos.nth(0).fill(creds.codigo_empresa)
-                textos.nth(1).fill(creds.usuario)
-            elif ntex == 1:
-                textos.nth(0).fill(creds.usuario)
-            else:
-                raise RuntimeError(
-                    "No se encontraron los campos de texto del login de bittal "
-                    "(la pagina pudo cambiar)."
-                )
-            pag.locator("input[type='password']:visible").first.fill(creds.password)
 
-            # Enviar el formulario: probar varios selectores del boton "INGRESAR"
-            # (puede ser button, input submit, a o div con onclick), luego Enter,
-            # y como ultimo recurso form.submit() por JS.
             def _en_login() -> bool:
-                return "User/Login" in pag.url
+                return "User/Login" in pag.url or "Prevalidate" in pag.url
 
-            candidatos = [
-                "input[type='submit']:visible",
-                "button[type='submit']:visible",
-                "button:has-text('INGRESAR')",
-                "a:has-text('INGRESAR')",
-                "input[value='INGRESAR']",
-                "[onclick]:has-text('INGRESAR')",
-                "text=INGRESAR",
-            ]
-            clic = False
-            for sel in candidatos:
+            # Enviar: usar sendLogin() del portal; si no existe, submit del form;
+            # como respaldo, clic en INGRESAR.
+            try:
+                pag.evaluate(
+                    "() => { if (typeof sendLogin === 'function') { sendLogin(); }"
+                    " else { const f = document.getElementById('login-form')"
+                    " || document.querySelector('form'); if (f) f.submit(); } }"
+                )
+                _l("  (envio via sendLogin/submit)")
+            except Exception:
                 try:
-                    loc = pag.locator(sel)
-                    if loc.count():
-                        loc.first.click(timeout=5000)
-                        clic = True
-                        _l(f"  (clic en login via: {sel})")
-                        break
-                except Exception:
-                    continue
-            if not clic:
-                try:
-                    pag.locator("input[type='password']:visible").first.press("Enter")
+                    pag.locator(
+                        "input[value='INGRESAR'], .btnaction"
+                    ).first.click(timeout=5000)
+                    _l("  (clic en INGRESAR)")
                 except Exception:
                     pass
+
             try:
-                pag.wait_for_url(lambda u: "User/Login" not in u, timeout=30_000)
+                pag.wait_for_url(
+                    lambda u: "User/Login" not in u and "Prevalidate" not in u,
+                    timeout=40_000,
+                )
             except PWTimeout:
                 pass
-
-            # Si sigue en login, intentar enviar el form por JS (ultimo recurso)
-            if _en_login():
-                _l("  (reintentando envio del login)")
-                try:
-                    pag.evaluate(
-                        "() => { const f = document.querySelector('form');"
-                        " if (f) f.submit(); }"
-                    )
-                    pag.wait_for_url(lambda u: "User/Login" not in u, timeout=20_000)
-                except Exception:
-                    pass
 
             _l(f"  URL tras login: {pag.url}")
 
