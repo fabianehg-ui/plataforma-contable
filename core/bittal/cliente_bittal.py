@@ -141,25 +141,68 @@ def descargar_reporte(
                 )
             pag.locator("input[type='password']:visible").first.fill(creds.password)
 
-            # Enviar: boton submit o, si no existe, Enter en la contrasena.
-            boton = pag.locator(
-                "button[type='submit'], input[type='submit'], "
-                "button:has-text('Ingresar'), button:has-text('Iniciar'), "
-                "button:has-text('Entrar'), a:has-text('Ingresar')"
-            )
-            if boton.count():
-                boton.first.click()
-            else:
-                pag.locator("input[type='password']:visible").first.press("Enter")
+            # Enviar el formulario: probar varios selectores del boton "INGRESAR"
+            # (puede ser button, input submit, a o div con onclick), luego Enter,
+            # y como ultimo recurso form.submit() por JS.
+            def _en_login() -> bool:
+                return "User/Login" in pag.url
 
+            candidatos = [
+                "input[type='submit']:visible",
+                "button[type='submit']:visible",
+                "button:has-text('INGRESAR')",
+                "a:has-text('INGRESAR')",
+                "input[value='INGRESAR']",
+                "[onclick]:has-text('INGRESAR')",
+                "text=INGRESAR",
+            ]
+            clic = False
+            for sel in candidatos:
+                try:
+                    loc = pag.locator(sel)
+                    if loc.count():
+                        loc.first.click(timeout=5000)
+                        clic = True
+                        _l(f"  (clic en login via: {sel})")
+                        break
+                except Exception:
+                    continue
+            if not clic:
+                try:
+                    pag.locator("input[type='password']:visible").first.press("Enter")
+                except Exception:
+                    pass
             try:
-                pag.wait_for_load_state("networkidle", timeout=30_000)
+                pag.wait_for_url(lambda u: "User/Login" not in u, timeout=30_000)
             except PWTimeout:
                 pass
 
+            # Si sigue en login, intentar enviar el form por JS (ultimo recurso)
+            if _en_login():
+                _l("  (reintentando envio del login)")
+                try:
+                    pag.evaluate(
+                        "() => { const f = document.querySelector('form');"
+                        " if (f) f.submit(); }"
+                    )
+                    pag.wait_for_url(lambda u: "User/Login" not in u, timeout=20_000)
+                except Exception:
+                    pass
+
             _l(f"  URL tras login: {pag.url}")
-            if "User/Login" in pag.url or pag.url.rstrip("/").endswith("accounts.bittal.co"):
-                _l("  ⚠️ Parece que sigue en login (el acceso pudo fallar).")
+
+            # Si AUN sigue en login, reportar con el texto visible de la pagina
+            if _en_login():
+                try:
+                    txt = pag.locator("body").inner_text()
+                    txt = " ".join(txt.split())[:400]
+                except Exception:
+                    txt = ""
+                raise RuntimeError(
+                    "El login de bittal no avanzo (sigue en la pagina de acceso). "
+                    "Revisa Codigo/Usuario/Contrasena. "
+                    f"Texto de la pagina: {txt!r}"
+                )
 
             # 2) Abrir el reporte
             _l(f"📄 Abriendo {report_url.rsplit('/', 1)[-1]} ...")
