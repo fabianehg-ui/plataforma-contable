@@ -213,24 +213,54 @@ def descargar_reporte(
             if marco is not pag.main_frame:
                 _l("  (reporte dentro de un iframe)")
 
-            # 3) Activar filtro por fecha y fijar el rango con la API de Telerik
+            # 3) Fijar el rango de fechas. Hay dos mecanismos según el reporte:
+            #    (a) RadDatePicker de Telerik + chkUseDate  -> Ventas / Compras DS
+            #    (b) control de rango con inputs ocultos hdnStartDate/hdnEndDate
+            #        en formato ISO (YYYY-MM-DD)            -> Caja menor / tesorería
+            #    Aplicamos el que exista en la página (sin romper el otro).
             chk = marco.locator(f"#{ID_CHK_USAR_FECHA}")
             if chk.count() and not chk.is_checked():
                 chk.check()
             _l(f"📆 {fecha_ini.isoformat()} a {fecha_fin.isoformat()}")
-            marco.evaluate(
-                """([idIni, idFin, ini, fin]) => {
-                    const set = (id, d) => {
+            aplicados = marco.evaluate(
+                """([idIni, idFin, ini, fin, iniISO, finISO]) => {
+                    const out = [];
+                    // (a) Telerik RadDatePicker
+                    const setPk = (id, d) => {
                         const pk = window.$find && window.$find(id);
-                        if (pk && pk.set_selectedDate)
+                        if (pk && pk.set_selectedDate) {
                             pk.set_selectedDate(new Date(d[0], d[1]-1, d[2]));
+                            return true;
+                        }
+                        return false;
                     };
-                    set(idIni, ini); set(idFin, fin);
+                    if (setPk(idIni, ini)) { setPk(idFin, fin); out.push('telerik'); }
+                    // (b) Rango con inputs ocultos (hdnStartDate / hdnEndDate)
+                    const setHid = (suf, val) => {
+                        const el = document.querySelector(
+                            'input[id$="' + suf + '"], input[name$="$' + suf + '"]');
+                        if (el) {
+                            el.value = val;
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            return true;
+                        }
+                        return false;
+                    };
+                    if (setHid('hdnStartDate', iniISO)) {
+                        setHid('hdnEndDate', finISO); out.push('rango-oculto');
+                    }
+                    return out;
                 }""",
                 [PICKER_FECHA_INI, PICKER_FECHA_FIN,
                  [fecha_ini.year, fecha_ini.month, fecha_ini.day],
-                 [fecha_fin.year, fecha_fin.month, fecha_fin.day]],
+                 [fecha_fin.year, fecha_fin.month, fecha_fin.day],
+                 fecha_ini.isoformat(), fecha_fin.isoformat()],
             )
+            if aplicados:
+                _l(f"  filtro de fecha aplicado vía: {', '.join(aplicados)}")
+            else:
+                _l("  ⚠️ No se encontró control de fecha conocido; "
+                   "se exportaría la vista por defecto.")
 
             # 4) Generar la grilla (arma todo el listado en el servidor)
             _l("⚙️ Generando listado...")
