@@ -17,6 +17,17 @@ BASE = "https://e4.portal.bittal.co/Systems/Company"
 PEND = "<<PENDIENTE>>"   # URL aún no capturada
 
 
+def _limpiar_plano(data: bytes) -> bytes:
+    """Quita el BOM inicial y la línea 'sep=\\t' (pista de Excel) que Contai no
+    necesita. Aplica a todos los informes."""
+    if data[:3] == b"\xef\xbb\xbf":
+        data = data[3:]
+    for pref in (b"sep=\t\r\n", b"sep=\t\n", b"sep=\t\r"):
+        if data.startswith(pref):
+            return data[len(pref):]
+    return data
+
+
 # ---------- procesadores por informe (envuelven los del repo) ----------
 
 def _procesar_ventas(archivos: dict, log: list):
@@ -56,6 +67,9 @@ def _procesar_caja_menor(archivos: dict, log: list):
     neto = int(v.sum())
     log.append(f"🧮 Caja menor: {len(df)} líneas. Neto (debe ser 0): ${neto:,}")
     log.append("   ✅ Cuadra (neto 0)" if neto == 0 else f"   ⚠️ Neto distinto de 0: {neto}")
+    # VALOR sin signo: Contai usa TIPO DE TRANSACCION (1=Db / 2=Cr) para el signo.
+    df = df.copy()
+    df["VALOR"] = v.abs().astype("int64")
     resumen = {"lineas": len(df), "neto": neto}
     return dataframe_a_plano_tsv(df), resumen
 
@@ -167,4 +181,5 @@ def generar_plano(
         )
         archivos[rol] = io.BytesIO(xlsx)
     plano_bytes, resumen = inf["procesar"](archivos, log)
+    plano_bytes = _limpiar_plano(plano_bytes)
     return plano_bytes, log, resumen
