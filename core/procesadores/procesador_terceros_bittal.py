@@ -19,7 +19,7 @@ import pandas as pd
 
 from core.procesadores.exportador_nits_siigo import (
     construir_fila_siigo, normalizar_nit, generar_excel_nits_siigo,
-    es_persona_natural,
+    descomponer_nombre_persona,
 )
 
 # Columnas del export de bittal (con sus tildes / typos reales).
@@ -45,6 +45,22 @@ COLUMNAS_NITS = [
     "E-MAIL", "CELULAR", "PLAZO", "ACTIVIDAD ECONOMICA",
     "INDICATIVO", "NATURALEZA",
 ]
+
+# Sufijos societarios inequívocos: fuerzan "jurídica" aunque el NIT parezca
+# cédula (cubre empresas con NIT mal digitado en el origen).
+_SUFIJOS_JURIDICA = ("SAS", "S.A.S", "S A S", "LTDA", "S.A.", "& CIA", "S EN C")
+
+
+def _es_natural(nit: str, nombre: str) -> bool:
+    """Decide natural vs jurídica priorizando los DÍGITOS del NIT (no el texto
+    del informe de bittal, que viene mal): jurídica = NIT de 9 dígitos que
+    empieza en 8 o 9; el resto (cédulas de 6-10 dígitos) es natural. Un sufijo
+    societario inequívoco en el nombre fuerza jurídica."""
+    rs = (nombre or "").upper().strip()
+    for s in _SUFIJOS_JURIDICA:
+        if rs.endswith(s) or rs.endswith(s + "."):
+            return False
+    return not (len(nit) == 9 and nit[:1] in ("8", "9"))
 
 
 def _col(df: pd.DataFrame, key: str) -> pd.Series:
@@ -93,11 +109,15 @@ def procesar_terceros_bittal(archivo):
 
         nombre = _nombre_tercero(s_rs[i], s_nom[i], s_otro[i], s_ape[i], s_ape2[i])
 
-        # Jurídica con DV pegado al final (10 díg): recortar el último dígito
-        # para dejar la base de 9. Las formas con guion (-3, -) ya las limpia
-        # normalizar_nit. La naturaleza se decide por dígitos del NIT.
-        es_juridica = not es_persona_natural(nombre, s_reg[i], nit)
-        if es_juridica and len(nit) == 10:
+        # DV pegado en jurídicas de 10 díg que empiezan en 8/9 -> base de 9.
+        if len(nit) == 10 and nit[:1] in ("8", "9"):
+            nit = nit[:-1]
+
+        natural = _es_natural(nit, nombre)
+
+        # Si quedó jurídica (p. ej. por sufijo societario) y aún tiene 10 díg,
+        # también se le recorta el DV para dejar la base de 9.
+        if not natural and len(nit) == 10:
             nit = nit[:-1]
 
         if nit in vistos:
@@ -105,14 +125,22 @@ def procesar_terceros_bittal(archivo):
             continue
         vistos.add(nit)
 
-        # construir_fila_siigo arma las 20 columnas y, si es natural, descompone
-        # el nombre en Primer/Segundo Nombre y Primer/Segundo Apellido.
         fila = construir_fila_siigo(
             nit=nit, nombre=nombre,
             direccion=s_dir[i], ciudad=s_ciu[i],
             telefono=s_tel[i], email=s_mail[i], celular=s_cel[i],
             regimen=s_reg[i],
         )
+        # La clasificación manda por DÍGITOS del NIT (no por lo que diga bittal).
+        fila["NATURALEZA"] = "N" if natural else "J"
+        fila["C"] = "C" if natural else "A"
+        if natural:
+            p1, p2, a1, a2 = descomponer_nombre_persona(nombre)
+            fila["PRIMER NOMBRE"], fila["SEGUNDO NOMBRE"] = p1, p2
+            fila["PRIMER APELLIDO"], fila["SEGUNDO APELLIDO"] = a1, a2
+        else:
+            fila["PRIMER NOMBRE"] = fila["SEGUNDO NOMBRE"] = ""
+            fila["PRIMER APELLIDO"] = fila["SEGUNDO APELLIDO"] = ""
         filas.append(fila)
 
     out = pd.DataFrame(filas, columns=COLUMNAS_NITS)
