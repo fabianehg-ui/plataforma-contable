@@ -100,7 +100,7 @@ def procesar_terceros_bittal(archivo):
     s_mail, s_reg = _col(df, "email"), _col(df, "regimen")
 
     filas, vistos = [], set()
-    sin_nit = duplicados = 0
+    sin_nit = duplicados = sin_nombre = 0
     for i in df.index:
         nit = normalizar_nit(s_id[i])
         if not nit:
@@ -108,6 +108,10 @@ def procesar_terceros_bittal(archivo):
             continue
 
         nombre = _nombre_tercero(s_rs[i], s_nom[i], s_otro[i], s_ape[i], s_ape2[i])
+        if not nombre.strip():
+            # Sin nombre en el origen (bittal) -> se omite.
+            sin_nombre += 1
+            continue
 
         # DV pegado en jurídicas de 10 díg que empiezan en 8/9 -> base de 9.
         if len(nit) == 10 and nit[:1] in ("8", "9"):
@@ -151,5 +155,6 @@ def procesar_terceros_bittal(archivo):
         "naturales": int((out["NATURALEZA"] == "N").sum()),
         "duplicados": duplicados,
         "sin_nit": sin_nit,
+        "sin_nombre": sin_nombre,
     }
     return xlsx, resumen
