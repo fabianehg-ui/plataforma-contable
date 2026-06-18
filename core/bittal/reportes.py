@@ -111,6 +111,18 @@ def _procesar_compras_ds(archivos: dict, log: list):
     return dataframe_a_plano_tsv(df), resumen
 
 
+def _procesar_terceros(archivos: dict, log: list):
+    from core.procesadores.procesador_terceros_bittal import procesar_terceros_bittal
+    xlsx, resumen = procesar_terceros_bittal(archivos["listado"])
+    log.append(
+        f"👥 Terceros: {resumen['terceros']} "
+        f"(jurídicas={resumen['juridicas']}, naturales={resumen['naturales']}); "
+        f"{resumen['duplicados']} duplicados y {resumen['sin_nit']} sin NIT descartados."
+    )
+    log.append("   Naturaleza/tipo decididos por dígitos del NIT (no por 'Tipo Persona').")
+    return xlsx, resumen
+
+
 INFORMES = {
     "ventas": {
         "nombre": "Ventas — detalle por cuentas (+ notas crédito opcional)",
@@ -149,6 +161,22 @@ INFORMES = {
         "procesar": _procesar_compras_ds,
         "estado": "VALIDADO (catálogo: SERV017 cae a default si no se agrega)",
     },
+    "terceros": {
+        "nombre": "Terceros (NITs) → formato Contai",
+        "descargas": {
+            "listado": {
+                "url": "https://e4.portal.bittal.co/Systems/ThirdParties/General/List.aspx",
+                "opcional": False, "arg_exportar": "1:0", "refrescar": False,
+            },
+        },
+        "procesar": _procesar_terceros,
+        "salida": {
+            "ext": "xlsx",
+            "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "nombre": "nits_contai",
+        },
+        "estado": "VALIDADO",
+    },
 }
 
 
@@ -174,12 +202,15 @@ def generar_plano(
             raise RuntimeError(
                 f"Falta la URL del rol obligatorio '{rol}' en el informe '{informe_key}'."
             )
-        xlsx = descargar_reporte(
-            creds, url, fecha_ini, fecha_fin,
-            headless=headless, log=log,
-            **({"arg_exportar": cfg["arg_exportar"]} if cfg.get("arg_exportar") else {}),
-        )
+        kw = {"headless": headless, "log": log}
+        if cfg.get("arg_exportar"):
+            kw["arg_exportar"] = cfg["arg_exportar"]
+        if "refrescar" in cfg:
+            kw["refrescar"] = cfg["refrescar"]
+        xlsx = descargar_reporte(creds, url, fecha_ini, fecha_fin, **kw)
         archivos[rol] = io.BytesIO(xlsx)
     plano_bytes, resumen = inf["procesar"](archivos, log)
-    plano_bytes = _limpiar_plano(plano_bytes)
+    # Los planos de texto llevan limpieza (BOM / sep=); las salidas binarias no.
+    if (inf.get("salida") or {}).get("ext") != "xlsx":
+        plano_bytes = _limpiar_plano(plano_bytes)
     return plano_bytes, log, resumen

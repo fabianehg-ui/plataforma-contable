@@ -90,6 +90,7 @@ def descargar_reporte(
     fecha_fin: date,
     *,
     arg_exportar: str = ARG_EXPORTAR_DEFAULT,
+    refrescar: bool = True,
     headless: bool = True,
     log: Optional[list] = None,
 ) -> bytes:
@@ -262,14 +263,18 @@ def descargar_reporte(
                 _l("  ⚠️ No se encontró control de fecha conocido; "
                    "se exportaría la vista por defecto.")
 
-            # 4) Generar la grilla (arma todo el listado en el servidor)
-            _l("⚙️ Generando listado...")
-            marco.evaluate("window.__doPostBack(" + repr(TARGET_REFRESCAR) + ", '')")
-            pag.wait_for_load_state("networkidle")
-            pag.wait_for_timeout(1500)
-
-            # Tras el postback el iframe puede recargarse: re-ubicar el marco.
-            marco = _frame_con_postback(pag) or marco
+            # 4) Generar la grilla (aplica el filtro en el servidor). Algunos
+            #    reportes (p. ej. Terceros) no tienen botón de refrescar y solo
+            #    exportan la vista cargada: en esos se omite este paso.
+            if refrescar:
+                _l("⚙️ Generando listado...")
+                marco.evaluate("window.__doPostBack(" + repr(TARGET_REFRESCAR) + ", '')")
+                pag.wait_for_load_state("networkidle")
+                pag.wait_for_timeout(1500)
+                # Tras el postback el iframe puede recargarse: re-ubicar el marco.
+                marco = _frame_con_postback(pag) or marco
+            else:
+                _l("  (sin refrescar: se exporta la vista cargada)")
 
             # 5) Exportar: postback al toolbar -> descarga del xlsx completo
             _l("⬇️ Exportando a Excel (listado completo)...")

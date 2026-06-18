@@ -51,11 +51,20 @@ if st.button("Generar plano", type="primary"):
             st.code("\n".join(log))
         if resumen:
             st.write("**Resumen**", resumen)
+
+        salida = INFORMES[informe_key].get("salida") or {}
+        ext = salida.get("ext", "txt")
+        mime = salida.get("mime", "text/plain")
+        base = salida.get("nombre", informe_key)
+        etiqueta = (
+            "Descargar terceros (NITs) para Contai"
+            if ext == "xlsx" else "Descargar plano para Contai"
+        )
         st.download_button(
-            "Descargar plano para Contai",
+            etiqueta,
             data=plano,
-            file_name=f"{informe_key}_{fecha_ini:%Y%m%d}_{fecha_fin:%Y%m%d}.txt",
-            mime="text/plain",
+            file_name=f"{base}_{fecha_ini:%Y%m%d}_{fecha_fin:%Y%m%d}.{ext}",
+            mime=mime,
         )
     except NotImplementedError as e:
         st.warning(str(e))
