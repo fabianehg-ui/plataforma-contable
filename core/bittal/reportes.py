@@ -117,7 +117,8 @@ def _procesar_terceros(archivos: dict, log: list):
     log.append(
         f"👥 Terceros: {resumen['terceros']} "
         f"(jurídicas={resumen['juridicas']}, naturales={resumen['naturales']}); "
-        f"{resumen['duplicados']} duplicados y {resumen['sin_nit']} sin NIT descartados."
+        f"{resumen['duplicados']} duplicados, {resumen['sin_nit']} sin NIT y "
+        f"{resumen['sin_nombre']} sin nombre descartados."
     )
     log.append("   Naturaleza/tipo decididos por dígitos del NIT (no por 'Tipo Persona').")
     return xlsx, resumen
@@ -170,10 +171,12 @@ INFORMES = {
             },
         },
         "procesar": _procesar_terceros,
+        "sin_fechas": True,
         "salida": {
-            "ext": "xlsx",
-            "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "ext": "txt",
+            "mime": "text/plain",
             "nombre": "nits_contai",
+            "etiqueta": "Descargar terceros (NITs) para Contai",
         },
         "estado": "VALIDADO",
     },

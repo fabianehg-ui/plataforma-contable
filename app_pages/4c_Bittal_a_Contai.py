@@ -24,8 +24,14 @@ informe_key = opciones[nombre]
 
 c1, c2 = st.columns(2)
 hoy = dt.date.today()
-fecha_ini = c1.date_input("Desde", value=hoy.replace(day=1))
-fecha_fin = c2.date_input("Hasta", value=hoy)
+requiere_fechas = not INFORMES[informe_key].get("sin_fechas", False)
+if requiere_fechas:
+    fecha_ini = c1.date_input("Desde", value=hoy.replace(day=1))
+    fecha_fin = c2.date_input("Hasta", value=hoy)
+else:
+    st.caption("Este informe descarga el listado completo; no usa rango de fechas.")
+    fecha_ini = hoy.replace(day=1)
+    fecha_fin = hoy
 
 with st.expander("Credenciales de bittal", expanded=True):
     st.caption(
@@ -56,10 +62,7 @@ if st.button("Generar plano", type="primary"):
         ext = salida.get("ext", "txt")
         mime = salida.get("mime", "text/plain")
         base = salida.get("nombre", informe_key)
-        etiqueta = (
-            "Descargar terceros (NITs) para Contai"
-            if ext == "xlsx" else "Descargar plano para Contai"
-        )
+        etiqueta = salida.get("etiqueta", "Descargar plano para Contai")
         st.download_button(
             etiqueta,
             data=plano,

@@ -15,11 +15,13 @@ Reglas:
 """
 from __future__ import annotations
 
+import csv
+import io
+
 import pandas as pd
 
 from core.procesadores.exportador_nits_siigo import (
-    construir_fila_siigo, normalizar_nit, generar_excel_nits_siigo,
-    descomponer_nombre_persona,
+    construir_fila_siigo, normalizar_nit, descomponer_nombre_persona,
 )
 
 # Columnas del export de bittal (con sus tildes / typos reales).
@@ -148,7 +150,12 @@ def procesar_terceros_bittal(archivo):
         filas.append(fila)
 
     out = pd.DataFrame(filas, columns=COLUMNAS_NITS)
-    xlsx = generar_excel_nits_siigo(out)
+    # Código DANE de municipio con cero a la izquierda (05001 = Medellín). Al
+    # entregar TXT no se pierde, a diferencia de re-guardar el xlsx en Excel.
+    out["MPIO"] = out["MPIO"].apply(
+        lambda x: str(x).zfill(5) if str(x).strip().isdigit() else x
+    )
+    txt = _df_a_txt_tab(out)
     resumen = {
         "terceros": len(out),
         "juridicas": int((out["NATURALEZA"] == "J").sum()),
@@ -157,4 +164,15 @@ def procesar_terceros_bittal(archivo):
         "sin_nit": sin_nit,
         "sin_nombre": sin_nombre,
     }
-    return xlsx, resumen
+    return txt, resumen
+
+
+def _df_a_txt_tab(df: pd.DataFrame) -> bytes:
+    """Genera TXT delimitado por tabulaciones (UTF-8, CRLF). Se entrega como
+    texto para que Contai no pierda los ceros a la izquierda de los códigos."""
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter="\t", lineterminator="\r\n")
+    w.writerow(list(df.columns))
+    for _, row in df.iterrows():
+        w.writerow(["" if pd.isna(v) else str(v) for v in row])
+    return buf.getvalue().encode("utf-8")
