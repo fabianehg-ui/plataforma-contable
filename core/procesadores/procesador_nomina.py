@@ -39,6 +39,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import calendar
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, date
@@ -1153,12 +1154,9 @@ def procesar_nomina(
 
     # Fechas de los asientos
     fecha_q1 = date(anio, mes, 15)
-    # Último día del mes (28, 29, 30 o 31)
-    if mes == 12:
-        fecha_q2 = date(anio, 12, 30)
-    else:
-        # 30 funciona siempre para el formato del Excel
-        fecha_q2 = date(anio, mes, 30)
+    # Último día real del mes (28, 29, 30 o 31 según el mes y si es bisiesto)
+    ultimo_dia = calendar.monthrange(anio, mes)[1]
+    fecha_q2 = date(anio, mes, ultimo_dia)
     fecha_provision = fecha_q2  # provisión al cierre del mes
 
     # Generar líneas
