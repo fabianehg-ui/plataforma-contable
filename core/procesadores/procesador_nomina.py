@@ -720,7 +720,8 @@ def _crear_linea_plano(
         "COMPROBANTE": comprobante,
         "FECHA": _formato_fecha_plano(fecha),
         "DOCUMENTO": documento,
-        "DOC REFERENCIA": doc_referencia,
+        # Por defecto la referencia es igual al documento (salvo que se indique otra)
+        "DOC REFERENCIA": doc_referencia or documento,
         "NIT": nit,
         "DETALLE": detalle,
         "TR": tr,
