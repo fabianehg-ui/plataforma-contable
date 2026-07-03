@@ -73,6 +73,7 @@ def _ventas_de_wb_eeff(wb) -> Dict[Tuple[str, int], Dict[str, float]]:
                    if x and x[0] and str(x[0]).strip().lower().startswith("devoluciones")), None)
 
         fcc = rows[rp]
+        fnom = rows[rp + 1] if rp + 1 < len(rows) else ()
         fmes = rows[rp + 2]
         fv = rows[rv]
         fd = rows[rd] if rd is not None else None
@@ -82,6 +83,22 @@ def _ventas_de_wb_eeff(wb) -> Dict[Tuple[str, int], Dict[str, float]]:
         b0 = next((c for c in range(1, ncol) if _mes_de(fmes[c]) is not None), None)
         if b0 is None:
             continue
+
+        # mapa offset->mes del layout de la hoja (para celdas de mes sin
+        # etiqueta, como bloques donde borraron el texto del mes): se toma el
+        # mes más frecuente en cada offset entre todos los bloques.
+        off_mes: Dict[int, Dict[int, int]] = {}
+        b = b0
+        while b < ncol:
+            for off in (0, 2, 4, 6, 8):
+                if b + off >= ncol:
+                    break
+                m = _mes_de(fmes[b + off])
+                if m is not None:
+                    off_mes.setdefault(off, {})
+                    off_mes[off][m] = off_mes[off].get(m, 0) + 1
+            b += _PASO
+        off2mes = {off: max(c, key=c.get) for off, c in off_mes.items()}
 
         b = b0
         while b < ncol:
@@ -94,10 +111,25 @@ def _ventas_de_wb_eeff(wb) -> Dict[Tuple[str, int], Dict[str, float]]:
                         cc = s[-4:]
                         break
             if cc:
+                # validar que el bloque sea un PUNTO real y no un agregado
+                # (la hoja "Total" trae bloques GRUPO 1..4 / TOTAL con códigos sueltos)
+                nom_blk = ""
+                for off in (0, 2, 4):
+                    if b + off < len(fnom) and fnom[b + off]:
+                        nom_blk = str(fnom[b + off]).strip().upper()
+                        break
+                if nom_blk.startswith("GRUPO") or nom_blk.startswith("TOTAL"):
+                    b += _PASO
+                    continue
                 for off in (0, 2, 4, 6, 8):
                     if b + off >= ncol:
                         break
                     mes = _mes_de(fmes[b + off])
+                    if mes is None:
+                        celda = fmes[b + off]
+                        if celda is None or not str(celda).strip():
+                            # celda sin etiqueta: usar el mes del layout
+                            mes = off2mes.get(off)
                     if mes is None:
                         continue
                     v = _num(fv[b + off]) if b + off < len(fv) else 0.0

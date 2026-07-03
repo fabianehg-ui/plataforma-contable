@@ -140,7 +140,7 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
                              empresa: Optional[str] = None,
                              nit: Optional[str] = None,
                              fusionar_prr_cc: bool = True,
-                             estimar_fin_ultimo: bool = True) -> bytes:
+                             estimar_fin_ultimo: bool = False) -> bytes:
     """Genera el libro de detalle por cuenta y lo devuelve como bytes.
 
     estimar_fin_ultimo: si el último mes trae en cero un ingreso/gasto no
@@ -156,6 +156,7 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
     # --- estimación de financieros del último mes (promedio de los anteriores) ---
     _EST_PREF = ("42", "43", "53", "55")
     est_por_cc = collections.defaultdict(set)   # cc -> {c6 estimados}
+    efecto_est = [0.0] * nmes                    # efecto de los estimados en la utilidad
     if estimar_fin_ultimo and nmes >= 2:
         u = nmes - 1
         for data in (data_p, data_s):
@@ -167,6 +168,8 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
                     prom = round(sum(previos) / u) if u else 0
                     if abs(prom) >= 1 and abs(vals[u]) < 0.5:
                         vals[u] = float(prom)
+                        # efecto en utilidad = −(mov inyectado) para clases 4 y 5
+                        efecto_est[u] += -float(prom)
                         est_por_cc[cc].add(c6)
     est_any = set().union(*est_por_cc.values()) if est_por_cc else set()
     empresa = empresa or (balances[0].empresa if balances else "")
@@ -796,12 +799,14 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
     res_lib = [res_emp["principal"][i] + res_emp["secundaria"][i] for i in range(nmes)]
     r = fila(r, "   Resultado libros combinado (4−5−6−7)", res_lib, bold=True)
     r = fila(r, "   (+) Diferencia de ingresos informe vs libros", dif, italic=True, color=NAR)
+    if any(abs(x) > 0.5 for x in efecto_est):
+        r = fila(r, "   (+) Financieros del último mes estimados", efecto_est, italic=True, color=NAR)
     r = fila(r, "   = UTILIDAD NETA según este informe", netaC, bold=True, fill=AZUL_C)
     r = fila(r, "   EBITDA según este informe", ebC, bold=True, fill=AZUL_C)
     r += 1
     r = fila(r, "3. VERIFICACIÓN (debe ser 0)", bold=True, color=AZUL)
-    chk = [res_lib[i] + dif[i] - netaC[i] for i in range(nmes)]
-    r = fila(r, "   Puente: libros + dif. ingresos − utilidad neta informe", chk)
+    chk = [res_lib[i] + dif[i] + efecto_est[i] - netaC[i] for i in range(nmes)]
+    r = fila(r, "   Puente: libros + dif. ingresos + estimados − utilidad neta", chk)
     r += 1
     for t in ["· La diferencia de utilidad frente a libros es atribuible únicamente a los INGRESOS",
               "  (el informe administrativo y la contabilidad pueden reconocer ventas en meses distintos).",
