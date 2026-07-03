@@ -351,11 +351,21 @@ st.caption(
     "del informe administrativo (sin cuenta 41), análisis vertical mes a mes, "
     "Índice con EBITDA y hoja de Conciliación Global contra libros."
 )
+estimar_fin = st.checkbox(
+    "Estimar financieros del último mes con el promedio de los anteriores",
+    value=True,
+    help="Si el último mes trae en cero un ingreso/gasto no operacional o "
+         "financiero (cuentas 42, 43, 53 y 55) que sí se movió en los meses "
+         "previos, lo completa con el promedio de esos meses (útil cuando aún "
+         "no se han causado los financieros del mes en curso). Las celdas "
+         "estimadas quedan marcadas en naranja.",
+)
 if st.button("⚙️ Generar detalle por cuenta"):
     with st.spinner("Generando detalle por cuenta..."):
         xls_det = exportar_detalle_cuentas(bals, balances_milagros=bals_milagros,
                                            ventas_eeff=ventas_eeff,
-                                           mil_label=mil_label)
+                                           mil_label=mil_label,
+                                           estimar_fin_ultimo=estimar_fin)
     nombre_det = f"PYG_Detalle_6dig_por_CC_{bals[-1].empresa.split()[0]}.xlsx".replace(" ", "_")
     st.download_button(
         "⬇️ Descargar detalle por cuenta",
