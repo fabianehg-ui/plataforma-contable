@@ -73,7 +73,72 @@ def _headers(token: str) -> dict:
     }
 
 
-def _norm_empresas(data) -> list:
+def login_headless(email: str, password: str, timeout_ms: int = 60000) -> dict:
+    """MODO C (experimental). Inicia sesion en Siigo con un navegador headless
+    (Playwright) y captura el token de la sesion — SIN guardar la contrasena:
+    se usa aqui una sola vez y se devuelve el refresh_token para renovar despues.
+
+    Requiere en el servidor:  pip install playwright  &&  playwright install chromium
+    (en Railway, agregar esos pasos + dependencias del navegador al Dockerfile).
+
+    LIMITES: si la cuenta tiene MFA/2FA o aparece un CAPTCHA, este metodo NO
+    funciona (no se evaden). Los selectores del formulario pueden cambiar; si
+    Siigo modifica su login, hay que ajustarlos. Va contra los terminos de Siigo.
+    Devuelve dict con access_token_header y refresh_token.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        raise SiigoWebError("Falta Playwright. Instala: pip install playwright && playwright install chromium.")
+
+    caught = {"auth": None, "refresh": None}
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context()
+        page = ctx.new_page()
+
+        def on_request(req):
+            try:
+                if "services.siigo.com" in req.url and not caught["auth"]:
+                    a = req.headers.get("authorization")
+                    if a:
+                        caught["auth"] = a
+            except Exception:
+                pass
+
+        def on_response(resp):
+            try:
+                if "oauth2/v2.0/token" in resp.url:
+                    j = resp.json()
+                    if j.get("refresh_token"):
+                        caught["refresh"] = j["refresh_token"]
+            except Exception:
+                pass
+
+        page.on("request", on_request)
+        page.on("response", on_response)
+
+        page.goto("https://siigonube.siigo.com/", wait_until="load", timeout=timeout_ms)
+        # Formulario de correo/contrasena (selectores tolerantes; ajustar si cambian).
+        try:
+            page.fill("input[type='email'], input[name='Email'], input[placeholder*='Correo']", email, timeout=timeout_ms)
+            page.fill("input[type='password'], input[name='Password'], input[placeholder*='Contrase']", password, timeout=timeout_ms)
+            page.click("button:has-text('Continuar'), button[type='submit'], #continue")
+        except Exception as e:
+            browser.close()
+            raise SiigoWebError(f"No se pudo completar el login (¿cambió el formulario, o hay MFA/CAPTCHA?): {e}")
+
+        # Espera a que la app cargue y dispare llamadas con token.
+        for _ in range(40):
+            if caught["auth"] and caught["refresh"]:
+                break
+            page.wait_for_timeout(500)
+        browser.close()
+
+    if not caught["auth"] and not caught["refresh"]:
+        raise SiigoWebError("No se capturó token. Posible MFA/CAPTCHA, credenciales erróneas o cambio del login.")
+    return {"access_token_header": caught["auth"], "refresh_token": caught["refresh"]}
+
     arr = data if isinstance(data, list) else (data.get("results") or data.get("companies") or data.get("data") or [])
     out = []
     for c in arr or []:

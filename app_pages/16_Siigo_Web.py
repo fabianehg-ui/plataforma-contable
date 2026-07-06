@@ -30,17 +30,38 @@ with st.expander("Como conectar (elige un modo)", expanded=not (ss.get("siigo_we
         "usuario ni contrasena. (Guardalo luego en Supabase, cifrado.)"
     )
 
-modo = st.radio("Modo de conexion", ["Token de sesion (A)", "Refresh token (B)"], horizontal=True)
+modo = st.radio("Modo de conexion", ["Usuario y contrasena (C)", "Refresh token (B)", "Token de sesion (A)"], horizontal=True)
 
-if modo.startswith("Token"):
+if modo.startswith("Usuario"):
+    st.warning("Experimental: el servidor inicia sesion por ti (navegador headless). "
+               "No funciona con MFA/CAPTCHA y va contra los terminos de Siigo. "
+               "La contrasena NO se guarda: se usa una vez para obtener el refresh token.")
+    c = st.columns(2)
+    email = c[0].text_input("Correo electronico", key="c_email")
+    pwd = c[1].text_input("Contrasena", type="password", key="c_pwd")
+    if st.button("Ingresar a Siigo"):
+        try:
+            with st.spinner("Iniciando sesion en Siigo..."):
+                res = web.login_headless(email, pwd)
+            if res.get("refresh_token"):
+                ss["siigo_web_refresh"] = res["refresh_token"]
+                st.success("Sesion iniciada. Se guardo el refresh token (la contrasena NO).")
+            elif res.get("access_token_header"):
+                ss["siigo_web_token"] = res["access_token_header"]
+                st.success("Sesion iniciada (token de ~1h; sin refresh token).")
+            else:
+                st.error("No se capturo token.")
+        except Exception as e:  # noqa: BLE001
+            st.error(str(e))
+elif modo.startswith("Refresh"):
+    rt = st.text_area("Refresh token", value=ss.get("siigo_web_refresh", ""), height=70, placeholder="eyJ...")
+    if rt:
+        ss["siigo_web_refresh"] = rt.strip()
+else:
     tok = st.text_area("Token de sesion (authorization)", value=ss.get("siigo_web_token", ""), height=70, placeholder="Bearer eyJ...")
     if tok:
         ss["siigo_web_token"] = tok.strip()
         ss.pop("siigo_web_refresh", None)
-else:
-    rt = st.text_area("Refresh token", value=ss.get("siigo_web_refresh", ""), height=70, placeholder="eyJ... (o el valor que traiga refresh_token)")
-    if rt:
-        ss["siigo_web_refresh"] = rt.strip()
 
 
 def token_activo() -> str:

@@ -27,3 +27,14 @@ asistente_siigo_web = st.Page(
 5) Commit/push y espera el redeploy de Railway.
 
 Nota: `requests` ya esta en tu requirements.txt.
+
+## Modo C (usuario y contraseña) — requisitos extra
+El login server-side usa Playwright (navegador headless). En Railway agrega al
+Dockerfile la instalación del navegador y sus dependencias:
+
+```dockerfile
+RUN pip install playwright && playwright install --with-deps chromium
+```
+
+Ten en cuenta: no funciona con MFA/CAPTCHA, es pesado, y va contra los términos
+de Siigo. La contraseña NO se guarda (se usa una vez para obtener el refresh token).
