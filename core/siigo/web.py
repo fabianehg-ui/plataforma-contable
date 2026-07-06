@@ -22,9 +22,42 @@ import requests
 BASE = "https://services.siigo.com"
 TIMEOUT = 90
 
+# Datos del login OAuth2 (Azure AD B2C) tomados del flujo real de Siigo Nube.
+TOKEN_URL = "https://account.siigo.com/siigob2cco.onmicrosoft.com/b2c_1a_col_pd_ssosiigo/oauth2/v2.0/token"
+CLIENT_ID = "c0f95d00-a5b7-4cfc-a84c-7fc1be2a6720"
+SCOPE = "openid profile https://siigob2cco.onmicrosoft.com/shell-pd-col/basic offline_access"
+
 
 class SiigoWebError(Exception):
     pass
+
+
+def refresh_access_token(refresh_token: str) -> dict:
+    """Con el REFRESH token (obtenido una vez de tu sesion), pide un access token
+    nuevo, sin usuario ni contrasena. B2C suele ROTAR el refresh token, asi que
+    guarda el 'refresh_token' devuelto para la proxima. Devuelve dict con
+    access_token, refresh_token y expires_in."""
+    rt = (refresh_token or "").strip()
+    if not rt:
+        raise SiigoWebError("Falta el refresh token.")
+    data = {
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "refresh_token": rt,
+        "scope": SCOPE,
+    }
+    r = requests.post(TOKEN_URL, data=data,
+                      headers={"Content-Type": "application/x-www-form-urlencoded"}, timeout=60)
+    if not r.ok:
+        raise SiigoWebError(f"No se pudo renovar el token ({r.status_code}): {r.text[:300]}")
+    j = r.json()
+    if not j.get("access_token"):
+        raise SiigoWebError("La renovacion no devolvio access_token.")
+    return {
+        "access_token": j.get("access_token"),
+        "refresh_token": j.get("refresh_token", rt),
+        "expires_in": j.get("expires_in"),
+    }
 
 
 def _headers(token: str) -> dict:

@@ -19,24 +19,43 @@ st.title("Siigo Web (sin API)")
 st.caption("Para empresas sin API habilitada. Pega el token de tu sesion de Siigo; el repo hace el resto.")
 ss = st.session_state
 
-with st.expander("Como obtener el token (1 minuto)", expanded=not ss.get("siigo_web_token")):
+with st.expander("Como conectar (elige un modo)", expanded=not (ss.get("siigo_web_token") or ss.get("siigo_web_refresh"))):
     st.markdown(
-        "1. Entra normal a **siigonube.siigo.com** en tu navegador (pasa MFA como siempre).\n"
-        "2. Abre **F12 -> Red (Network)**, filtra **Fetch/XHR** y recarga o abre cualquier pantalla.\n"
-        "3. Clic en una peticion a **services.siigo.com** -> pestana **Headers** -> "
-        "en *Request Headers* copia el valor de **authorization** (empieza por `Bearer eyJ...`).\n"
-        "4. Pegalo abajo. Dura ~1 hora; cuando falle, pega uno nuevo."
+        "**Modo A - Token de sesion (~1 hora):** en tu navegador logueado a "
+        "**siigonube.siigo.com**, F12 -> Red -> una peticion a *services.siigo.com* -> "
+        "Headers -> copia **authorization** (`Bearer eyJ...`) y pegalo abajo.\n\n"
+        "**Modo B - Refresh token (entrar una vez, se renueva solo):** F12 -> Red, filtra "
+        "**token**, abre la peticion `oauth2/v2.0/token` -> pestana **Response** -> copia el "
+        "valor de **refresh_token** y pegalo abajo. El repo renueva el acceso solo, sin "
+        "usuario ni contrasena. (Guardalo luego en Supabase, cifrado.)"
     )
 
-token = st.text_area("Token de sesion (authorization)", value=ss.get("siigo_web_token", ""), height=80, placeholder="Bearer eyJ...")
-if token:
-    ss["siigo_web_token"] = token.strip()
+modo = st.radio("Modo de conexion", ["Token de sesion (A)", "Refresh token (B)"], horizontal=True)
+
+if modo.startswith("Token"):
+    tok = st.text_area("Token de sesion (authorization)", value=ss.get("siigo_web_token", ""), height=70, placeholder="Bearer eyJ...")
+    if tok:
+        ss["siigo_web_token"] = tok.strip()
+        ss.pop("siigo_web_refresh", None)
+else:
+    rt = st.text_area("Refresh token", value=ss.get("siigo_web_refresh", ""), height=70, placeholder="eyJ... (o el valor que traiga refresh_token)")
+    if rt:
+        ss["siigo_web_refresh"] = rt.strip()
+
+
+def token_activo() -> str:
+    """Devuelve un access token vigente. En modo B lo renueva con el refresh token."""
+    if ss.get("siigo_web_refresh"):
+        res = web.refresh_access_token(ss["siigo_web_refresh"])
+        ss["siigo_web_refresh"] = res["refresh_token"]  # B2C rota el refresh token
+        ss["siigo_web_token"] = "Bearer " + res["access_token"]
+    return ss.get("siigo_web_token", "")
 
 col = st.columns(2)
 if col[0].button("Listar empresas", type="primary"):
     try:
         with st.spinner("Consultando catalogo..."):
-            ss["siigo_web_empresas"] = web.get_empresas(ss.get("siigo_web_token", ""))
+            ss["siigo_web_empresas"] = web.get_empresas(token_activo())
         st.success(f"{len(ss['siigo_web_empresas'])} empresa(s).")
     except Exception as e:  # noqa: BLE001
         st.error(str(e))
@@ -47,7 +66,7 @@ if empresas:
     sel = st.selectbox("Empresa", list(op.keys()))
     tenant = op[sel]
     if col[1].button("Elegir empresa"):
-        ok, code = web.elegir_empresa(ss.get("siigo_web_token", ""), tenant)
+        ok, code = web.elegir_empresa(token_activo(), tenant)
         st.info("Empresa seleccionada." if ok else f"No se pudo (status {code}).")
 
 st.markdown("---")
@@ -55,7 +74,7 @@ st.subheader("Facturas de venta")
 if st.button("Traer facturas"):
     try:
         with st.spinner("Descargando facturas (paginando)..."):
-            filas, cruda = web.get_facturas(ss.get("siigo_web_token", ""))
+            filas, cruda = web.get_facturas(token_activo())
         ss["siigo_web_facturas"] = filas
         ss["siigo_web_cruda"] = cruda
         st.success(f"{len(filas)} facturas.")
