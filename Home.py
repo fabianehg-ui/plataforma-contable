@@ -214,6 +214,12 @@ asistente_xml_descargador = st.Page(
     icon="📥",
     url_path="contabilidad-xml-dian",
 )
+asistente_siigo = st.Page(
+    "app_pages/15_Siigo_a_Contai.py",
+    title="Siigo a Contai",
+    icon="🧾",
+    url_path="siigo-a-contai",
+)
 
 # ----- Sección: Herramientas Tributarias -----
 trib_radian = st.Page(
@@ -309,6 +315,7 @@ nav = st.navigation(
             asistente_ventas_c13,
             asistente_pos,
             asistente_bittal,
+            asistente_siigo,
             asistente_pila,
         ],
         "📊 Herramientas Tributarias": [
