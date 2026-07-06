@@ -139,16 +139,20 @@ def login_headless(email: str, password: str, timeout_ms: int = 60000) -> dict:
         raise SiigoWebError("No se capturó token. Posible MFA/CAPTCHA, credenciales erróneas o cambio del login.")
     return {"access_token_header": caught["auth"], "refresh_token": caught["refresh"]}
 
+
+def _norm_empresas(data) -> list:
     arr = data if isinstance(data, list) else (data.get("results") or data.get("companies") or data.get("data") or [])
     out = []
     for c in arr or []:
-        tid = c.get("tenantId") or c.get("TenantId") or c.get("tenant_id") or c.get("id") or c.get("Id")
+        tid = (c.get("cloudTenantID") or c.get("CloudTenantID") or c.get("tenantId") or c.get("TenantId")
+               or c.get("tenant_id") or c.get("companyKey") or c.get("id") or c.get("Id") or c.get("serial"))
         if not tid:
             continue
         out.append({
             "tenantId": tid,
-            "nombre": c.get("name") or c.get("Name") or c.get("companyName") or c.get("razonSocial") or "(sin nombre)",
-            "nit": c.get("identification") or c.get("Identification") or c.get("nit") or c.get("Nit") or "",
+            "nombre": (c.get("nameCompany") or c.get("name") or c.get("Name") or c.get("companyName")
+                       or c.get("razonSocial") or "(sin nombre)"),
+            "nit": c.get("nit") or c.get("Nit") or c.get("identification") or c.get("Identification") or "",
         })
     return out
 

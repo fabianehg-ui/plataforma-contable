@@ -108,4 +108,59 @@ if st.button("Traer facturas"):
 if ss.get("siigo_web_facturas"):
     data = json.dumps(ss["siigo_web_facturas"], ensure_ascii=False, indent=1).encode("utf-8")
     st.download_button("Descargar facturas (JSON)", data=data, file_name="siigo_web_facturas.json", mime="application/json")
-    st.caption("Pasame este JSON: con las columnas reales armo el mapeo al plano de Contai (ventas, recibos, NITs).")
+
+# ── Generar planos de Contai ─────────────────────────────────────────
+st.markdown("---")
+st.subheader("Generar planos de Contai")
+st.caption("Usa lo que trajiste arriba, o sube el JSON de movimientos capturado (de la extension o de aqui).")
+
+up = st.file_uploader("JSON de movimientos (opcional)", type=["json"])
+rows = None
+if up is not None:
+    try:
+        j = json.load(up)
+        rows = j.get("rows", j if isinstance(j, list) else [])
+    except Exception as e:  # noqa: BLE001
+        st.error(f"JSON invalido: {e}")
+elif ss.get("siigo_web_facturas"):
+    rows = ss["siigo_web_facturas"]
+
+if rows:
+    from core.siigo import web_planos as WP
+    facts = WP.facturas(rows)
+    prefs = WP.prefijos_de(rows)
+    st.write(f"**{len(facts)}** facturas utilizables · prefijos: {[p['prefix'] for p in prefs]}")
+    st.info("Este listado trae total por documento (sin desglose de IVA): Recibos y NITs salen exactos; "
+            "Ventas 'simple' es correcta solo si la empresa NO maneja IVA.")
+
+    mapeo = {}
+    for p in prefs:
+        c = st.columns([1, 2, 2])
+        c[0].markdown(f"**{p['prefix']}**  \n<small>{p['count']} fact.</small>", unsafe_allow_html=True)
+        comp = c[1].text_input("comprobante", key=f"wc_{p['prefix']}", label_visibility="collapsed", placeholder="comprobante")
+        cen = c[2].text_input("centro", key=f"wcen_{p['prefix']}", label_visibility="collapsed", placeholder="centro")
+        mapeo[p["prefix"]] = {"comprobante": comp, "centro": cen}
+
+    cc = st.columns(3)
+    cta_efe = cc[0].text_input("Efectivo (recibos)", value="11050503")
+    cta_car = cc[1].text_input("Cartera / clientes", value="13050502")
+    cta_ven = cc[2].text_input("Ventas (para ventas simple)", value="")
+    cons = st.number_input("Consecutivo inicial de recibos", min_value=1, value=500, step=1)
+
+    quiero = st.multiselect("Que generar", ["Recibos de caja", "NITs", "Ventas (simple)"], default=["Recibos de caja", "NITs"])
+    if st.button("Generar planos", type="primary"):
+        outs = []
+        if "Recibos de caja" in quiero:
+            res = WP.build_recibos(rows, cons, mapeo, cta_efe, cta_car)
+            outs.append(("recibos_caja.txt", res["content"], f"{res['rango']['count']} recibos ({res['rango']['desde']}-{res['rango']['hasta']})"))
+        if "NITs" in quiero:
+            outs.append(("nits.txt", WP.build_terceros(rows), "terceros deduplicados"))
+        if "Ventas (simple)" in quiero:
+            outs.append(("ventas.txt", WP.build_ventas_simple(rows, mapeo, cta_car, cta_ven or "41359503"), "ventas por total (sin IVA)"))
+        ss["web_outs"] = [(fn, c.encode("utf-8"), nota) for fn, c, nota in outs]
+        st.success("Listo. " + " · ".join(n for _, _, n in outs))
+
+if ss.get("web_outs"):
+    for fn, data, nota in ss["web_outs"]:
+        st.download_button(f"Descargar {fn} ({nota})", data=data, file_name=fn, mime="text/plain", key=f"wdl_{fn}")
+    st.caption("Importa los .txt en Contai: Procesos -> Intercambio de Datos -> Importar.")
