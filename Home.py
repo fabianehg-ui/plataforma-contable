@@ -220,6 +220,12 @@ asistente_siigo = st.Page(
     icon="🧾",
     url_path="siigo-a-contai",
 )
+asistente_siigo_web = st.Page(
+    "app_pages/16_Siigo_Web.py",
+    title="Siigo Web (sin API)",
+    icon="🌐",
+    url_path="siigo-web",
+)
 
 # ----- Sección: Herramientas Tributarias -----
 trib_radian = st.Page(
@@ -316,6 +322,7 @@ nav = st.navigation(
             asistente_pos,
             asistente_bittal,
             asistente_siigo,
+            asistente_siigo_web,
             asistente_pila,
         ],
         "📊 Herramientas Tributarias": [
