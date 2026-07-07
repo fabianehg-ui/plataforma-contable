@@ -35,6 +35,49 @@ def _entero(v) -> str:
         return "0"
 
 
+# Campos con dos convenciones: sales_report (minuscula) y getreport (PascalCase).
+_CAMPOS = {
+    "docClass": ("docClass", "DocClass"),
+    "docName": ("docName", "DocName"),
+    "docDate": ("docDate", "DocDate"),
+    "total": ("total", "TotalValue", "Total"),
+    "nit": ("accountIdentification", "Identification", "nit"),
+    "nombre": ("accountFullName", "AccountName", "fullName"),
+    "anulada": ("isAnnulled", "IsAnnulled"),
+}
+
+
+def _g(row: dict, campo: str):
+    for k in _CAMPOS.get(campo, (campo,)):
+        if k in row:
+            return row[k]
+    return None
+
+
+def extraer_filas(j):
+    """Devuelve la lista de movimientos de cualquiera de las formas capturadas:
+    {rows:[...]}, {data:{Value:{Table:[...]}}}, o una lista directa."""
+    if isinstance(j, list):
+        return j
+    if isinstance(j, dict):
+        if isinstance(j.get("rows"), list):
+            return j["rows"]
+
+        def find_arr(o, depth=0):
+            if depth > 8:
+                return None
+            if isinstance(o, list):
+                return o if (o and isinstance(o[0], dict)) else None
+            if isinstance(o, dict):
+                for v in o.values():
+                    r = find_arr(v, depth + 1)
+                    if r is not None:
+                        return r
+            return None
+        return find_arr(j) or []
+    return []
+
+
 def _clean(v) -> str:
     s = "" if v is None else str(v)
     for ch in ("\t", "\r", "\n"):
@@ -66,16 +109,16 @@ def _resolver(prefijo: str, mapeo: Optional[dict]) -> dict:
 
 
 def facturas(rows: list) -> list:
-    return [r for r in rows or [] if r.get("docClass") == "FV" and not r.get("isAnnulled")]
+    return [r for r in rows or [] if _g(r, "docClass") == "FV" and not _g(r, "anulada")]
 
 
 def prefijos_de(rows: list) -> list:
-    c = Counter(_prefijo(r["docName"]) for r in facturas(rows))
+    c = Counter(_prefijo(_g(r, "docName")) for r in facturas(rows))
     return [{"prefix": k, "count": v} for k, v in sorted(c.items())]
 
 
 def _ordenar(rows: list) -> list:
-    return sorted(rows, key=lambda r: (str(r.get("docDate") or "")[:10], _num(r.get("docName"))))
+    return sorted(rows, key=lambda r: (str(_g(r, "docDate") or "")[:10], _num(_g(r, "docName"))))
 
 
 # ── Recibos de caja (cancelar todo, por el total) ────────────────────
@@ -89,15 +132,15 @@ def build_recibos(rows, consecutivo_inicial, mapeo=None,
     lines = [TAB.join(MOV_HEADER)]
     n = 0
     for r in _ordenar(facturas(rows)):
-        total = float(r.get("total") or 0)
+        total = float(_g(r, "total") or 0)
         if total <= 0:
             continue
-        fecha = _fecha(r.get("docDate"))
-        nit = r.get("accountIdentification") or ""
-        centro = _resolver(_prefijo(r["docName"]), mapeo)["centro"]
+        fecha = _fecha(_g(r, "docDate"))
+        nit = _g(r, "nit") or ""
+        centro = _resolver(_prefijo(_g(r, "docName")), mapeo)["centro"]
         doc = str(cons).rjust(DOC_ANCHO, "0")
-        fact = _num(r["docName"])
-        det = _clean(f"Recaudo factura {r.get('docName')}")
+        fact = _num(_g(r, "docName"))
+        det = _clean(f"Recaudo factura {_g(r, 'docName')}")
         lines.append(TAB.join([cuenta_efectivo, comprobante, fecha, doc, doc, nit, det, "1", _entero(total), "", centro]))
         lines.append(TAB.join([cuenta_cartera, comprobante, fecha, doc, fact, nit, det, "2", _entero(total), "", centro]))
         cons += 1
@@ -110,15 +153,15 @@ def build_recibos(rows, consecutivo_inicial, mapeo=None,
 def build_ventas_simple(rows, mapeo=None, cuenta_clientes="13050502", cuenta_ventas="41359503") -> str:
     lines = [TAB.join(MOV_HEADER)]
     for r in facturas(rows):
-        total = float(r.get("total") or 0)
+        total = float(_g(r, "total") or 0)
         if total <= 0:
             continue
-        fecha = _fecha(r.get("docDate"))
-        nit = r.get("accountIdentification") or ""
-        res = _resolver(_prefijo(r["docName"]), mapeo)
+        fecha = _fecha(_g(r, "docDate"))
+        nit = _g(r, "nit") or ""
+        res = _resolver(_prefijo(_g(r, "docName")), mapeo)
         comp, centro = res["comprobante"], res["centro"]
-        doc = _num(r["docName"])
-        det = _clean(f"Venta {r.get('docName')}")
+        doc = _num(_g(r, "docName"))
+        det = _clean(f"Venta {_g(r, 'docName')}")
         lines.append(TAB.join([cuenta_clientes, comp, fecha, doc, doc, nit, det, "1", _entero(total), "", centro]))
         lines.append(TAB.join([cuenta_ventas, comp, fecha, doc, doc, nit, det, "2", _entero(total), "", centro]))
     return CRLF.join(lines) + CRLF
@@ -128,13 +171,12 @@ def build_ventas_simple(rows, mapeo=None, cuenta_clientes="13050502", cuenta_ven
 def build_terceros(rows) -> str:
     vistos = OrderedDict()
     for r in rows or []:
-        nit = str(r.get("accountIdentification") or "").strip()
+        nit = str(_g(r, "nit") or "").strip()
         if not nit or nit in vistos:
             continue
-        vistos[nit] = _clean(r.get("accountFullName"))
+        vistos[nit] = _clean(_g(r, "nombre"))
     lines = [TAB.join(NIT_HEADER)]
     for nit, nombre in vistos.items():
-        # Persona juridica si el NIT parece de empresa (>= 900000000) — heuristica simple.
         try:
             es_jur = int(nit) >= 800000000
         except ValueError:

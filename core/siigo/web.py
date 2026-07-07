@@ -119,14 +119,23 @@ def login_headless(email: str, password: str, timeout_ms: int = 60000) -> dict:
         page.on("response", on_response)
 
         page.goto("https://siigonube.siigo.com/", wait_until="load", timeout=timeout_ms)
-        # Formulario de correo/contrasena (selectores tolerantes; ajustar si cambian).
+        # Formulario de Azure AD B2C: #signInName (correo), #password, #next.
         try:
-            page.fill("input[type='email'], input[name='Email'], input[placeholder*='Correo']", email, timeout=timeout_ms)
-            page.fill("input[type='password'], input[name='Password'], input[placeholder*='Contrase']", password, timeout=timeout_ms)
-            page.click("button:has-text('Continuar'), button[type='submit'], #continue")
+            try:
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            page.wait_for_selector("#signInName", state="visible", timeout=timeout_ms)
+            page.fill("#signInName", email)
+            page.fill("#password", password)
+            page.click("#next")
         except Exception as e:
             browser.close()
-            raise SiigoWebError(f"No se pudo completar el login (¿cambió el formulario, o hay MFA/CAPTCHA?): {e}")
+            raise SiigoWebError(
+                "El login no se pudo automatizar: el formulario de Siigo no se muestra "
+                "al navegador del servidor (posible bloqueo anti-bot/MFA/CAPTCHA). "
+                f"Detalle: {str(e)[:160]}"
+            )
 
         # Espera a que la app cargue y dispare llamadas con token.
         for _ in range(40):

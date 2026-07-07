@@ -118,8 +118,8 @@ up = st.file_uploader("JSON de movimientos (opcional)", type=["json"])
 rows = None
 if up is not None:
     try:
-        j = json.load(up)
-        rows = j.get("rows", j if isinstance(j, list) else [])
+        from core.siigo import web_planos as WP
+        rows = WP.extraer_filas(json.load(up))
     except Exception as e:  # noqa: BLE001
         st.error(f"JSON invalido: {e}")
 elif ss.get("siigo_web_facturas"):
