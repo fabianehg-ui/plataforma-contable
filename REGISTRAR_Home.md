@@ -38,3 +38,10 @@ RUN pip install playwright && playwright install --with-deps chromium
 
 Ten en cuenta: no funciona con MFA/CAPTCHA, es pesado, y va contra los términos
 de Siigo. La contraseña NO se guarda (se usa una vez para obtener el refresh token).
+
+## Pagina "Siigo Excel -> Contai" (con IVA y retencion, sin API)
+Copia `core/siigo/excel_planos.py` y `app_pages/17_Siigo_Excel.py`. En Home.py:
+```python
+asistente_siigo_excel = st.Page("app_pages/17_Siigo_Excel.py", title="Siigo Excel a Contai", icon="📄", url_path="siigo-excel")
+```
+y agregalo a la navegacion. Requiere openpyxl (ya esta en requirements).
