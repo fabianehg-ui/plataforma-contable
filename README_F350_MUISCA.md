@@ -37,3 +37,22 @@ ruta, form_id = cli.diligenciar_y_descargar(
 1. **Mapeo renglón→casilla:** se asume `cs_id_N = renglón N` (confirmado para el 27). Corre una vez con pocos valores, baja el PDF y verifica que caen en el renglón correcto; si hay desfase, ajusta el mapeo.
 2. **Login/cookies:** si el `login()` no deja sesión, revisa headers/redirecciones (algunas veces el token va en un header o requiere un paso extra). El HAR muestra que la sesión es por cookies httpOnly.
 3. **clientId:** el valor `CLIENT_ID` puede rotar; si el login falla, tómalo de la petición weblogin del portal.
+
+---
+## Página web (Streamlit) para el login DIAN
+Archivos añadidos:
+- `app_pages/11_DIAN_F350_Muisca.py` — pestaña "Acceso DIAN" (credenciales cifradas) + "Generar borrador".
+- `core/f350/dian_acceso.py` — guardar/leer credenciales cifradas.
+- `db/migrations/013_f350_dian_credenciales.sql` — tabla de credenciales (RLS por contador).
+
+Pasos:
+1. Sube y corre la migración `013_*.sql` en Supabase.
+2. Genera y carga en el entorno la clave: `F350_FERNET_KEY` (Fernet).
+3. Registra la página en `Home.py`:
+   ```python
+   dian_f350 = st.Page("app_pages/11_DIAN_F350_Muisca.py", title="DIAN F350 (Muisca)", icon="🏛️", url_path="dian-f350")
+   ```
+4. Conecta `obtener_valores_renglones(sb, empresa_id, anio, periodo)` de tu módulo
+   (lo que ya clasifica/calcula por renglón). Si no está, la página permite cargar
+   los renglones manualmente para probar.
+5. `requirements.txt`: asegura `requests` y `cryptography`.
