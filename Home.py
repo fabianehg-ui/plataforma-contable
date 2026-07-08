@@ -90,7 +90,7 @@ def home_page():
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric("Módulos disponibles", "17")
+        st.metric("Módulos disponibles", "18")
     with col3:
         st.metric("Sesión", "Activa")
 
@@ -129,6 +129,7 @@ def home_page():
                 "- 📝 Declaración de Renta\n"
                 "- 💸 IVA y reteIVA\n"
                 "- 🧾 Retención en la Fuente\n"
+                "- 🏛️ DIAN F350 (Muisca)\n"
                 "- 🥤 Impuestos Saludables (INC, IBUA, ICUI)"
             )
 
@@ -258,6 +259,12 @@ trib_retencion = st.Page(
     icon="🧾",
     url_path="retencion",
 )
+trib_dian_f350 = st.Page(
+    "app_pages/10a_DIAN_F350_Muisca.py",
+    title="DIAN F350 (Muisca)",
+    icon="🏛️",
+    url_path="dian-f350",
+)
 trib_saludables = st.Page(
     "app_pages/11_Impuestos_Saludables.py",
     title="Impuestos Saludables",
@@ -333,6 +340,7 @@ nav = st.navigation(
             trib_renta,
             trib_iva,
             trib_retencion,
+            trib_dian_f350,
             trib_saludables,
         ],
         "📈 Reportes": [
