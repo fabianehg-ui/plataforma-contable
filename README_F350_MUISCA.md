@@ -70,3 +70,10 @@ Flujo de la pestaña "Generar borrador":
 4. `MuiscaF350Client` llena el borrador (cs_id_{casilla}) y descarga el PDF.
 
 Nota: el adaptador es tolerante a los nombres de campos del resultado (concepto/tipo_persona/retencion/casilla). Si tu `procesar_declaracion` usa otras claves, ajústalas en `muisca_adapter.py`.
+
+### Fix aplicado (obtener_casillas_f350)
+Tu `obtener_casillas_f350(concepto, tipo_tercero)` exige DOS argumentos. El adaptador ahora:
+- Normaliza el tipo a `PJ`/`PN` y siempre pasa los dos argumentos.
+- Llena casillas de **BASE** y de **RETENCIÓN** (29/42, 31/44, 33/46, 36/49, 81/97, 83/99, ...).
+- Incluye **autorretención 114-1** (59/68) y **totales** (130, 136, 138).
+Validado contra el PDF del módulo viejo (junio 2026, NUTRIENDO): 17 casillas idénticas.
