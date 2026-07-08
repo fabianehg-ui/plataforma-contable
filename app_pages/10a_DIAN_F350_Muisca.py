@@ -56,7 +56,7 @@ tab_cfg, tab_gen = st.tabs(["🔐 Acceso DIAN", "📄 Generar borrador"])
 # =============================================================================
 with tab_cfg:
     st.subheader("Credenciales de acceso a Muisca")
-    st.caption("Se guardan **cifradas**. La contraseña nunca se muestra ni se almacena en texto plano. "
+    st.caption("Ingresa el **NIT de la empresa** (arriba, empresa activa), y el **tipo y número de documento del REPRESENTANTE**. Se guardan **cifradas**. La contraseña nunca se muestra en texto plano. "
                "El borrador se genera para tu revisión; la firma y presentación las haces tú.")
 
     estado = acc.estado_credenciales(sb, empresa["id"])
@@ -68,8 +68,8 @@ with tab_cfg:
 
     with st.form("cfg_dian"):
         c1, c2 = st.columns(2)
-        tipo_doc = c1.selectbox("Tipo de documento (usuario DIAN)", ["CC", "CE", "TI", "PP", "NIT"], index=0)
-        num_doc = c2.text_input("Número de documento (cédula del usuario)")
+        tipo_doc = c1.selectbox("Tipo de documento del representante", ["CC", "CE", "TI", "PP", "NIT"], index=0)
+        num_doc = c2.text_input("Número de documento del REPRESENTANTE (sin puntos)")
         password = st.text_input("Contraseña DIAN", type="password",
                                  help="Se cifra antes de guardar. Solo se usa en el momento de iniciar sesión.")
         col_a, col_b = st.columns(2)

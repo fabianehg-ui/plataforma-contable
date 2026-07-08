@@ -77,3 +77,8 @@ Tu `obtener_casillas_f350(concepto, tipo_tercero)` exige DOS argumentos. El adap
 - Llena casillas de **BASE** y de **RETENCIÓN** (29/42, 31/44, 33/46, 36/49, 81/97, 83/99, ...).
 - Incluye **autorretención 114-1** (59/68) y **totales** (130, 136, 138).
 Validado contra el PDF del módulo viejo (junio 2026, NUTRIENDO): 17 casillas idénticas.
+
+### Fix login (HTTP 500)
+El weblogin requiere el campo **ideRequest** (JSON base64 con clientId, redirect_uri y params.tipoUsuario=muisca)
+y el **redirectUri** completo al callback. Sin ellos, la DIAN responde 500. Ya incluidos en `login()`.
+Datos: numDocumentoOrg = NIT empresa; tipoDoc/numDoc = del REPRESENTANTE; aNombreDe="0".

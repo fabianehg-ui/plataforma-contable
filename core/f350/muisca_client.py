@@ -28,7 +28,9 @@ MUISCA = "https://muisca.dian.gov.co"
 API = "https://api.dian.gov.co"
 F350_BASE = API + "/documentos/retefuente350v10/v1"
 CLIENT_ID = "Wo0aKAlB7vRP_16frPI1x9ZphBEa"          # clientId del portal (verificar si cambia)
-REDIRECT_URI = MUISCA + "/IdentidadRest_Login"
+# URL de callback completa que el portal envia en redirectUri (verificar si cambia)
+CALLBACK = ("http://muisca.dian.gov.co/IdentidadRest_LoginFiltro/api/sts/v1/auth/callback"
+            "?redirect_uri=http%3A%2F%2Fmuisca.dian.gov.co%2FWebArquitectura%2FDefLogin.faces")
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 _PLANTILLA = Path(__file__).with_name("plantilla_f350_v10.json")
@@ -46,7 +48,13 @@ class MuiscaF350Client:
 
     # ---------- 1) LOGIN ----------
     def login(self, tipo_doc: str, num_doc: str, nit_empresa: str, password: str, a_nombre_de: str = "0") -> bool:
-        """tipo_doc: 'CC'/'CE'/... ; num_doc: cédula; nit_empresa: NIT de la empresa."""
+        """tipo_doc/num_doc: del REPRESENTANTE; nit_empresa: NIT de la empresa (numDocumentoOrg)."""
+        ide = {
+            "clientId": CLIENT_ID, "redirect_uri": CALLBACK,
+            "responseType": "", "scope": "", "state": "", "nonce": "",
+            "params": {"tipoUsuario": "muisca"},
+        }
+        ide_request = base64.b64encode(json.dumps(ide).encode("utf-8")).decode("ascii")
         data = {
             "aNombreDe": a_nombre_de,
             "numDocumentoOrg": str(nit_empresa),
@@ -54,15 +62,16 @@ class MuiscaF350Client:
             "numDoc": str(num_doc),
             "password": base64.b64encode(password.encode("utf-8")).decode("ascii"),
             "clientId": CLIENT_ID,
-            "redirectUri": REDIRECT_URI,
+            "redirectUri": CALLBACK,
+            "ideRequest": ide_request,
         }
         r = self.s.post(MUISCA + "/IdentidadRest_Acceso/api/sts/v1/auth/weblogin",
                         data=data, timeout=self.timeout, allow_redirects=True)
         if r.status_code >= 400:
-            raise MuiscaError(f"Login falló (HTTP {r.status_code}). Revisa tipo/número de documento y clave.")
+            raise MuiscaError(f"Login falló (HTTP {r.status_code}). Revisa NIT de la empresa, "
+                              f"tipo/número de documento del representante y la clave.")
         # Establece cookies/token para la API (api.dian.gov.co)
         self.s.post(API + "/identidad/sts/v2/cookies/token", timeout=self.timeout)
-        # Verifica que la sesión sirve contra la API del 350
         chk = self.s.get(F350_BASE + "/anios", timeout=self.timeout)
         if chk.status_code >= 400:
             raise MuiscaError("No se estableció la sesión con la API del 350 (¿credenciales correctas?).")
