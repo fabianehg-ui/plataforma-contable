@@ -90,7 +90,7 @@ def leer_excel(path_or_file) -> list:
                 "nit": _clean(r[c["nit"]]), "tercero": _clean(r[c["terc"]]),
                 "fecha": _fecha(r[c["fecha"]]), "centro": _clean(r[c["centro"]]),
                 "base_by_iva": defaultdict(float), "iva_by": defaultdict(float),
-                "ret_by": defaultdict(float), "total_pagar": 0.0,
+                "ret_by": defaultdict(float), "retbase_by": defaultdict(float), "total_pagar": 0.0,
             }
         d = docs[key]
         reg = str(r[c["reg"]])
@@ -101,6 +101,7 @@ def leer_excel(path_or_file) -> list:
             d["iva_by"][il] += _num(r[c["ivaV"]])
             if rl:
                 d["ret_by"][rl] += _num(r[c["retV"]])
+                d["retbase_by"][rl] += base
         elif reg == "Formas de pago":
             d["total_pagar"] += _num(r[c["total"]])
 
@@ -156,28 +157,28 @@ def build_ventas(docs, mapeo, cuentas) -> dict:
         for il, base in d["base_by_iva"].items():
             bv = int(round(base)); cta = ventas.get(il)
             if not cta: faltan.add("ventas " + il)
-            cr_lines.append((cta or "VENTAS?", "Base " + il, bv)); cr_doc += bv
+            cr_lines.append((cta or "VENTAS?", "Base " + il, bv, "")); cr_doc += bv
         for il, val in d["iva_by"].items():
             iv = int(round(val))
             if iv <= 0:
                 continue
             cta = iva.get(il)
             if not cta: faltan.add("IVA " + il)
-            cr_lines.append((cta or "IVA?", il, iv)); cr_doc += iv
+            cr_lines.append((cta or "IVA?", il, iv, str(int(round(d["base_by_iva"].get(il, 0)))))); cr_doc += iv
         ret_lines = []
         ret_total = 0
         for rl, val in d["ret_by"].items():
             rv = int(round(val)); cta = reten.get(rl)
             if not cta: faltan.add("retención " + rl)
-            ret_lines.append((cta or "RETENCION?", rl, rv)); ret_total += rv
+            ret_lines.append((cta or "RETENCION?", rl, rv, str(int(round(d["retbase_by"].get(rl, 0)))))); ret_total += rv
         cartera = cr_doc - ret_total  # = total a pagar, cuadra exacto
         # Débitos
         L.append(TAB.join([cta_cartera, comp, fecha, ref, ref, nit, det, "1", str(cartera), "", centro]))
-        for cta, dl, val in ret_lines:
-            L.append(TAB.join([cta, comp, fecha, ref, ref, nit, _clean(dl), "1", str(val), "", centro]))
+        for cta, dl, val, base in ret_lines:
+            L.append(TAB.join([cta, comp, fecha, ref, ref, nit, _clean(dl), "1", str(val), base, centro]))
         # Créditos
-        for cta, dl, val in cr_lines:
-            L.append(TAB.join([cta, comp, fecha, ref, ref, nit, _clean(dl), "2", str(val), "", centro]))
+        for cta, dl, val, base in cr_lines:
+            L.append(TAB.join([cta, comp, fecha, ref, ref, nit, _clean(dl), "2", str(val), base, centro]))
         tot_db += cartera + ret_total
         tot_cr += cr_doc
         n += 1
