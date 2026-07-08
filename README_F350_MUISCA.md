@@ -56,3 +56,12 @@ Pasos:
    (lo que ya clasifica/calcula por renglón). Si no está, la página permite cargar
    los renglones manualmente para probar.
 5. `requirements.txt`: asegura `requests` y `cryptography`.
+
+---
+## Cálculo automático de casillas desde el auxiliar de Contai
+- `core/f350/auxiliar_contai.py` — parsea el PDF "Análisis de % de Retención e IVA".
+- `core/f350/mapeo_f350.py` — mapea cada cuenta 23-65-xx-xx a su casilla F350 (jurídica/natural).
+- La pestaña "Generar borrador" sube el auxiliar, muestra el detalle por tercero y las casillas, y genera el borrador.
+- `requirements.txt`: añade **pdfplumber**.
+- Casillas de retención renta (2026): Honorarios 42/95 · Servicios 44/97 · Arrendamientos 46/99 · Regalías 47/100 · Compras 49/102 · Otros 54/108.
+- Ajusta `MAPEO_CUENTAS` si tu plan de cuentas Contai usa otros códigos.

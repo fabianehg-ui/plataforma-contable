@@ -26,12 +26,8 @@ from db.supabase_client import get_supabase
 
 from core.f350 import dian_acceso as acc
 from core.f350.muisca_client import MuiscaF350Client, MuiscaError
-# Hook a tu módulo: debe devolver {numero_renglon: valor} para la empresa/periodo.
-# Ajusta el import al nombre real de tu servicio que ya calcula los renglones del F350.
-try:
-    from core.f350.servicios import obtener_valores_renglones  # type: ignore
-except Exception:  # noqa: BLE001
-    obtener_valores_renglones = None
+from core.f350.auxiliar_contai import parse_auxiliar
+from core.f350.mapeo_f350 import calcular_casillas
 
 
 st.set_page_config(page_title="DIAN — Borrador F350 (Muisca)", page_icon="🏛️", layout="wide")
@@ -108,30 +104,43 @@ with tab_gen:
     actividad = c3.text_input("Actividad económica (CIIU, renglón 27)",
                               value=str(empresa.get("ciiu_principal", "") or ""))
 
-    st.markdown("**Valores por renglón** que se van a diligenciar:")
-    valores = None
-    if obtener_valores_renglones is not None:
+    st.markdown("**Auxiliar de retención (Contai, PDF)** — de aquí se calculan las casillas del F350:")
+    aux_pdf = st.file_uploader("Sube el 'Análisis de % de Retención e IVA' de Contai (.pdf)", type=["pdf"])
+
+    forzar_nat = st.text_input("NITs que son persona NATURAL (sepáralos con coma, si la clasificación automática se equivoca)",
+                               help="Ej. si un tercero con NIT tipo empresa es en realidad persona natural.")
+    overrides = {n.strip(): "N" for n in forzar_nat.split(",") if n.strip()}
+
+    valores = {}
+    if aux_pdf is not None:
+        ruta_tmp = f"/tmp/aux_{empresa['nit']}_{anio}_{periodo}.pdf"
+        with open(ruta_tmp, "wb") as fh:
+            fh.write(aux_pdf.read())
         try:
-            valores = obtener_valores_renglones(sb, empresa["id"], int(anio), int(periodo))
+            cuentas = parse_auxiliar(ruta_tmp)
+            res = calcular_casillas(cuentas, overrides_tipo=overrides)
+            valores = res["casillas"]
+            st.markdown("**Detalle por tercero (revisa jurídica/natural):**")
+            st.dataframe(res["detalle"], use_container_width=True)
+            st.markdown("**Casillas que se enviarán al F350:**")
+            st.dataframe([{"Casilla": k, "Valor": v} for k, v in sorted(valores.items())], use_container_width=True)
+            st.caption(f"Total renta: {res['total']:,}".replace(",", "."))
         except Exception as e:  # noqa: BLE001
-            st.error(f"No pude traer los renglones calculados por el módulo: {e}")
-    if not valores:
-        st.info("Conecta aquí la función de tu módulo que devuelve {renglón: valor}. "
-                "Mientras tanto puedes cargarlos manualmente para probar (formato: renglón=valor por línea).")
-        texto = st.text_area("Renglones manuales (ej. `29=1200000`)", height=120)
-        valores = {}
+            st.error(f"No pude procesar el auxiliar: {e}")
+    else:
+        st.info("Sube el auxiliar para calcular las casillas. (También puedes cargarlas a mano abajo para pruebas.)")
+        texto = st.text_area("Casillas manuales (ej. `42=608723`)", height=100)
         for ln in texto.splitlines():
             if "=" in ln:
                 k, v = ln.split("=", 1)
                 try:
-                    valores[int(k.strip())] = float(v.strip().replace(".", "").replace(",", "."))
+                    valores[int(k.strip())] = int(float(v.strip().replace(".", "").replace(",", ".")))
                 except ValueError:
                     pass
 
-    if valores:
-        st.dataframe([{"Renglón": k, "Valor": v} for k, v in sorted(valores.items())], use_container_width=True)
-
-    st.warning("Esto genera un **BORRADOR** para revisar. La firma y presentación en Muisca las haces tú.")
+    st.warning("Esto genera un **BORRADOR** para revisar. La firma y presentación en Muisca las haces tú. "
+               "Verifica la clasificación jurídica/natural y los conceptos antes de enviar. "
+               "La **autorretención (114-1)** y las retenciones de **IVA/timbre** no salen de este auxiliar; agrégalas si aplican.")
 
     if st.button("Generar borrador en Muisca y descargar PDF", type="primary", disabled=not valores):
         cred = acc.obtener_credenciales(sb, empresa["id"])
