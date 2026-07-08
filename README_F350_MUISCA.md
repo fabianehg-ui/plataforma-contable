@@ -82,3 +82,11 @@ Validado contra el PDF del módulo viejo (junio 2026, NUTRIENDO): 17 casillas id
 El weblogin requiere el campo **ideRequest** (JSON base64 con clientId, redirect_uri y params.tipoUsuario=muisca)
 y el **redirectUri** completo al callback. Sin ellos, la DIAN responde 500. Ya incluidos en `login()`.
 Datos: numDocumentoOrg = NIT empresa; tipoDoc/numDoc = del REPRESENTANTE; aNombreDe="0".
+
+### Fix casillas (jurídica/natural y autorretención)
+Dos bugs del adaptador, corregidos:
+1. `obtener_casillas_f350(concepto, tipo_tercero)` compara con el texto **"Persona Natural"**.
+   El adaptador enviaba "PN"/"PJ" → todo caía en Persona Jurídica. Ahora envía el texto correcto.
+2. Las autorretenciones NO están en `MAPEO_CASILLAS_F350`: van en **`AUTORRET_CASILLAS_F350`**
+   (114-1 → 59/68). Antes caían al default "Otros pagos" (41/54).
+Validado contra el borrador oficial del portal (3510687536231): **17/17 casillas idénticas**.

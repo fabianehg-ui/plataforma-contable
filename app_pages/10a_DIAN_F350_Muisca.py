@@ -143,6 +143,10 @@ with tab_gen:
                 st.dataframe(resultado["movimientos"], use_container_width=True)
             st.markdown("**Casillas que se enviarán al F350:**")
             st.dataframe([{"Casilla": k, "Valor": v} for k, v in sorted(valores.items())], use_container_width=True)
+            import json as _json
+            st.markdown("**Para la extensión DIAN F350 — copia este JSON de casillas:**")
+            st.code(_json.dumps({str(k): int(v) for k, v in valores.items()}), language="json")
+            st.caption(f"NIT {empresa['nit']} · DV {empresa.get('dv','')} · {empresa['razon_social']} · CIIU {actividad} · {anio}-{periodo}")
         except Exception as e:  # noqa: BLE001
             st.error(f"No pude procesar los reportes con el módulo F350: {e}")
     else:
