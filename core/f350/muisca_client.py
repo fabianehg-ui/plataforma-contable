@@ -55,6 +55,15 @@ class MuiscaF350Client:
             "params": {"tipoUsuario": "muisca"},
         }
         ide_request = base64.b64encode(json.dumps(ide).encode("utf-8")).decode("ascii")
+        login_page = MUISCA + "/WebIdentidadLogin/?ideRequest=" + ide_request
+
+        # 1) Cargar la página de login (establece cookies de sesión, como el navegador)
+        try:
+            self.s.get(login_page, timeout=self.timeout,
+                       headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
+        except Exception:  # noqa: BLE001
+            pass
+
         data = {
             "aNombreDe": a_nombre_de,
             "numDocumentoOrg": str(nit_empresa),
@@ -65,16 +74,24 @@ class MuiscaF350Client:
             "redirectUri": CALLBACK,
             "ideRequest": ide_request,
         }
+        # 2) Headers que el servidor EXIGE (Origin + Referer con el ideRequest)
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": MUISCA,
+            "Referer": login_page,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Upgrade-Insecure-Requests": "1",
+        }
         r = self.s.post(MUISCA + "/IdentidadRest_Acceso/api/sts/v1/auth/weblogin",
-                        data=data, timeout=self.timeout, allow_redirects=True)
+                        data=data, headers=headers, timeout=self.timeout, allow_redirects=True)
         if r.status_code >= 400:
             raise MuiscaError(f"Login falló (HTTP {r.status_code}). Revisa NIT de la empresa, "
                               f"tipo/número de documento del representante y la clave.")
-        # Establece cookies/token para la API (api.dian.gov.co)
         self.s.post(API + "/identidad/sts/v2/cookies/token", timeout=self.timeout)
         chk = self.s.get(F350_BASE + "/anios", timeout=self.timeout)
         if chk.status_code >= 400:
-            raise MuiscaError("No se estableció la sesión con la API del 350 (¿credenciales correctas?).")
+            raise MuiscaError("Login OK pero no se estableció la sesión con la API del 350. "
+                              f"(anios -> HTTP {chk.status_code}).")
         return True
 
     # ---------- 2) BORRADOR (plantilla de casillas) ----------
