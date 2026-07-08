@@ -41,7 +41,7 @@ ruta, form_id = cli.diligenciar_y_descargar(
 ---
 ## Página web (Streamlit) para el login DIAN
 Archivos añadidos:
-- `app_pages/11_DIAN_F350_Muisca.py` — pestaña "Acceso DIAN" (credenciales cifradas) + "Generar borrador".
+- `app_pages/10a_DIAN_F350_Muisca.py` — pestaña "Acceso DIAN" (credenciales cifradas) + "Generar borrador".
 - `core/f350/dian_acceso.py` — guardar/leer credenciales cifradas.
 - `db/migrations/013_f350_dian_credenciales.sql` — tabla de credenciales (RLS por contador).
 
@@ -50,7 +50,7 @@ Pasos:
 2. Genera y carga en el entorno la clave: `F350_FERNET_KEY` (Fernet).
 3. Registra la página en `Home.py`:
    ```python
-   dian_f350 = st.Page("app_pages/11_DIAN_F350_Muisca.py", title="DIAN F350 (Muisca)", icon="🏛️", url_path="dian-f350")
+   dian_f350 = st.Page("app_pages/10a_DIAN_F350_Muisca.py", title="DIAN F350 (Muisca)", icon="🏛️", url_path="dian-f350")
    ```
 4. Conecta `obtener_valores_renglones(sb, empresa_id, anio, periodo)` de tu módulo
    (lo que ya clasifica/calcula por renglón). Si no está, la página permite cargar
