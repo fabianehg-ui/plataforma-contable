@@ -58,10 +58,15 @@ Pasos:
 5. `requirements.txt`: asegura `requests` y `cryptography`.
 
 ---
-## Cálculo automático de casillas desde el auxiliar de Contai
-- `core/f350/auxiliar_contai.py` — parsea el PDF "Análisis de % de Retención e IVA".
-- `core/f350/mapeo_f350.py` — mapea cada cuenta 23-65-xx-xx a su casilla F350 (jurídica/natural).
-- La pestaña "Generar borrador" sube el auxiliar, muestra el detalle por tercero y las casillas, y genera el borrador.
-- `requirements.txt`: añade **pdfplumber**.
-- Casillas de retención renta (2026): Honorarios 42/95 · Servicios 44/97 · Arrendamientos 46/99 · Regalías 47/100 · Compras 49/102 · Otros 54/108.
-- Ajusta `MAPEO_CUENTAS` si tu plan de cuentas Contai usa otros códigos.
+## Reutiliza tus procesadores existentes (no duplica lógica)
+La página usa TU módulo:
+- `core.f350.procesador.procesar_declaracion(auxiliar, balance, tarifa_pct, es_exonerado)` — parser_contai + clasificador + nit_utils.inferir_tipo_persona + casillas + autorretención.
+- `core.f350.muisca_adapter.casillas_desde_procesado(resultado)` — convierte el resultado en {casilla: valor} usando `obtener_casillas_f350` (fuente de verdad del repo).
+
+Flujo de la pestaña "Generar borrador":
+1. Subes **auxiliar** (retenciones) y **balance** (ingresos → autorretención 114-1).
+2. `procesar_declaracion` clasifica y calcula (jurídica/natural con inferir_tipo_persona).
+3. El adaptador arma {casilla: valor}; se muestran movimientos y casillas para revisar.
+4. `MuiscaF350Client` llena el borrador (cs_id_{casilla}) y descarga el PDF.
+
+Nota: el adaptador es tolerante a los nombres de campos del resultado (concepto/tipo_persona/retencion/casilla). Si tu `procesar_declaracion` usa otras claves, ajústalas en `muisca_adapter.py`.

@@ -26,8 +26,9 @@ from db.supabase_client import get_supabase
 
 from core.f350 import dian_acceso as acc
 from core.f350.muisca_client import MuiscaF350Client, MuiscaError
-from core.f350.auxiliar_contai import parse_auxiliar
-from core.f350.mapeo_f350 import calcular_casillas
+# Reutiliza los procesadores YA EXISTENTES del módulo (no duplica lógica):
+from core.f350.procesador import procesar_declaracion          # parser + clasificador + nit_utils + autorretención
+from core.f350.muisca_adapter import casillas_desde_procesado  # {concepto/tipo} -> {casilla: valor}
 
 
 st.set_page_config(page_title="DIAN — Borrador F350 (Muisca)", page_icon="🏛️", layout="wide")
@@ -104,43 +105,51 @@ with tab_gen:
     actividad = c3.text_input("Actividad económica (CIIU, renglón 27)",
                               value=str(empresa.get("ciiu_principal", "") or ""))
 
-    st.markdown("**Auxiliar de retención (Contai, PDF)** — de aquí se calculan las casillas del F350:")
-    aux_pdf = st.file_uploader("Sube el 'Análisis de % de Retención e IVA' de Contai (.pdf)", type=["pdf"])
+    st.markdown("**Reportes de Contai (PDF):**")
+    cc1, cc2 = st.columns(2)
+    aux_pdf = cc1.file_uploader("Auxiliar de retención (Análisis de % de Retención e IVA)", type=["pdf"], key="aux")
+    bal_pdf = cc2.file_uploader("Balance de prueba (ingresos, para autorretención)", type=["pdf"], key="bal")
 
-    forzar_nat = st.text_input("NITs que son persona NATURAL (sepáralos con coma, si la clasificación automática se equivoca)",
-                               help="Ej. si un tercero con NIT tipo empresa es en realidad persona natural.")
-    overrides = {n.strip(): "N" for n in forzar_nat.split(",") if n.strip()}
+    cd1, cd2 = st.columns(2)
+    tarifa = cd1.number_input("Tarifa autorretención 114-1 (%)", min_value=0.0, max_value=100.0,
+                              value=float(empresa.get("tarifa_autorretencion", 0.0) or 0.0), step=0.01,
+                              help="Tarifa del CIIU vigente. Si es 0 o no aplica, la autorretención queda en 0.")
+    es_exonerado = cd2.checkbox("Empresa exonerada del Art. 114-1", value=bool(empresa.get("exonerado_114", False)))
 
     valores = {}
     if aux_pdf is not None:
-        ruta_tmp = f"/tmp/aux_{empresa['nit']}_{anio}_{periodo}.pdf"
-        with open(ruta_tmp, "wb") as fh:
-            fh.write(aux_pdf.read())
         try:
-            cuentas = parse_auxiliar(ruta_tmp)
-            res = calcular_casillas(cuentas, overrides_tipo=overrides)
-            valores = res["casillas"]
-            st.markdown("**Detalle por tercero (revisa jurídica/natural):**")
-            st.dataframe(res["detalle"], use_container_width=True)
+            resultado = procesar_declaracion(
+                auxiliar_fuente=aux_pdf.getvalue(),
+                balance_fuente=(bal_pdf.getvalue() if bal_pdf is not None else None),
+                tarifa_pct=float(tarifa),
+                es_exonerado=es_exonerado,
+            )
+            adap = casillas_desde_procesado(resultado)
+            valores = adap["casillas"]
+            for a in adap.get("avisos", []):
+                st.warning(a)
+            for w in resultado.get("advertencias", []) or []:
+                st.info(w)
+
+            tot = resultado.get("totales", {})
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Retención renta", f"{tot.get('total_retenciones_renta', 0):,}".replace(",", "."))
+            m2.metric("Autorretención", f"{tot.get('valor_autorretencion', 0):,}".replace(",", "."))
+            m3.metric("Retención IVA", f"{tot.get('total_retenciones_iva', 0):,}".replace(",", "."))
+
+            if resultado.get("movimientos"):
+                st.markdown("**Movimientos clasificados (revisa jurídica/natural y concepto):**")
+                st.dataframe(resultado["movimientos"], use_container_width=True)
             st.markdown("**Casillas que se enviarán al F350:**")
             st.dataframe([{"Casilla": k, "Valor": v} for k, v in sorted(valores.items())], use_container_width=True)
-            st.caption(f"Total renta: {res['total']:,}".replace(",", "."))
         except Exception as e:  # noqa: BLE001
-            st.error(f"No pude procesar el auxiliar: {e}")
+            st.error(f"No pude procesar los reportes con el módulo F350: {e}")
     else:
-        st.info("Sube el auxiliar para calcular las casillas. (También puedes cargarlas a mano abajo para pruebas.)")
-        texto = st.text_area("Casillas manuales (ej. `42=608723`)", height=100)
-        for ln in texto.splitlines():
-            if "=" in ln:
-                k, v = ln.split("=", 1)
-                try:
-                    valores[int(k.strip())] = int(float(v.strip().replace(".", "").replace(",", ".")))
-                except ValueError:
-                    pass
+        st.info("Sube al menos el **auxiliar de retención**. El **balance** es necesario para calcular la autorretención 114-1.")
 
     st.warning("Esto genera un **BORRADOR** para revisar. La firma y presentación en Muisca las haces tú. "
-               "Verifica la clasificación jurídica/natural y los conceptos antes de enviar. "
-               "La **autorretención (114-1)** y las retenciones de **IVA/timbre** no salen de este auxiliar; agrégalas si aplican.")
+               "Verifica los movimientos (jurídica/natural y concepto) antes de enviar.")
 
     if st.button("Generar borrador en Muisca y descargar PDF", type="primary", disabled=not valores):
         cred = acc.obtener_credenciales(sb, empresa["id"])
