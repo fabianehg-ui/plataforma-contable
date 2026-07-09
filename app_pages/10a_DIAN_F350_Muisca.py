@@ -29,6 +29,7 @@ from core.f350.muisca_client import MuiscaF350Client, MuiscaError
 # Reutiliza los procesadores YA EXISTENTES del módulo (no duplica lógica):
 from core.f350.procesador import procesar_declaracion          # parser + clasificador + nit_utils + autorretención
 from core.f350.muisca_adapter import casillas_desde_procesado  # {concepto/tipo} -> {casilla: valor}
+from core.f350 import vista_formulario as vf                    # vista tipo formulario 350
 
 
 st.set_page_config(page_title="DIAN — Borrador F350 (Muisca)", page_icon="🏛️", layout="wide")
@@ -141,12 +142,33 @@ with tab_gen:
             if resultado.get("movimientos"):
                 st.markdown("**Movimientos clasificados (revisa jurídica/natural y concepto):**")
                 st.dataframe(resultado["movimientos"], use_container_width=True)
-            st.markdown("**Casillas que se enviarán al F350:**")
-            st.dataframe([{"Casilla": k, "Valor": v} for k, v in sorted(valores.items())], use_container_width=True)
-            import json as _json
-            st.markdown("**Para la extensión DIAN F350 — copia este JSON de casillas:**")
-            st.code(_json.dumps({str(k): int(v) for k, v in valores.items()}), language="json")
-            st.caption(f"NIT {empresa['nit']} · DV {empresa.get('dv','')} · {empresa['razon_social']} · CIIU {actividad} · {anio}-{periodo}")
+            # ---- Vista tipo FORMULARIO 350 (como se verá en la DIAN) ----
+            st.markdown("### 📄 Así quedará el Formulario 350")
+            solo_valor = st.checkbox("Mostrar solo renglones con valor", value=True)
+
+            chk = vf.verificacion(valores)
+            if chk["ok"]:
+                st.success("Verificación de totales: consistente ✓")
+            else:
+                for a in chk["avisos"]:
+                    st.error("⚠ " + a)
+
+            st.markdown("**Retenciones a título de renta**")
+            st.dataframe(vf.filas_retenciones(valores, solo_valor), use_container_width=True, hide_index=True)
+
+            st.markdown("**Autorretenciones**")
+            st.dataframe(vf.filas_autorretenciones(valores, solo_valor), use_container_width=True, hide_index=True)
+
+            st.markdown("**Totales**")
+            st.dataframe(vf.filas_totales(valores), use_container_width=True, hide_index=True)
+
+            with st.expander("Ver casillas planas / JSON para la extensión"):
+                st.dataframe([{"Casilla": k, "Valor": v} for k, v in sorted(valores.items())],
+                             use_container_width=True, hide_index=True)
+                import json as _json
+                st.code(_json.dumps({str(k): int(v) for k, v in valores.items()}), language="json")
+                st.caption(f"NIT {empresa['nit']} · DV {empresa.get('dv','')} · {empresa['razon_social']} "
+                           f"· CIIU {actividad} · {anio}-{periodo}")
         except Exception as e:  # noqa: BLE001
             st.error(f"No pude procesar los reportes con el módulo F350: {e}")
     else:

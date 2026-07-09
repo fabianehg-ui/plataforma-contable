@@ -90,3 +90,9 @@ Dos bugs del adaptador, corregidos:
 2. Las autorretenciones NO están en `MAPEO_CASILLAS_F350`: van en **`AUTORRET_CASILLAS_F350`**
    (114-1 → 59/68). Antes caían al default "Otros pagos" (41/54).
 Validado contra el borrador oficial del portal (3510687536231): **17/17 casillas idénticas**.
+
+### Vista tipo formulario (antes de subir)
+`core/f350/vista_formulario.py` muestra el F350 como en el portal: conceptos en orden oficial
+con base/retención por jurídica y natural, autorretenciones y totales, más una **verificación
+de consistencia** (130 = retenciones + autorretenciones − 129; 136 = 130+134+135; 138 = 136+137),
+con tolerancia por el redondeo a miles de la DIAN.
