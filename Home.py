@@ -108,6 +108,7 @@ def home_page():
                 "- 📥 Contabilidad con XML DIAN\n"
                 "- 💵 Caja Menor\n"
                 "- 💼 Nómina\n"
+                "- 🏖️ Vacaciones y Liquidaciones\n"
                 "- 📝 Provisiones\n"
                 "- 🛍️ Ventas C13\n"
                 "- 🧾 Ventas POS\n"
@@ -178,6 +179,12 @@ asistente_nomina = st.Page(
     title="Nómina",
     icon="💼",
     url_path="nomina",
+)
+asistente_vacaciones = st.Page(
+    "app_pages/3b_Vacaciones_Liquidaciones.py",
+    title="Vacaciones y Liquidaciones",
+    icon="🏖️",
+    url_path="vacaciones-liquidaciones",
 )
 asistente_prov = st.Page(
     "app_pages/4_Provisiones.py",
@@ -330,6 +337,7 @@ nav = st.navigation(
             asistente_xml_descargador,
             asistente_caja,
             asistente_nomina,
+            asistente_vacaciones,
             asistente_prov,
             asistente_ventas_c13,
             asistente_pos,
