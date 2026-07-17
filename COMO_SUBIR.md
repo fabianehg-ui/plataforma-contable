@@ -1,28 +1,28 @@
-# Cómo subir estos archivos (plataforma-contable)
+# Cómo subir (plataforma-contable) — todo dentro de Nómina
 
-Todo se maneja DENTRO del módulo de Nómina. NO se crea página nueva.
+Rutas EXACTAS (3 archivos):
+    app_pages/3_Nomina.py                     (REEMPLAZA)
+    core/procesadores/procesador_nomina.py    (REEMPLAZA)
+    core/lectores/lector_vacaciones.py        (REEMPLAZA)
 
-Rutas EXACTAS:
-    app_pages/3_Nomina.py                (REEMPLAZA)
-    core/lectores/lector_vacaciones.py   (NUEVO)
+## Cambios de esta versión
+1) CONSECUTIVO DE NÓMINA: ahora es 1 documento por EMPLEADO y por QUINCENA.
+   - Q1 usa documentos 1..N, Q2 continúa en N+1..2N (comp 11), sin repetir números.
+   - La provisión sigue en comp 9, documento = número del mes.
 
-## Qué hace
-- Tercer cargador OPCIONAL en "Procesar nómina": Vacaciones y liquidaciones
-  definitivas (varios PDF a la vez), para cuando aparezcan en el mes.
-- VACACIONES: extrae datos, aplica 4% pensión + 4% salud sobre el total y
-  genera el plano contable Comp 11 (cuadrado):
-      Db 25301501  Pago de vacaciones           (total)
-      Cr 25503002  Aporte pensión trabajador 4%
-      Cr 25500502  Deducción salud trabajador 4%
-      Cr 25050501  Neto a pagar
-- LIQUIDACIÓN DEFINITIVA: muestra conceptos; las vacaciones ahí NO llevan 4%+4%.
+2) UN SOLO PLANO DEL MES: al final de "Procesar nómina" hay una sección
+   "Plano del mes (nómina + vacaciones)" que une TODO en un solo .txt/.xlsx.
+   - Las vacaciones entran en el mismo comp 11, con documento que continúa el
+     consecutivo de la nómina (no quedan planos regados).
+   - El .txt sale SIN encabezado (solo registros), listo para Contai.
 
-## IMPORTANTE — corrección de Contai
-El plano .txt se descarga SIN encabezado (solo registros de datos). Antes se
-incluían las filas "sep=" y los títulos de columna (CUENTA, COMPROBANTE...),
-que Contai leía como un registro y generaba inconsistencias
-("la cuenta NO existe en el Plan de Cuentas"). Ahora el primer renglón del
-.txt ya es la primera cuenta real (25301501).
+3) BASE IBC OPCIONAL EN VACACIONES: por cada vacación puedes marcar
+   "La SS cotiza sobre un IBC distinto al valor liquidado" e ingresar el IBC.
+   - Sin marcar: 4%+4% sobre el total de la vacación (como el documento).
+   - Marcado: 4%+4% sobre el IBC que va a la PILA (ej. María Yorladis
+     IBC 1.050.543 -> pensión 42.022 + salud 42.021 = 84.043).
 
-Ejemplo validado (María Yorladis, mayo 2026):
-  TOTAL 1.870.741 -> pensión 74.830 + salud 74.829 = 149.659 -> neto 1.721.082.
+## Pendiente (para cerrar la conciliación PILA -> gasto)
+- Confirmar cuentas de gasto (5204xx / 5104xx) para el ajuste automático
+  provisión/deducción vs PILA.
+- Revisar la provisión de ARL (se veía ~3,5x sobre lo que cobra la PILA).

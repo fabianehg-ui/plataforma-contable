@@ -429,6 +429,18 @@ def exportar_excel(d: dict) -> bytes:
     return buf.getvalue()
 
 
+def calcular_deduccion(base_ss: int) -> dict:
+    """Calcula el 4% pensión + 4% salud sobre una base de seguridad social.
+
+    Devuelve pensión, salud y total, cuadrando pensión+salud == total.
+    """
+    base_ss = int(round(base_ss))
+    total = int(round(base_ss * PORC_TOTAL_SS))
+    pension = int(round(base_ss * PORC_PENSION))
+    salud = total - pension
+    return {"base": base_ss, "pension": pension, "salud": salud, "total": total}
+
+
 def generar_plano_vacaciones(
     d: dict,
     comprobante: str = "11",
@@ -437,13 +449,14 @@ def generar_plano_vacaciones(
     doc_referencia: str = "",
     centro_costo: str = "",
     cuenta_pago: str = CUENTA_PAGO_VACACIONES,
+    base_ss: int | None = None,
 ) -> pd.DataFrame:
     """Genera el plano contable del PAGO de vacaciones (solo tipo 'vacaciones').
 
     Asiento (cuadra exacto):
         Db  {cuenta_pago}   TOTAL VACACIONES
-          Cr  25503002      pensión 4%
-          Cr  25500502      salud 4%
+          Cr  25503002      pensión 4%  (sobre base_ss)
+          Cr  25500502      salud 4%    (sobre base_ss)
           Cr  25050501      neto a pagar
 
     Args:
@@ -454,12 +467,16 @@ def generar_plano_vacaciones(
         doc_referencia: referencia (por defecto la cédula del empleado).
         centro_costo: centro de costo (por defecto en blanco).
         cuenta_pago: cuenta de débito del pago de vacaciones.
+        base_ss: base de seguridad social sobre la que se calcula el 4%+4%.
+            Si es None se usa el TOTAL VACACIONES (comportamiento por defecto).
+            Úsalo para cotizar sobre el IBC de la planilla cuando difiera del
+            valor liquidado.
 
     Returns:
         DataFrame con las columnas de COLUMNAS_PLANO.
 
     Raises:
-        ValueError si el documento no es de tipo vacaciones o no cuadra.
+        ValueError si el documento no es de tipo vacaciones.
     """
     if d.get("tipo") != "vacaciones":
         raise ValueError(
@@ -468,8 +485,12 @@ def generar_plano_vacaciones(
         )
 
     total = int(d.get("total_vacaciones", 0))
-    pension = int(d.get("deduccion_pension", 0))
-    salud = int(d.get("deduccion_salud", 0))
+    if base_ss is None:
+        pension = int(d.get("deduccion_pension", 0))
+        salud = int(d.get("deduccion_salud", 0))
+    else:
+        ded = calcular_deduccion(base_ss)
+        pension, salud = ded["pension"], ded["salud"]
     neto = total - pension - salud  # garantiza cuadre exacto
 
     nit = d.get("cedula", "") or ""
@@ -491,11 +512,12 @@ def generar_plano_vacaciones(
             "CENTRO DE COSTO": centro_costo,
         }
 
+    base_col = int(base_ss) if base_ss is not None else total
     filas = [
-        _fila(cuenta_pago, "1", total),          # Db pago de vacaciones
-        _fila(CTA_DED_PENSION, "2", pension, base=total),  # Cr pensión 4%
-        _fila(CTA_DED_SALUD, "2", salud, base=total),      # Cr salud 4%
-        _fila(CTA_NETO, "2", neto),              # Cr neto a pagar
+        _fila(cuenta_pago, "1", total),                       # Db pago de vacaciones
+        _fila(CTA_DED_PENSION, "2", pension, base=base_col),  # Cr pensión 4%
+        _fila(CTA_DED_SALUD, "2", salud, base=base_col),      # Cr salud 4%
+        _fila(CTA_NETO, "2", neto),                           # Cr neto a pagar
     ]
     return pd.DataFrame(filas, columns=COLUMNAS_PLANO)
 

@@ -36,6 +36,7 @@ from core.procesadores.procesador_nomina import (
     cargar_empleados_embebido,
     COMPROBANTE_NOMINA,
     COMPROBANTE_PROVISION,
+    COLUMNAS_PLANO,
     dataframe_a_plano_tsv,
 )
 
@@ -231,6 +232,11 @@ with tab_procesar:
     )
     if not VAC_LIQ_DISPONIBLE:
         st.caption("⚠️ El lector de vacaciones/liquidaciones no está instalado en el servidor.")
+
+    # Estado compartido del mes: se llena en los bloques de nómina y vacaciones
+    # y se consolida en UN solo plano al final.
+    df_plano = None            # plano de nómina (comp 11 + comp 9)
+    planos_vac = []            # lista de DataFrames de vacaciones (comp 11)
 
     # === Procesar nómina ===
     if archivo_nomina is not None:
@@ -454,38 +460,11 @@ with tab_procesar:
                     )
 
             # === Plano completo ===
-            with st.expander("📄 Ver plano completo"):
+            with st.expander("📄 Ver plano de nómina (comp 11 + comp 9)"):
                 st.dataframe(df_plano, use_container_width=True, hide_index=True)
 
             with st.expander("📜 Ver log de procesamiento"):
                 st.code("\n".join(log), language="text")
-
-            # === Descargas ===
-            st.markdown("#### ⬇️ Descargas")
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                tsv_bytes = dataframe_a_plano_tsv(
-                    df_plano,
-                    incluir_encabezado_excel=incluir_enc_excel,
-                )
-                st.download_button(
-                    label="📥 Plano (.txt)",
-                    data=tsv_bytes,
-                    file_name=f"plano_nomina_{int(anio)}_{int(mes_idx):02d}.txt",
-                    mime="text/tab-separated-values",
-                    use_container_width=True,
-                )
-            with col_d2:
-                bio = io.BytesIO()
-                with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-                    df_plano.to_excel(writer, sheet_name="PLANO", index=False)
-                st.download_button(
-                    label="📥 Plano (.xlsx)",
-                    data=bio.getvalue(),
-                    file_name=f"plano_nomina_{int(anio)}_{int(mes_idx):02d}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
 
 
     # === Vacaciones y liquidaciones definitivas del mes ===
@@ -495,8 +474,18 @@ with tab_procesar:
         st.caption(
             "Documentos opcionales del movimiento del mes. A las **vacaciones** "
             "(no definitivas) se les aplica 4% pensión + 4% salud; en una "
-            "**liquidación definitiva** las vacaciones NO llevan esa deducción."
+            "**liquidación definitiva** las vacaciones NO llevan esa deducción. "
+            "Todo queda en el **mismo plano del mes** (abajo)."
         )
+
+        # El documento de cada vacación continúa el consecutivo del comp 11 de
+        # la nómina, para que no se repitan números dentro del comprobante.
+        doc_vac = 1
+        if df_plano is not None and len(df_plano):
+            comp11 = df_plano[df_plano["COMPROBANTE"].astype(str) == str(COMPROBANTE_NOMINA)]
+            nums = pd.to_numeric(comp11["DOCUMENTO"], errors="coerce").dropna()
+            if len(nums):
+                doc_vac = int(nums.max()) + 1
 
         for archivo_vl in archivos_vac:
             with st.expander(f"📄 {archivo_vl.name}", expanded=len(archivos_vac) == 1):
@@ -541,23 +530,37 @@ with tab_procesar:
                     with dpc:
                         st.metric("Deducción 8%", f"$ {dvl['deduccion_total_calculada']:,}".replace(",", "."))
 
-                    if dvl.get("deduccion_documento"):
-                        if dvl.get("deduccion_cuadra"):
-                            st.success("✅ La deducción 4%+4% coincide con la del documento.")
-                        else:
-                            st.warning("⚠️ La deducción del documento difiere de 4%+4%. Revísala.")
+                    # --- Base de seguridad social (IBC) opcional ---
+                    total_vac = int(dvl.get("total_vacaciones", 0))
+                    usar_ibc = st.checkbox(
+                        "La SS cotiza sobre un IBC distinto al valor liquidado",
+                        key=f"chk_ibc_{archivo_vl.name}",
+                        help="Actívalo si el 4%+4% debe calcularse sobre el IBC que "
+                             "va a la planilla PILA (no sobre el total de la vacación).",
+                    )
+                    base_ss = None
+                    if usar_ibc:
+                        base_ss = int(st.number_input(
+                            "IBC de la vacación (base para el 4%+4%)",
+                            min_value=0, value=total_vac, step=1000,
+                            key=f"ibc_{archivo_vl.name}",
+                        ))
 
                     # --- Plano contable del pago de vacaciones (Comp 11) ---
-                    st.markdown("**📄 Plano contable · pago de vacaciones (Comp 11)**")
+                    st.markdown(f"**📄 Plano contable · pago de vacaciones (Comp 11 · doc {doc_vac})**")
                     ultimo_dia = calendar.monthrange(int(anio), int(mes_idx))[1]
                     fecha_plano = f"{int(mes_idx):02d}/{ultimo_dia:02d}/{int(anio)}"
                     df_vac_plano = generar_plano_vacaciones(
                         dvl,
-                        comprobante="11",
-                        documento=str(int(mes_idx)),
+                        comprobante=str(COMPROBANTE_NOMINA),
+                        documento=str(doc_vac),
                         fecha=fecha_plano,
                         centro_costo="",
+                        base_ss=base_ss,
                     )
+                    doc_vac += 1  # siguiente vacación toma el próximo consecutivo
+                    planos_vac.append(df_vac_plano)
+
                     st.dataframe(
                         df_vac_plano, use_container_width=True, hide_index=True,
                         column_config={
@@ -571,33 +574,7 @@ with tab_procesar:
                         st.success(f"✅ Cuadra Db = Cr = $ {db_v:,}".replace(",", "."))
                     else:
                         st.error(f"❌ Descuadre: $ {db_v - cr_v:,}".replace(",", "."))
-
-                    st.caption(
-                        "El plano .txt se descarga **sin encabezado** (solo registros), "
-                        "listo para importar a Contai sin inconsistencias."
-                    )
-                    cpa, cpb = st.columns(2)
-                    with cpa:
-                        st.download_button(
-                            "📥 Plano (.txt) para Contai",
-                            data=plano_vac_a_tsv(df_vac_plano, incluir_encabezado=False),
-                            file_name=f"plano_vacaciones_{int(anio)}_{int(mes_idx):02d}_{dvl.get('cedula','')}.txt",
-                            mime="text/tab-separated-values",
-                            key=f"dlp_txt_{archivo_vl.name}",
-                            use_container_width=True,
-                        )
-                    with cpb:
-                        _bio = io.BytesIO()
-                        with pd.ExcelWriter(_bio, engine="openpyxl") as _w:
-                            df_vac_plano.to_excel(_w, sheet_name="PLANO", index=False)
-                        st.download_button(
-                            "📥 Plano (.xlsx)",
-                            data=_bio.getvalue(),
-                            file_name=f"plano_vacaciones_{int(anio)}_{int(mes_idx):02d}_{dvl.get('cedula','')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"dlp_xlsx_{archivo_vl.name}",
-                            use_container_width=True,
-                        )
+                    st.caption("Se une al plano del mes que descargas abajo.")
 
                 # ---------- LIQUIDACIÓN DEFINITIVA ----------
                 else:
@@ -639,6 +616,66 @@ with tab_procesar:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key=f"dl_vac_{archivo_vl.name}",
                 )
+
+    # === Plano ÚNICO del mes (nómina + vacaciones) ===
+    partes = []
+    if df_plano is not None and len(df_plano):
+        partes.append(df_plano[COLUMNAS_PLANO])
+    for dfv in planos_vac:
+        partes.append(dfv[COLUMNAS_PLANO])
+
+    if partes:
+        st.markdown("---")
+        st.markdown("### 📥 Plano del mes (nómina + vacaciones)")
+        df_mes = pd.concat(partes, ignore_index=True)[COLUMNAS_PLANO]
+
+        db_m = int(pd.to_numeric(df_mes[df_mes["TR"] == "1"]["VALOR"]).sum())
+        cr_m = int(pd.to_numeric(df_mes[df_mes["TR"] == "2"]["VALOR"]).sum())
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Líneas", len(df_mes))
+        with c2:
+            st.metric("Total Db", f"$ {db_m:,}".replace(",", "."))
+        with c3:
+            st.metric("Comprobantes", df_mes["COMPROBANTE"].nunique())
+
+        if db_m == cr_m:
+            st.success(f"✅ Cuadra Db = Cr = $ {db_m:,}".replace(",", "."))
+        else:
+            st.error(f"❌ Descuadre: $ {db_m - cr_m:,}".replace(",", "."))
+
+        if planos_vac:
+            st.caption(
+                f"Incluye la nómina + {len(planos_vac)} documento(s) de vacaciones "
+                f"en el mismo comp {COMPROBANTE_NOMINA}, sin dejar planos regados."
+            )
+
+        with st.expander("📄 Ver plano del mes completo"):
+            st.dataframe(df_mes, use_container_width=True, hide_index=True)
+
+        st.caption("El .txt sale **sin encabezado** (solo registros), listo para importar a Contai.")
+        cm1, cm2 = st.columns(2)
+        with cm1:
+            st.download_button(
+                "📥 Plano del mes (.txt) para Contai",
+                data=plano_vac_a_tsv(df_mes, incluir_encabezado=False),
+                file_name=f"plano_mes_{int(anio)}_{int(mes_idx):02d}.txt",
+                mime="text/tab-separated-values",
+                key="dl_plano_mes_txt",
+                use_container_width=True,
+            )
+        with cm2:
+            _biom = io.BytesIO()
+            with pd.ExcelWriter(_biom, engine="openpyxl") as _wm:
+                df_mes.to_excel(_wm, sheet_name="PLANO", index=False)
+            st.download_button(
+                "📥 Plano del mes (.xlsx)",
+                data=_biom.getvalue(),
+                file_name=f"plano_mes_{int(anio)}_{int(mes_idx):02d}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_plano_mes_xlsx",
+                use_container_width=True,
+            )
 
 
 # ------------------------------------------------------------

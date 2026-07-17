@@ -736,16 +736,20 @@ def _generar_asiento_quincena(
     empleados: Dict[str, Empleado],
     numero_quincena: int,
     fecha_asiento: date,
-) -> Tuple[List[dict], List[str]]:
+    doc_base: int = 1,
+) -> Tuple[List[dict], List[str], int]:
     """Genera las líneas del plano de UNA quincena (todas las empleadas).
 
+    Numeración: 1 documento por EMPLEADO y por quincena. El consecutivo
+    arranca en `doc_base` y avanza de a 1 por cada empleado procesado.
+
     Returns:
-        (filas_plano, advertencias)
+        (filas_plano, advertencias, siguiente_documento_disponible)
     """
     filas: List[dict] = []
     advertencias: List[str] = []
-    documento = str(numero_quincena)
     detalle = DETALLE_NOMINA_Q1 if numero_quincena == 1 else DETALLE_NOMINA_Q2
+    doc_actual = int(doc_base)
 
     for q in quincenas_q:
         emp = empleados.get(q.cc)
@@ -755,6 +759,10 @@ def _generar_asiento_quincena(
                 f"de empleados. Se descarta."
             )
             continue
+
+        # Documento único para este empleado en esta quincena
+        documento = str(doc_actual)
+        doc_actual += 1
 
         cuentas = emp.cuentas_gasto()
         nit = emp.cc
@@ -863,7 +871,7 @@ def _generar_asiento_quincena(
                 f"(diferencia ${neto_calc - neto_excel:,} por redondeos)".replace(",", ".")
             )
 
-    return filas, advertencias
+    return filas, advertencias, doc_actual
 
 
 def _generar_asiento_provision(
@@ -1162,13 +1170,17 @@ def procesar_nomina(
 
     # Generar líneas
     todas_filas: List[dict] = []
+    # Consecutivo corrido: 1 documento por empleado y por quincena.
+    # Q1 usa 1..N, Q2 continúa en N+1..2N (documentos únicos dentro del comp 11).
+    siguiente_doc = 1
 
     if q1:
         log.append("")
         log.append(f"📝 Generando asiento Q1 (comprobante {COMPROBANTE_NOMINA}, "
-                   f"documento 1, fecha {_formato_fecha_plano(fecha_q1)})...")
-        filas_q1, adv_q1 = _generar_asiento_quincena(
-            q1, empleados, 1, fecha_q1
+                   f"1 documento por empleado desde {siguiente_doc}, "
+                   f"fecha {_formato_fecha_plano(fecha_q1)})...")
+        filas_q1, adv_q1, siguiente_doc = _generar_asiento_quincena(
+            q1, empleados, 1, fecha_q1, doc_base=siguiente_doc
         )
         todas_filas.extend(filas_q1)
         log.extend(adv_q1)
@@ -1177,9 +1189,10 @@ def procesar_nomina(
     if q2:
         log.append("")
         log.append(f"📝 Generando asiento Q2 (comprobante {COMPROBANTE_NOMINA}, "
-                   f"documento 2, fecha {_formato_fecha_plano(fecha_q2)})...")
-        filas_q2, adv_q2 = _generar_asiento_quincena(
-            q2, empleados, 2, fecha_q2
+                   f"1 documento por empleado desde {siguiente_doc}, "
+                   f"fecha {_formato_fecha_plano(fecha_q2)})...")
+        filas_q2, adv_q2, siguiente_doc = _generar_asiento_quincena(
+            q2, empleados, 2, fecha_q2, doc_base=siguiente_doc
         )
         todas_filas.extend(filas_q2)
         log.extend(adv_q2)
