@@ -572,11 +572,15 @@ with tab_procesar:
                     else:
                         st.error(f"❌ Descuadre: $ {db_v - cr_v:,}".replace(",", "."))
 
+                    st.caption(
+                        "El plano .txt se descarga **sin encabezado** (solo registros), "
+                        "listo para importar a Contai sin inconsistencias."
+                    )
                     cpa, cpb = st.columns(2)
                     with cpa:
                         st.download_button(
-                            "📥 Plano (.txt)",
-                            data=plano_vac_a_tsv(df_vac_plano, incluir_enc_excel),
+                            "📥 Plano (.txt) para Contai",
+                            data=plano_vac_a_tsv(df_vac_plano, incluir_encabezado=False),
                             file_name=f"plano_vacaciones_{int(anio)}_{int(mes_idx):02d}_{dvl.get('cedula','')}.txt",
                             mime="text/tab-separated-values",
                             key=f"dlp_txt_{archivo_vl.name}",

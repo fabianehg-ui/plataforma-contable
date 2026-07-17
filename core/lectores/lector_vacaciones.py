@@ -500,13 +500,25 @@ def generar_plano_vacaciones(
     return pd.DataFrame(filas, columns=COLUMNAS_PLANO)
 
 
-def plano_a_tsv(df: pd.DataFrame, incluir_encabezado_excel: bool = True) -> bytes:
-    """Exporta el plano a texto tab-delimitado CRLF (formato Contai)."""
-    lineas = []
-    if incluir_encabezado_excel:
-        lineas.append("sep=\t")
+def plano_a_tsv(df: pd.DataFrame, incluir_encabezado: bool = False) -> bytes:
+    """Exporta el plano a texto tab-delimitado CRLF (formato Contai).
+
+    IMPORTANTE: por defecto NO incluye encabezado. Contai importa solo
+    registros de datos; si se anteponen las filas 'sep=' o los títulos de
+    columna ('CUENTA', 'COMPROBANTE', ...), Contai los lee como un registro
+    y genera inconsistencias ("la cuenta NO existe en el Plan de Cuentas").
+
+    Usa incluir_encabezado=True solo para abrir el archivo en Excel, NUNCA
+    para importar a Contai.
+    """
     df_out = df[COLUMNAS_PLANO].copy()
-    lineas.append("\t".join(COLUMNAS_PLANO))
+    for col in df_out.columns:
+        df_out[col] = df_out[col].astype(str).str.replace("\t", " ", regex=False)
+
+    lineas = []
+    if incluir_encabezado:
+        lineas.append("sep=\t")
+        lineas.append("\t".join(COLUMNAS_PLANO))
     for _, row in df_out.iterrows():
         lineas.append("\t".join(str(row[c]) for c in COLUMNAS_PLANO))
     return ("\r\n".join(lineas) + "\r\n").encode("utf-8")
