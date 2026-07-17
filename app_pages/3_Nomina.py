@@ -61,6 +61,13 @@ try:
 except ImportError:
     VAC_LIQ_DISPONIBLE = False
 
+# Motor de conciliación PILA -> gasto (ajuste comp 9)
+try:
+    from core.procesadores import ajuste_pila as AJ
+    AJUSTE_PILA_DISPONIBLE = True
+except ImportError:
+    AJUSTE_PILA_DISPONIBLE = False
+
 
 # ============================================================
 # Configuración
@@ -237,6 +244,8 @@ with tab_procesar:
     # y se consolida en UN solo plano al final.
     df_plano = None            # plano de nómina (comp 11 + comp 9)
     planos_vac = []            # lista de DataFrames de vacaciones (comp 11)
+    planos_ajuste = []         # lista de DataFrames de ajuste PILA (comp 9)
+    pila_para_ajuste = None    # objeto PILA para la conciliación
 
     # === Procesar nómina ===
     if archivo_nomina is not None:
@@ -331,6 +340,9 @@ with tab_procesar:
                     pila = None
 
                 if pila is not None:
+                    # Guardar para la conciliación PILA -> gasto (más abajo)
+                    pila_para_ajuste = pila
+
                     # Métricas globales
                     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                     with col_m1:
@@ -617,12 +629,103 @@ with tab_procesar:
                     key=f"dl_vac_{archivo_vl.name}",
                 )
 
-    # === Plano ÚNICO del mes (nómina + vacaciones) ===
+    # === Conciliación PILA -> gasto (ajuste comp 9) ===
+    if AJUSTE_PILA_DISPONIBLE and pila_para_ajuste is not None and (
+        (df_plano is not None and len(df_plano)) or planos_vac
+    ):
+        st.markdown("---")
+        st.markdown("### 🔁 Conciliación PILA → gasto (ajuste comp 9)")
+        st.caption(
+            "Cruza el pasivo contable del mes (nómina + provisión + vacaciones) "
+            "contra la PILA y ajusta la diferencia de cada concepto contra su "
+            "gasto, con débito o crédito, hasta dejar el pasivo = saldo PILA."
+        )
+
+        # Plano ANTES del ajuste (para medir el pasivo contable del mes)
+        partes_pre = []
+        if df_plano is not None and len(df_plano):
+            partes_pre.append(df_plano[COLUMNAS_PLANO])
+        for dfv in planos_vac:
+            partes_pre.append(dfv[COLUMNAS_PLANO])
+        df_pre = pd.concat(partes_pre, ignore_index=True)[COLUMNAS_PLANO]
+
+        pt = pila_para_ajuste.totales
+        pila_conc = {
+            "pension": int(pt.aportes_pension),
+            "salud":   int(pt.aportes_salud),
+            "arl":     int(pt.aportes_riesgos),
+            "caja":    int(pt.aportes_cajas),
+        }
+
+        st.markdown("**Cuentas de gasto para el ajuste** _(confirma/edita según tu PUC)_")
+        defaults = AJ.gastos_default()
+        gc1, gc2, gc3, gc4 = st.columns(4)
+        with gc1:
+            g_pen = st.text_input("Gasto pensión", value=defaults["pension"], key="g_pen")
+        with gc2:
+            g_eps = st.text_input(
+                "Gasto EPS", value=defaults["salud"], key="g_eps",
+                help="La empresa está exonerada: no hay gasto EPS en la provisión. "
+                     "Escribe la cuenta que usas para este ajuste.",
+            )
+        with gc3:
+            g_arl = st.text_input("Gasto ARL", value=defaults["arl"], key="g_arl")
+        with gc4:
+            g_caja = st.text_input("Gasto caja", value=defaults["caja"], key="g_caja")
+        gastos = {"pension": g_pen, "salud": g_eps, "arl": g_arl, "caja": g_caja}
+
+        ultimo_dia_aj = calendar.monthrange(int(anio), int(mes_idx))[1]
+        fecha_aj = f"{int(mes_idx):02d}/{ultimo_dia_aj:02d}/{int(anio)}"
+        df_aj, conc = AJ.generar_ajuste_pila(
+            df_pre, pila_conc, gastos,
+            fecha=fecha_aj,
+            documento=str(int(mes_idx)),   # mismo documento de la provisión
+            comprobante=str(COMPROBANTE_PROVISION),
+        )
+        if len(df_aj):
+            planos_ajuste.append(df_aj)
+
+        tabla = pd.DataFrame([{
+            "Concepto": c["nombre"],
+            "PILA": c["pila"],
+            "Contable": c["contable"],
+            "Diferencia": c["diferencia"],
+            "Ajuste": ("—" if c["diferencia"] == 0 else
+                       ("Db gasto / Cr pasivo" if c["diferencia"] > 0
+                        else "Db pasivo / Cr gasto")),
+            "Gasto": c.get("gasto", ""),
+        } for c in conc])
+        st.dataframe(
+            tabla, use_container_width=True, hide_index=True,
+            column_config={
+                "PILA": st.column_config.NumberColumn(format="$ %d"),
+                "Contable": st.column_config.NumberColumn(format="$ %d"),
+                "Diferencia": st.column_config.NumberColumn(format="$ %d"),
+            },
+        )
+
+        faltan = [c["nombre"] for c in conc if c.get("sin_gasto")]
+        if faltan:
+            st.warning(
+                "⚠️ Falta la cuenta de gasto para: " + ", ".join(faltan) +
+                ". Esos conceptos NO se ajustaron. Complétala arriba."
+            )
+        if len(df_aj):
+            st.success(
+                f"✅ Ajuste generado ({len(df_aj)} líneas) en comp "
+                f"{COMPROBANTE_PROVISION}. Se une al plano del mes."
+            )
+        else:
+            st.info("No hubo diferencias para ajustar (o faltan cuentas de gasto).")
+
+    # === Plano ÚNICO del mes (nómina + vacaciones + ajuste PILA) ===
     partes = []
     if df_plano is not None and len(df_plano):
         partes.append(df_plano[COLUMNAS_PLANO])
     for dfv in planos_vac:
         partes.append(dfv[COLUMNAS_PLANO])
+    for dfa in planos_ajuste:
+        partes.append(dfa[COLUMNAS_PLANO])
 
     if partes:
         st.markdown("---")
@@ -644,11 +747,12 @@ with tab_procesar:
         else:
             st.error(f"❌ Descuadre: $ {db_m - cr_m:,}".replace(",", "."))
 
+        detalle_incluye = ["nómina"]
         if planos_vac:
-            st.caption(
-                f"Incluye la nómina + {len(planos_vac)} documento(s) de vacaciones "
-                f"en el mismo comp {COMPROBANTE_NOMINA}, sin dejar planos regados."
-            )
+            detalle_incluye.append(f"{len(planos_vac)} vacación(es)")
+        if planos_ajuste:
+            detalle_incluye.append("ajuste PILA (comp 9)")
+        st.caption("Incluye: " + " + ".join(detalle_incluye) + ". Todo en un solo plano, sin dejar documentos regados.")
 
         with st.expander("📄 Ver plano del mes completo"):
             st.dataframe(df_mes, use_container_width=True, hide_index=True)
