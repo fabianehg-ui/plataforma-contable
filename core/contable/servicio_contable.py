@@ -502,6 +502,111 @@ def estado_cartera(sb, empresa_id: str, hasta: str = "999999",
 
 
 # ============================================================
+# Estados financieros
+# ============================================================
+
+CLASES_PUC = {
+    "1": "Activo", "2": "Pasivo", "3": "Patrimonio",
+    "4": "Ingresos", "5": "Gastos", "6": "Costos de ventas",
+    "7": "Costos de producción",
+}
+
+
+def _calc_estado_resultados(movs: list[dict], desde: str, hasta: str):
+    ing = gas = cos = 0
+    det = {}  # grupo 2 dígitos -> valor
+    for m in movs:
+        if not (desde <= m["periodo"] <= hasta):
+            continue
+        cta = str(m["cuenta"])
+        cl = cta[:1]
+        s = _signed(m)
+        if cl == "4":
+            ing += -s
+        elif cl == "5":
+            gas += s
+        elif cl in ("6", "7"):
+            cos += s
+        else:
+            continue
+        g = cta[:2]
+        det[g] = det.get(g, 0) + (-s if cl == "4" else s)
+    utilidad = ing - cos - gas
+    resumen = pd.DataFrame([
+        {"Concepto": "Ingresos (clase 4)", "Valor": ing},
+        {"Concepto": "(−) Costos (6, 7)", "Valor": cos},
+        {"Concepto": "(−) Gastos (clase 5)", "Valor": gas},
+        {"Concepto": "= Utilidad / (Pérdida) del período", "Valor": utilidad},
+    ])
+    detalle = pd.DataFrame(
+        [{"Grupo": g, "Valor": v} for g, v in sorted(det.items())],
+        columns=["Grupo", "Valor"],
+    )
+    return resumen, detalle, {"ingresos": ing, "costos": cos, "gastos": gas, "utilidad": utilidad}
+
+
+def _calc_balance_general(movs: list[dict], hasta: str):
+    anio = str(hasta)[:4]
+    inicio_anio = anio + "01"
+    activo = pasivo = patrim = 0
+    ing = gas = cos = 0
+    grupos = {}  # (clase, grupo2) -> saldo presentación
+    for m in movs:
+        if m["periodo"] > hasta:
+            continue
+        cta = str(m["cuenta"])
+        cl = cta[:1]
+        s = _signed(m)
+        if cl == "1":
+            activo += s
+            grupos[("1", cta[:2])] = grupos.get(("1", cta[:2]), 0) + s
+        elif cl == "2":
+            pasivo += -s
+            grupos[("2", cta[:2])] = grupos.get(("2", cta[:2]), 0) + (-s)
+        elif cl == "3":
+            patrim += -s
+            grupos[("3", cta[:2])] = grupos.get(("3", cta[:2]), 0) + (-s)
+        # Resultado del ejercicio (año en curso hasta el corte)
+        if inicio_anio <= m["periodo"] <= hasta:
+            if cl == "4":
+                ing += -s
+            elif cl == "5":
+                gas += s
+            elif cl in ("6", "7"):
+                cos += s
+    utilidad = ing - cos - gas
+    pas_pat_util = pasivo + patrim + utilidad
+    resumen = pd.DataFrame([
+        {"Concepto": "ACTIVO (1)", "Valor": activo},
+        {"Concepto": "PASIVO (2)", "Valor": pasivo},
+        {"Concepto": "PATRIMONIO (3)", "Valor": patrim},
+        {"Concepto": "Utilidad del ejercicio", "Valor": utilidad},
+        {"Concepto": "= Pasivo + Patrimonio + Utilidad", "Valor": pas_pat_util},
+    ])
+    detalle = pd.DataFrame(
+        [{"Clase": CLASES_PUC.get(cl, cl), "Grupo": g, "Valor": v}
+         for (cl, g), v in sorted(grupos.items())],
+        columns=["Clase", "Grupo", "Valor"],
+    )
+    info = {"activo": activo, "pasivo": pasivo, "patrimonio": patrim,
+            "utilidad": utilidad, "cuadra": activo == pas_pat_util,
+            "diferencia": activo - pas_pat_util}
+    return resumen, detalle, info
+
+
+def estado_resultados(sb, empresa_id: str, desde: str, hasta: str):
+    """Estado de resultados (PyG) entre dos períodos 'AAAAMM'."""
+    movs = _fetch_paginado(sb, empresa_id, "cuenta,periodo,tr,valor", periodo_lte=str(hasta))
+    return _calc_estado_resultados(movs, str(desde), str(hasta))
+
+
+def balance_general(sb, empresa_id: str, hasta: str):
+    """Balance general acumulado a un corte 'AAAAMM' (con utilidad del año)."""
+    movs = _fetch_paginado(sb, empresa_id, "cuenta,periodo,tr,valor", periodo_lte=str(hasta))
+    return _calc_balance_general(movs, str(hasta))
+
+
+# ============================================================
 # Importación de históricos (plano de 11 columnas -> cn_movimientos)
 # ============================================================
 

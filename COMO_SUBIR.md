@@ -1,26 +1,16 @@
-# INTEGRAL — Captura de comprobantes (partida doble)
+# INTEGRAL — Estados financieros + Roadmap
 
 ## Archivos
-    Home.py                              (REEMPLAZA — nueva página en Asistente Contable)
-    app_pages/21_Captura.py              (NUEVO)
-    core/contable/servicio_contable.py   (por si no lo tenías al día)
+    app_pages/20_Contabilidad.py         (REEMPLAZA — +2 pestañas)
+    core/contable/servicio_contable.py   (REEMPLAZA — +estados financieros)
+    ROADMAP_INTEGRAL.md                  (documento, no va al repo salvo que quieras)
 
-(Requiere migración 014 aplicada.)
+## Nuevo
+- 📈 Estado de resultados (PyG): ingresos (4) − costos (6,7) − gastos (5) =
+  utilidad, con detalle por grupo y export a Excel.
+- 🏛️ Balance general: activo (1), pasivo (2), patrimonio (3) + utilidad del
+  ejercicio, valida la ecuación patrimonial (Activo = Pas+Pat+Util).
+Ambos leen de cn_movimientos por rango/corte de período.
 
-## Qué agrega
-Nueva página "✍️ Captura de Comprobantes". Permite armar un documento de
-partida doble y guardarlo en cn_movimientos:
-
-- Tipos de comprobante: se gestionan en la barra lateral (botón "Crear los 4
-  sugeridos": recibo de caja, egreso, causación, nota).
-- Cabecera: comprobante, fecha, documento (consecutivo), NIT, detalle.
-- Líneas: editor tipo Excel; escribes cuenta y el valor en Débito o Crédito.
-- Valida en vivo: total Db, total Cr, diferencia; avisa si no cuadra o si una
-  línea tiene débito y crédito a la vez.
-- Guardar: solo si cuadra (Db=Cr) y el período NO está protegido. Queda con
-  origen='captura' y se ve en 📚 Contabilidad (auxiliar, balance, cartera).
-
-## Ejemplos del ciclo
-- Egreso        → Db gasto/pasivo, Cr banco.
-- Causación     → Db gasto + Db IVA, Cr proveedor + Cr retenciones.
-- Recibo de caja→ Db caja/banco, Cr cartera/ingreso.
+El ROADMAP lista TODAS las funcionalidades de Contai, marca lo hecho/pendiente
+por fases, y deja cubos/medios magnéticos avanzados como mejoras finales.

@@ -63,8 +63,11 @@ def _fmt_cols(df, cols):
     return {c: st.column_config.NumberColumn(format="%d") for c in cols if c in df.columns}
 
 
-tab_bal, tab_aux, tab_cart, tab_import, tab_per = st.tabs([
+(tab_bal, tab_er, tab_bg, tab_aux, tab_cart,
+ tab_import, tab_per) = st.tabs([
     "⚖️ Balance de prueba",
+    "📈 Estado de resultados",
+    "🏛️ Balance general",
     "📒 Libro auxiliar",
     "💳 Estado de cartera",
     "📥 Importar movimiento",
@@ -103,6 +106,63 @@ with tab_bal:
             st.download_button("📊 Excel", _excel(df, "BalancePrueba"),
                                file_name=f"balance_prueba_{desde}_{hasta}.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ---------------------------------------------------------------------
+# Estado de resultados (PyG)
+# ---------------------------------------------------------------------
+with tab_er:
+    st.markdown("### 📈 Estado de resultados (PyG)")
+    cA, cB = st.columns(2)
+    with cA:
+        er_d = _sel_periodo("Desde", "er_d", default_mes=1)
+    with cB:
+        er_h = _sel_periodo("Hasta", "er_h")
+    if st.button("Generar estado de resultados", type="primary", key="btn_er"):
+        with st.spinner("Calculando…"):
+            resumen, detalle, info = cont.estado_resultados(sb, emp["id"], er_d, er_h)
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Ingresos", f"$ {info['ingresos']:,}".replace(",", "."))
+        m2.metric("Costos", f"$ {info['costos']:,}".replace(",", "."))
+        m3.metric("Gastos", f"$ {info['gastos']:,}".replace(",", "."))
+        m4.metric("Utilidad", f"$ {info['utilidad']:,}".replace(",", "."))
+        st.dataframe(resumen, use_container_width=True, hide_index=True,
+                     column_config=_fmt_cols(resumen, ["Valor"]))
+        if len(detalle):
+            with st.expander("Detalle por grupo (2 dígitos)"):
+                st.dataframe(detalle, use_container_width=True, hide_index=True,
+                             column_config=_fmt_cols(detalle, ["Valor"]))
+        st.download_button("📊 Excel", _excel(resumen, "PyG"),
+                           file_name=f"estado_resultados_{er_d}_{er_h}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ---------------------------------------------------------------------
+# Balance general
+# ---------------------------------------------------------------------
+with tab_bg:
+    st.markdown("### 🏛️ Balance general")
+    corte_bg = _sel_periodo("Corte a", "bg_h")
+    if st.button("Generar balance general", type="primary", key="btn_bg"):
+        with st.spinner("Calculando…"):
+            resumen, detalle, info = cont.balance_general(sb, emp["id"], corte_bg)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Activo", f"$ {info['activo']:,}".replace(",", "."))
+        m2.metric("Pasivo", f"$ {info['pasivo']:,}".replace(",", "."))
+        m3.metric("Patrim.+Utilidad", f"$ {info['patrimonio'] + info['utilidad']:,}".replace(",", "."))
+        if info["cuadra"]:
+            st.success("✅ Ecuación patrimonial cuadra: Activo = Pasivo + Patrimonio + Utilidad")
+        else:
+            st.warning(f"⚠️ Descuadre patrimonial: $ {info['diferencia']:,}".replace(",", "."))
+        st.dataframe(resumen, use_container_width=True, hide_index=True,
+                     column_config=_fmt_cols(resumen, ["Valor"]))
+        if len(detalle):
+            with st.expander("Detalle por clase / grupo"):
+                st.dataframe(detalle, use_container_width=True, hide_index=True,
+                             column_config=_fmt_cols(detalle, ["Valor"]))
+        st.download_button("📊 Excel", _excel(resumen, "BalanceGeneral"),
+                           file_name=f"balance_general_{corte_bg}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ---------------------------------------------------------------------
