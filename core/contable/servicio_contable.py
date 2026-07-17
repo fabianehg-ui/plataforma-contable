@@ -356,3 +356,200 @@ def cuadre_periodo(sb, empresa_id: str, periodo: str) -> dict:
     db = sum(int(m["valor"]) for m in movs if m.get("tr") == "1")
     cr = sum(int(m["valor"]) for m in movs if m.get("tr") == "2")
     return {"debitos": db, "creditos": cr, "diferencia": db - cr, "cuadra": db == cr}
+
+
+# ============================================================
+# Fetch con paginación (PostgREST devuelve máx 1000 por página)
+# ============================================================
+
+def _fetch_paginado(sb, empresa_id: str, columns: str,
+                    periodo_gte: Optional[str] = None,
+                    periodo_lte: Optional[str] = None,
+                    extra_eq: Optional[dict] = None,
+                    pagina: int = 1000) -> list[dict]:
+    filas: list[dict] = []
+    off = 0
+    while True:
+        q = sb.table("cn_movimientos").select(columns).eq("empresa_id", empresa_id)
+        if periodo_gte is not None:
+            q = q.gte("periodo", periodo_gte)
+        if periodo_lte is not None:
+            q = q.lte("periodo", periodo_lte)
+        for k, v in (extra_eq or {}).items():
+            q = q.eq(k, v)
+        res = q.range(off, off + pagina - 1).execute()
+        chunk = res.data or []
+        filas.extend(chunk)
+        if len(chunk) < pagina:
+            break
+        off += pagina
+    return filas
+
+
+def _nombres_cuentas(sb, empresa_id: str) -> dict:
+    """{codigo: nombre} del plan de cuentas de la empresa (para reportes)."""
+    return {c["codigo"]: c.get("nombre", "") for c in listar_plan_cuentas(sb, empresa_id)}
+
+
+# ============================================================
+# Cálculos PUROS (sin red) — testeables
+# ============================================================
+
+def _signed(m) -> int:
+    v = int(round(float(m.get("valor") or 0)))
+    return v if str(m.get("tr")) == "1" else -v
+
+
+def _calc_balance_prueba(movs: list[dict], desde: str, hasta: str,
+                         nombres: Optional[dict] = None) -> pd.DataFrame:
+    nombres = nombres or {}
+    cuentas = sorted({m["cuenta"] for m in movs})
+    filas = []
+    for cta in cuentas:
+        ms = [m for m in movs if m["cuenta"] == cta]
+        s_ant = sum(_signed(m) for m in ms if m["periodo"] < desde)
+        deb = sum(int(m["valor"]) for m in ms if desde <= m["periodo"] <= hasta and str(m["tr"]) == "1")
+        cre = sum(int(m["valor"]) for m in ms if desde <= m["periodo"] <= hasta and str(m["tr"]) == "2")
+        s_fin = s_ant + deb - cre
+        if s_ant == 0 and deb == 0 and cre == 0:
+            continue
+        filas.append({
+            "Cuenta": cta,
+            "Nombre": nombres.get(cta, ""),
+            "Saldo anterior": s_ant,
+            "Débitos": deb,
+            "Créditos": cre,
+            "Saldo final": s_fin,
+        })
+    return pd.DataFrame(filas, columns=[
+        "Cuenta", "Nombre", "Saldo anterior", "Débitos", "Créditos", "Saldo final",
+    ])
+
+
+def _calc_libro_auxiliar(movs: list[dict], desde: str, hasta: str) -> pd.DataFrame:
+    # saldo anterior (antes de 'desde')
+    s_ant = sum(_signed(m) for m in movs if m["periodo"] < desde)
+    ms = [m for m in movs if desde <= m["periodo"] <= hasta]
+    ms.sort(key=lambda m: (m.get("fecha") or "", m.get("comprobante") or "", m.get("documento") or ""))
+    filas = []
+    saldo = s_ant
+    for m in ms:
+        deb = int(m["valor"]) if str(m["tr"]) == "1" else 0
+        cre = int(m["valor"]) if str(m["tr"]) == "2" else 0
+        saldo += deb - cre
+        filas.append({
+            "Fecha": m.get("fecha"),
+            "Comp": m.get("comprobante"),
+            "Documento": m.get("documento"),
+            "NIT": m.get("nit"),
+            "Detalle": m.get("detalle"),
+            "Débito": deb,
+            "Crédito": cre,
+            "Saldo": saldo,
+            "C. Costo": m.get("centro_costo"),
+        })
+    df = pd.DataFrame(filas, columns=[
+        "Fecha", "Comp", "Documento", "NIT", "Detalle", "Débito", "Crédito", "Saldo", "C. Costo",
+    ])
+    return df, s_ant
+
+
+def _calc_estado_cartera(movs: list[dict], prefijos) -> pd.DataFrame:
+    prefijos = tuple(prefijos)
+    por_nit = {}
+    for m in movs:
+        if not str(m["cuenta"]).startswith(prefijos):
+            continue
+        nit = m.get("nit") or "(sin NIT)"
+        por_nit[nit] = por_nit.get(nit, 0) + _signed(m)
+    filas = [{"NIT": k, "Saldo cartera": v} for k, v in por_nit.items() if v != 0]
+    filas.sort(key=lambda r: -r["Saldo cartera"])
+    return pd.DataFrame(filas, columns=["NIT", "Saldo cartera"])
+
+
+# ============================================================
+# Reportes (con red)
+# ============================================================
+
+def balance_prueba(sb, empresa_id: str, desde: str, hasta: str) -> pd.DataFrame:
+    """Balance de prueba entre dos períodos 'AAAAMM' (inclusive)."""
+    movs = _fetch_paginado(sb, empresa_id, "cuenta,periodo,tr,valor", periodo_lte=hasta)
+    return _calc_balance_prueba(movs, str(desde), str(hasta), _nombres_cuentas(sb, empresa_id))
+
+
+def libro_auxiliar(sb, empresa_id: str, cuenta: Optional[str] = None,
+                   nit: Optional[str] = None, desde: str = "000000",
+                   hasta: str = "999999"):
+    """Movimientos detallados con saldo corriente. Filtra por cuenta y/o NIT."""
+    extra = {}
+    if cuenta:
+        extra["cuenta"] = str(cuenta)
+    if nit:
+        extra["nit"] = str(nit)
+    movs = _fetch_paginado(
+        sb, empresa_id,
+        "cuenta,periodo,fecha,comprobante,documento,doc_referencia,nit,detalle,tr,valor,base,centro_costo",
+        periodo_lte=str(hasta), extra_eq=extra or None,
+    )
+    return _calc_libro_auxiliar(movs, str(desde), str(hasta))
+
+
+def estado_cartera(sb, empresa_id: str, hasta: str = "999999",
+                   prefijos=("13",)) -> pd.DataFrame:
+    """Saldo de cartera por tercero (cuentas que empiezan por 'prefijos')."""
+    movs = _fetch_paginado(sb, empresa_id, "cuenta,periodo,nit,tr,valor", periodo_lte=str(hasta))
+    return _calc_estado_cartera(movs, prefijos)
+
+
+# ============================================================
+# Importación de históricos (plano de 11 columnas -> cn_movimientos)
+# ============================================================
+
+def importar_movimientos(sb, empresa_id: str, df: pd.DataFrame,
+                         origen: str = "importado", user_id: Optional[str] = None,
+                         lote: int = 500) -> dict:
+    """Importa un plano (DataFrame de 11 columnas) derivando el PERÍODO de la
+    FECHA de cada fila (AAAAMM). Crea los períodos faltantes y respeta los
+    protegidos (se saltan y se reportan).
+
+    Returns: {insertados, periodos, saltados_protegidos}.
+    """
+    registros = []
+    periodos = set()
+    for _, row in df.iterrows():
+        f_iso = _fecha_iso(row.get("FECHA"))
+        periodo = (f_iso[:4] + f_iso[5:7]) if f_iso else ""
+        reg = {"empresa_id": empresa_id, "periodo": periodo, "origen": origen or None}
+        for col_plano, col_db in _MAPA_PLANO_DB.items():
+            val = row.get(col_plano)
+            if col_db == "fecha":
+                reg[col_db] = f_iso
+            elif col_db in ("valor", "base"):
+                reg[col_db] = _int(val)
+            else:
+                reg[col_db] = None if val is None or str(val) == "" else str(val)
+        if user_id:
+            reg["creado_por"] = user_id
+        registros.append(reg)
+        periodos.add(periodo)
+
+    # Crear períodos faltantes (no reabre protegidos por ignore_duplicates)
+    for p in sorted(periodos):
+        if p:
+            crear_periodo(sb, empresa_id, p)
+
+    # Saltar períodos protegidos
+    protegidos = {p for p in periodos if p and periodo_protegido(sb, empresa_id, p)}
+    a_insertar = [r for r in registros if r["periodo"] not in protegidos]
+
+    total = 0
+    for i in range(0, len(a_insertar), lote):
+        chunk = a_insertar[i:i + lote]
+        sb.table("cn_movimientos").insert(chunk).execute()
+        total += len(chunk)
+
+    return {
+        "insertados": total,
+        "periodos": sorted(p for p in periodos if p),
+        "saltados_protegidos": sorted(protegidos),
+    }

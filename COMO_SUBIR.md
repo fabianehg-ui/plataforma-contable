@@ -1,25 +1,29 @@
-# INTEGRAL — rebranding + guardar plano en la base
+# INTEGRAL — Libros y reportes contables
 
-## Archivos (todos REEMPLAZAN / NUEVOS)
-    Home.py                              (REEMPLAZA — ahora se llama "INTEGRAL")
-    README.md                            (REEMPLAZA — título INTEGRAL)
-    app_pages/3_Nomina.py                (REEMPLAZA — botón "Guardar plano del mes")
-    core/contable/__init__.py            (NUEVO)
-    core/contable/servicio_contable.py   (NUEVO/actualizado — crear_periodo seguro)
+## Archivos
+    Home.py                              (REEMPLAZA — nueva página en menú Reportes)
+    app_pages/20_Contabilidad.py         (NUEVO)
+    core/contable/servicio_contable.py   (REEMPLAZA — +reportes e importación)
 
-(La migración 014_nucleo_contable.sql ya la corriste en Supabase.)
+(Requiere la migración 014 ya aplicada.)
 
-## Qué cambia
-1) NOMBRE: la app aparece como "INTEGRAL" (pestaña del navegador, título de
-   inicio "📊 INTEGRAL — Gestión contable integral") y en el README.
-2) GUARDAR EN LA BASE: en Nómina, bajo "Plano del mes", hay un botón
-   "💾 Guardar plano del mes (AAAAMM) en INTEGRAL" que:
-     - crea el período si no existe (sin reabrir uno protegido),
-     - guarda el plano combinado (nómina + vacaciones + ajuste PILA) en
-       cn_movimientos con origen='nomina_mes',
-     - con "Reemplazar" borra primero lo de ese período/origen (no duplica).
-   Si el período está PROTEGIDO, bloquea el guardado.
+## Qué agrega
+Nueva página "📚 Contabilidad (Libros)" en el menú Reportes, que lee de
+cn_movimientos y trae 5 pestañas:
 
-## Seguridad
-- servicio_contable.crear_periodo ahora usa ignore_duplicates: si el período
-  ya existe, NO lo modifica (así no reabre un período protegido por accidente).
+1) ⚖️ Balance de prueba — por rango de períodos: saldo anterior, débitos,
+   créditos, saldo final por cuenta, con cuadre Db=Cr y export a Excel.
+2) 📒 Libro auxiliar — movimiento detallado de una cuenta y/o NIT, con
+   saldo anterior y saldo corriente. Export a Excel.
+3) 💳 Estado de cartera — saldo por tercero de las cuentas de cartera
+   (por defecto las que empiezan por 13). Export a Excel.
+4) 📥 Importar movimiento — sube un plano (.txt o .xlsx) con el formato de
+   11 columnas; el período se toma de la FECHA de cada línea. Sirve para
+   cargar HISTÓRICOS. Crea períodos y respeta los protegidos.
+5) 🗓️ Períodos — lista, muestra el cuadre del período y permite
+   abrir/proteger (estilo CNPERIOD).
+
+## Nota
+- Reportes leen con paginación (maneja miles de movimientos).
+- El "aging" (edades de mora) de cartera se puede añadir cuando el import
+  traiga fechas de vencimiento por documento.

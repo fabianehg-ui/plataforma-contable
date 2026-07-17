@@ -297,6 +297,12 @@ rep_pyg_detallado = st.Page(
     icon="📑",
     url_path="reportes-pyg-detallado-cc",
 )
+rep_contabilidad = st.Page(
+    "app_pages/20_Contabilidad.py",
+    title="Contabilidad (Libros)",
+    icon="📚",
+    url_path="contabilidad",
+)
 
 # ----- Sección: Sistema -----
 sistema_panel_admin = st.Page(
@@ -344,6 +350,7 @@ nav = st.navigation(
             trib_saludables,
         ],
         "📈 Reportes": [
+            rep_contabilidad,
             rep_centros_costos,
             rep_pyg_detallado,
         ],
