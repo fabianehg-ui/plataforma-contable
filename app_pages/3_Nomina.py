@@ -26,7 +26,7 @@ from datetime import date
 import streamlit as st
 import pandas as pd
 
-from auth.login import require_auth, sidebar_user_info
+from auth.login import require_auth, sidebar_user_info, current_user
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from auth.modulos import require_modulo
 
@@ -67,6 +67,14 @@ try:
     AJUSTE_PILA_DISPONIBLE = True
 except ImportError:
     AJUSTE_PILA_DISPONIBLE = False
+
+# Guardado en el núcleo contable (INTEGRAL)
+try:
+    from db.supabase_client import get_supabase
+    from core.contable import servicio_contable as cont
+    GUARDADO_DISPONIBLE = True
+except Exception:
+    GUARDADO_DISPONIBLE = False
 
 
 # ============================================================
@@ -780,6 +788,43 @@ with tab_procesar:
                 key="dl_plano_mes_xlsx",
                 use_container_width=True,
             )
+
+        # === Guardar en INTEGRAL (cn_movimientos) ===
+        if GUARDADO_DISPONIBLE:
+            st.markdown("#### 💾 Guardar en INTEGRAL")
+            periodo_cod = f"{int(anio)}{int(mes_idx):02d}"
+            cg1, cg2 = st.columns([2, 3])
+            with cg1:
+                reemplazar_bd = st.checkbox(
+                    "Reemplazar lo ya guardado de este mes",
+                    value=True,
+                    help="Borra los movimientos previos de la nómina de este período "
+                         "antes de guardar, para no duplicar al reprocesar.",
+                )
+            with cg2:
+                if st.button(
+                    f"💾 Guardar plano del mes ({periodo_cod}) en INTEGRAL",
+                    type="primary", use_container_width=True,
+                ):
+                    try:
+                        sb = get_supabase()
+                        usr = current_user() or {}
+                        cont.crear_periodo(
+                            sb, emp["id"], periodo_cod,
+                            f"{meses[int(mes_idx) - 1]} {int(anio)}",
+                        )
+                        n = cont.guardar_plano(
+                            sb, emp["id"], periodo_cod, df_mes,
+                            origen="nomina_mes", user_id=usr.get("id"),
+                            reemplazar=reemplazar_bd,
+                        )
+                        st.success(
+                            f"✅ {n} líneas guardadas en INTEGRAL (período {periodo_cod})."
+                        )
+                    except PermissionError as e:
+                        st.error(f"🔒 {e}")
+                    except Exception as e:
+                        st.error(f"No se pudo guardar en INTEGRAL: {e}")
 
 
 # ------------------------------------------------------------

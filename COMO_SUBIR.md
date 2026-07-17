@@ -1,20 +1,25 @@
-# F350 — quitar conexión DIAN + JSON PLANO para la extensión
+# INTEGRAL — rebranding + guardar plano en la base
 
-## 1) BORRAR en tu repo (los que se conectaban a la DIAN)
-    app_pages/10a_DIAN_F350_Muisca.py    <- ELIMINAR
-    app_pages/11_DIAN_F350_Muisca.py     <- ELIMINAR
+## Archivos (todos REEMPLAZAN / NUEVOS)
+    Home.py                              (REEMPLAZA — ahora se llama "INTEGRAL")
+    README.md                            (REEMPLAZA — título INTEGRAL)
+    app_pages/3_Nomina.py                (REEMPLAZA — botón "Guardar plano del mes")
+    core/contable/__init__.py            (NUEVO)
+    core/contable/servicio_contable.py   (NUEVO/actualizado — crear_periodo seguro)
 
-## 2) REEMPLAZAR / SUBIR estos 3 archivos
-    Home.py                              (REEMPLAZA — sin "DIAN F350 (Muisca)" en el menú)
-    app_pages/10_Retencion_Fuente.py     (REEMPLAZA — botón "JSON extensión")
-    core/f350/muisca_adapter.py          (REEMPLAZA — json_casillas_planas)
+(La migración 014_nucleo_contable.sql ya la corriste en Supabase.)
 
-## Formato del JSON (el que pide TU extensión)
-Mapa plano {renglon: valor}, ej:
-    {"29": 5533840, "42": 608723, "31": 7163000, "44": 190000}
-Se pega en el cuadro "CASILLAS (JSON DE TU PLATAFORMA)" y luego
-"Copiar datos a los renglones". Los totales (130/136/138) NO se
-incluyen: los calcula la DIAN en el portal.
+## Qué cambia
+1) NOMBRE: la app aparece como "INTEGRAL" (pestaña del navegador, título de
+   inicio "📊 INTEGRAL — Gestión contable integral") y en el README.
+2) GUARDAR EN LA BASE: en Nómina, bajo "Plano del mes", hay un botón
+   "💾 Guardar plano del mes (AAAAMM) en INTEGRAL" que:
+     - crea el período si no existe (sin reabrir uno protegido),
+     - guarda el plano combinado (nómina + vacaciones + ajuste PILA) en
+       cn_movimientos con origen='nomina_mes',
+     - con "Reemplazar" borra primero lo de ese período/origen (no duplica).
+   Si el período está PROTEGIDO, bloquea el guardado.
 
-Nota: quedó también generar_doc_extension() (documento completo cs_id_...),
-pero NO es lo que usa esta extensión; se conserva por si acaso.
+## Seguridad
+- servicio_contable.crear_periodo ahora usa ignore_duplicates: si el período
+  ya existe, NO lo modifica (así no reabre un período protegido por accidente).

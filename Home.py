@@ -31,7 +31,7 @@ from auth.login import (
 # ============================================================
 
 st.set_page_config(
-    page_title="Plataforma Contable",
+    page_title="INTEGRAL",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -72,7 +72,8 @@ def home_page():
     sidebar_user_info()
 
     user = current_user()
-    st.title("📊 Plataforma Contable")
+    st.title("📊 INTEGRAL")
+    st.caption("Gestión contable integral")
     st.markdown(f"Bienvenido, **{user['email']}**")
     st.markdown("---")
 

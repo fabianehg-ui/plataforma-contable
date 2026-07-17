@@ -1,6 +1,6 @@
-# BorradorFácil 350 · versión 2.1.5
+# INTEGRAL
 
-Aplicación de escritorio para Windows con **carga automática de PDFs de Contai** y **exportación a PDF estilo DIAN**.
+Plataforma web de **gestión contable integral** (Streamlit + Supabase): nómina, retención en la fuente (F350), conciliación, impuestos y generación de planos contables.
 
 ---
 
