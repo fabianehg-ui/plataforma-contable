@@ -1,16 +1,18 @@
-# INTEGRAL — Estados financieros + Roadmap
+# INTEGRAL — Captura: crear comprobantes dentro del flujo
 
-## Archivos
-    app_pages/20_Contabilidad.py         (REEMPLAZA — +2 pestañas)
-    core/contable/servicio_contable.py   (REEMPLAZA — +estados financieros)
-    ROADMAP_INTEGRAL.md                  (documento, no va al repo salvo que quieras)
+## Archivo
+    app_pages/21_Captura.py   (REEMPLAZA)
 
-## Nuevo
-- 📈 Estado de resultados (PyG): ingresos (4) − costos (6,7) − gastos (5) =
-  utilidad, con detalle por grupo y export a Excel.
-- 🏛️ Balance general: activo (1), pasivo (2), patrimonio (3) + utilidad del
-  ejercicio, valida la ecuación patrimonial (Activo = Pas+Pat+Util).
-Ambos leen de cn_movimientos por rango/corte de período.
+## Qué cambió
+La creación de tipos de comprobante ya NO está escondida en la barra lateral:
+ahora está en el cuerpo de la página, en la sección "🧾 Tipos de comprobante",
+como un panel que se abre automáticamente cuando no tienes ninguno.
 
-El ROADMAP lista TODAS las funcionalidades de Contai, marca lo hecho/pendiente
-por fases, y deja cubos/medios magnéticos avanzados como mejoras finales.
+Desde ahí puedes:
+- Ver los comprobantes existentes (código y nombre).
+- Crear/actualizar uno escribiendo Código + Nombre.
+- Botón "⚡ Crear los 4 sugeridos" (recibo de caja, egreso, causación, nota).
+
+Con al menos un comprobante creado, sigues con la cabecera y las líneas del
+asiento normalmente. Si tu rol no tiene permiso (solo admin/superadmin puede
+crear comprobantes por RLS), sale un aviso claro en vez de fallar en silencio.
