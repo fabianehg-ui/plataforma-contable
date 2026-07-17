@@ -12,7 +12,13 @@ Usa los mapeos del propio repo:
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from core.f350.casillas import obtener_casillas_f350, AUTORRET_CASILLAS_F350
+
+# Plantilla del F350 v10 (misma estructura que consume la extensión del navegador)
+_PLANTILLA_EXT = Path(__file__).with_name("plantilla_f350_v10.json")
 
 # Totales del F350 (Res. 000031/2024)
 CASILLA_TOTAL_RENTA = 130
@@ -99,3 +105,99 @@ def casillas_desde_procesado(resultado: dict, incluir_totales: bool = True) -> d
             add(CASILLA_TOTAL_MAS_SANCIONES, total_ret + sanciones)
 
     return {"casillas": casillas, "avisos": avisos}
+
+
+def generar_doc_extension(
+    casillas: dict,
+    *,
+    nit,
+    dv,
+    razon_social,
+    anio,
+    periodo,
+    actividad_economica=None,
+    plantilla_path: str | None = None,
+) -> dict:
+    """Construye el JSON que se pega en la extensión del F350 para autollenar.
+
+    Es la versión OFFLINE de MuiscaF350Client.construir_doc(): parte de la
+    plantilla local del formulario y coloca cada casilla en su renglón
+    (cs_id_{renglon}), sin conectarse a la DIAN.
+
+    Args:
+        casillas: {numero_renglon: valor} (por ej. la salida de
+                  casillas_desde_procesado(...)["casillas"]).
+        nit, dv, razon_social: datos del aportante (encabezado).
+        anio, periodo: año y periodo (mes) de la declaración.
+        actividad_economica: código CIIU principal (renglón 27). Opcional.
+        plantilla_path: ruta a la plantilla; por defecto la del repo.
+
+    Returns:
+        dict con el documento completo listo para pegar en la extensión
+        (misma forma que plantilla_f350_v10.json). Incluye además la clave
+        'renglones_no_existentes' con los que no se encontraron, si los hay.
+    """
+    ruta = Path(plantilla_path) if plantilla_path else _PLANTILLA_EXT
+    base = json.loads(ruta.read_text(encoding="utf-8"))
+
+    doc = base.get("doc", base)
+    cab = doc["cab"]
+    cuerpo = doc["cuerpo"]
+    pie = doc.get("pie", {})
+
+    # Encabezado
+    cab["id"] = -1
+    cab["cs_id_1"] = int(anio)
+    cab["cs_id_3"] = int(periodo)
+    cab["cs_id_5"] = str(nit)
+    cab["cs_id_6"] = str(dv)
+    cab["cs_id_11"] = razon_social
+    if actividad_economica is not None and str(actividad_economica).strip():
+        cuerpo["cs_id_27"] = str(actividad_economica)
+
+    # Casillas -> renglones
+    no_existen = []
+    for renglon, valor in (casillas or {}).items():
+        clave = f"cs_id_{int(renglon)}"
+        v = int(round(float(valor or 0)))
+        if clave in cuerpo:
+            cuerpo[clave] = v
+        elif clave in pie:
+            pie[clave] = v
+        else:
+            no_existen.append(int(renglon))
+
+    resultado = {
+        "doc": doc,
+        "status": base.get("status", 200),
+        "statusText": base.get("statusText", "OK"),
+    }
+    if no_existen:
+        resultado["renglones_no_existentes"] = sorted(no_existen)
+    return resultado
+
+
+def json_extension_texto(doc_extension: dict) -> str:
+    """Serializa el DOC completo del F350 a texto JSON (formato cs_id_...).
+
+    OJO: esto NO es lo que pide la extensión 'DIAN F350 — Llenar renglones';
+    esa extensión usa el mapa plano {renglon: valor} de json_casillas_planas().
+    Se conserva por si se necesita el documento completo del formulario.
+    """
+    limpio = {k: v for k, v in doc_extension.items() if k != "renglones_no_existentes"}
+    return json.dumps(limpio, ensure_ascii=False, indent=1)
+
+
+def json_casillas_planas(casillas: dict) -> str:
+    """JSON plano {renglon: valor} para pegar en la extensión del F350.
+
+    Formato exacto que espera el cuadro 'CASILLAS (JSON DE TU PLATAFORMA)':
+        {"29": 5533840, "42": 608723, "31": 7163000, "44": 190000}
+    Llaves = número de renglón (string), valores = enteros.
+    """
+    plano = {
+        str(int(k)): int(round(float(v or 0)))
+        for k, v in (casillas or {}).items()
+        if int(round(float(v or 0))) != 0
+    }
+    return json.dumps(plano, ensure_ascii=False)

@@ -36,6 +36,10 @@ from core.f350 import (
     generar_pdf_formulario_350,
 )
 from core.f350.procesador import procesar_declaracion
+from core.f350.muisca_adapter import (
+    casillas_desde_procesado,
+    json_casillas_planas,
+)
 from core.f350 import servicios as svc
 
 
@@ -164,12 +168,14 @@ with tab_decl:
         elegida_label = st.selectbox("Selecciona", list(opciones.keys()))
         elegida_id = opciones[elegida_label]
 
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
             ver = st.button("👁️ Ver detalle", use_container_width=True)
         with col_b:
             generar_pdf = st.button("📄 Generar PDF", use_container_width=True)
         with col_c:
+            generar_json = st.button("🧩 JSON extensión", use_container_width=True)
+        with col_d:
             eliminar = st.button("🗑️ Eliminar", use_container_width=True, type="secondary")
 
         if eliminar:
@@ -197,6 +203,9 @@ with tab_decl:
 
         if generar_pdf:
             st.session_state["__decl_pdf"] = elegida_id
+
+        if generar_json:
+            st.session_state["__decl_json"] = elegida_id
 
         # Vista de detalle
         if st.session_state.get("__decl_seleccionada") == elegida_id:
@@ -323,6 +332,82 @@ with tab_decl:
                 st.success("PDF generado. Haz clic en el botón de arriba para descargarlo.")
             except Exception as e:
                 st.error(f"No se pudo generar el PDF: {e}")
+
+        # ── JSON para la extensión del F350 (autollenar el formulario) ──
+        if st.session_state.get("__decl_json") == elegida_id:
+            decl = svc.obtener_declaracion(sb, elegida_id)
+            movs = svc.listar_movimientos(sb, elegida_id)
+            st.divider()
+            st.markdown("### 🧩 JSON para la extensión del F350")
+            st.caption(
+                "Pégalo en el cuadro **CASILLAS (JSON DE TU PLATAFORMA)** de la "
+                "extensión y usa **Copiar datos a los renglones**. Es el mapa "
+                "plano {renglón: valor}; los totales los calcula la DIAN. "
+                "No se conecta a la DIAN."
+            )
+
+            # Reunir retenciones y autorretención (igual que para el PDF)
+            retenciones_j = []
+            iva_total_j = 0
+            for m in movs:
+                if m.get("concepto_asignado") == "IVA":
+                    iva_total_j += m["retencion"]
+                    continue
+                tipo_key = "PN" if m.get("tipo_inferido") == "Persona Natural" else "PJ"
+                retenciones_j.append({
+                    "concepto":  m.get("concepto_asignado") or "Otros pagos",
+                    "tipo":      tipo_key,
+                    "base":      m["base"],
+                    "retencion": m["retencion"],
+                })
+            concepto_autorret_j = (
+                "Contribuyentes exonerados 114-1"
+                if config.get("exonerado_art_114_1") else "Ventas"
+            )
+            autorretenciones_j = [{
+                "concepto":  concepto_autorret_j,
+                "base":      decl.get("base_autorretencion") or 0,
+                "retencion": decl.get("valor_autorretencion") or 0,
+            }]
+
+            resultado_like = {
+                "retenciones_agrupadas": retenciones_j,
+                "autorretenciones":      autorretenciones_j,
+                "totales": {
+                    "total_retenciones_renta": decl.get("total_retenciones_renta") or 0,
+                    "total_retenciones_iva":   iva_total_j or (decl.get("total_retenciones_iva") or 0),
+                },
+            }
+
+            try:
+                # incluir_totales=False: la DIAN calcula 130/136/138 sola
+                adap = casillas_desde_procesado(resultado_like, incluir_totales=False)
+                json_txt = json_casillas_planas(adap["casillas"])
+            except Exception as e:
+                st.error(f"No se pudo generar el JSON: {e}")
+                json_txt = None
+
+            if json_txt:
+                for aviso in adap.get("avisos", []):
+                    st.warning(f"⚠️ {aviso}")
+
+                st.caption(
+                    f"Empresa del JSON: **{empresa['razon_social']}** "
+                    f"(NIT {empresa['nit']}) · Periodo {decl['anio']}-{decl['mes']:02d}. "
+                    "Verifica que el portal esté en la MISMA empresa antes de llenar."
+                )
+                st.text_area(
+                    "CASILLAS (JSON de tu plataforma) — cópialo y pégalo en la extensión",
+                    value=json_txt,
+                    height=140,
+                )
+                periodo_nombre = f"{decl['anio']}-{decl['mes']:02d}"
+                st.download_button(
+                    "⬇️ Descargar JSON",
+                    data=json_txt.encode("utf-8"),
+                    file_name=f"F350_casillas_{empresa['nit']}_{periodo_nombre}.json",
+                    mime="application/json",
+                )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
