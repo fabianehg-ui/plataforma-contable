@@ -173,6 +173,12 @@ asistente_token_dian = st.Page(
     icon="📥",
     url_path="procesar-token-dian",
 )
+asistente_captura = st.Page(
+    "app_pages/21_Captura.py",
+    title="Captura de Comprobantes",
+    icon="✍️",
+    url_path="captura",
+)
 asistente_nomina = st.Page(
     "app_pages/3_Nomina.py",
     title="Nómina",
@@ -329,6 +335,7 @@ nav = st.navigation(
         "🤖 Asistente Contable": [
             asistente_xml_descargador,
             asistente_caja,
+            asistente_captura,
             asistente_nomina,
             asistente_prov,
             asistente_ventas_c13,

@@ -1,29 +1,26 @@
-# INTEGRAL — Libros y reportes contables
+# INTEGRAL — Captura de comprobantes (partida doble)
 
 ## Archivos
-    Home.py                              (REEMPLAZA — nueva página en menú Reportes)
-    app_pages/20_Contabilidad.py         (NUEVO)
-    core/contable/servicio_contable.py   (REEMPLAZA — +reportes e importación)
+    Home.py                              (REEMPLAZA — nueva página en Asistente Contable)
+    app_pages/21_Captura.py              (NUEVO)
+    core/contable/servicio_contable.py   (por si no lo tenías al día)
 
-(Requiere la migración 014 ya aplicada.)
+(Requiere migración 014 aplicada.)
 
 ## Qué agrega
-Nueva página "📚 Contabilidad (Libros)" en el menú Reportes, que lee de
-cn_movimientos y trae 5 pestañas:
+Nueva página "✍️ Captura de Comprobantes". Permite armar un documento de
+partida doble y guardarlo en cn_movimientos:
 
-1) ⚖️ Balance de prueba — por rango de períodos: saldo anterior, débitos,
-   créditos, saldo final por cuenta, con cuadre Db=Cr y export a Excel.
-2) 📒 Libro auxiliar — movimiento detallado de una cuenta y/o NIT, con
-   saldo anterior y saldo corriente. Export a Excel.
-3) 💳 Estado de cartera — saldo por tercero de las cuentas de cartera
-   (por defecto las que empiezan por 13). Export a Excel.
-4) 📥 Importar movimiento — sube un plano (.txt o .xlsx) con el formato de
-   11 columnas; el período se toma de la FECHA de cada línea. Sirve para
-   cargar HISTÓRICOS. Crea períodos y respeta los protegidos.
-5) 🗓️ Períodos — lista, muestra el cuadre del período y permite
-   abrir/proteger (estilo CNPERIOD).
+- Tipos de comprobante: se gestionan en la barra lateral (botón "Crear los 4
+  sugeridos": recibo de caja, egreso, causación, nota).
+- Cabecera: comprobante, fecha, documento (consecutivo), NIT, detalle.
+- Líneas: editor tipo Excel; escribes cuenta y el valor en Débito o Crédito.
+- Valida en vivo: total Db, total Cr, diferencia; avisa si no cuadra o si una
+  línea tiene débito y crédito a la vez.
+- Guardar: solo si cuadra (Db=Cr) y el período NO está protegido. Queda con
+  origen='captura' y se ve en 📚 Contabilidad (auxiliar, balance, cartera).
 
-## Nota
-- Reportes leen con paginación (maneja miles de movimientos).
-- El "aging" (edades de mora) de cartera se puede añadir cuando el import
-  traiga fechas de vencimiento por documento.
+## Ejemplos del ciclo
+- Egreso        → Db gasto/pasivo, Cr banco.
+- Causación     → Db gasto + Db IVA, Cr proveedor + Cr retenciones.
+- Recibo de caja→ Db caja/banco, Cr cartera/ingreso.
