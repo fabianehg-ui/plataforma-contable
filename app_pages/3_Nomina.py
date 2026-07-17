@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import io
+import calendar
 from datetime import date
 
 import streamlit as st
@@ -44,6 +45,20 @@ try:
     PILA_DISPONIBLE = True
 except ImportError:
     PILA_DISPONIBLE = False
+
+# Lectura de vacaciones / liquidaciones definitivas (opcional)
+try:
+    from core.lectores.lector_vacaciones import (
+        leer_documento as leer_vac_liq,
+        vacaciones_a_dataframe,
+        definitiva_a_dataframe,
+        exportar_excel as exportar_vac_liq_excel,
+        generar_plano_vacaciones,
+        plano_a_tsv as plano_vac_a_tsv,
+    )
+    VAC_LIQ_DISPONIBLE = True
+except ImportError:
+    VAC_LIQ_DISPONIBLE = False
 
 
 # ============================================================
@@ -149,7 +164,11 @@ with tab_procesar:
         "Comp 9 (provisión del último día del mes).\n"
         "- La **prefactura PILA** (opcional) se usa para **comparar visualmente** lo "
         "provisionado vs lo realmente pagado en aportes.\n"
-        "- Si no subes PILA, el sistema procesa solo la nómina y genera el plano normalmente."
+        "- Las **vacaciones y liquidaciones definitivas** (opcional) se suben cuando "
+        "aparezcan en el movimiento del mes. A las vacaciones (no definitivas) se les "
+        "deduce 4% pensión + 4% salud.\n"
+        "- Si no subes PILA ni vacaciones, el sistema procesa solo la nómina y genera el "
+        "plano normalmente."
     )
 
     # Selector de periodo
@@ -196,6 +215,22 @@ with tab_procesar:
         )
         if not PILA_DISPONIBLE:
             st.caption("⚠️ El lector de PILA no está instalado en el servidor.")
+
+    # Vacaciones y liquidaciones definitivas (opcional, cuando las haya en el mes)
+    st.markdown("**🏖️ Vacaciones y liquidaciones definitivas** _(opcional)_")
+    archivos_vac = st.file_uploader(
+        "PDF de vacaciones y/o liquidaciones definitivas del mes",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="archivos_vac_liq",
+        help="Súbelos cuando en el movimiento del mes haya pago de vacaciones "
+             "o liquidaciones definitivas. A las vacaciones (no definitivas) se les "
+             "deduce 4% pensión + 4% salud; en liquidación definitiva las vacaciones "
+             "NO llevan esa deducción.",
+        disabled=not VAC_LIQ_DISPONIBLE,
+    )
+    if not VAC_LIQ_DISPONIBLE:
+        st.caption("⚠️ El lector de vacaciones/liquidaciones no está instalado en el servidor.")
 
     # === Procesar nómina ===
     if archivo_nomina is not None:
@@ -450,6 +485,155 @@ with tab_procesar:
                     file_name=f"plano_nomina_{int(anio)}_{int(mes_idx):02d}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
+                )
+
+
+    # === Vacaciones y liquidaciones definitivas del mes ===
+    if archivos_vac and VAC_LIQ_DISPONIBLE:
+        st.markdown("---")
+        st.markdown("### 🏖️ Vacaciones y liquidaciones definitivas del mes")
+        st.caption(
+            "Documentos opcionales del movimiento del mes. A las **vacaciones** "
+            "(no definitivas) se les aplica 4% pensión + 4% salud; en una "
+            "**liquidación definitiva** las vacaciones NO llevan esa deducción."
+        )
+
+        for archivo_vl in archivos_vac:
+            with st.expander(f"📄 {archivo_vl.name}", expanded=len(archivos_vac) == 1):
+                try:
+                    dvl = leer_vac_liq(archivo_vl)
+                except Exception as e:
+                    st.error(f"❌ No se pudo leer {archivo_vl.name}: {e}")
+                    continue
+
+                # ---------- VACACIONES ----------
+                if dvl.get("tipo") == "vacaciones":
+                    st.success("Tipo: **Liquidación de vacaciones** (aplica 4% + 4%)")
+                    cva, cvb, cvc = st.columns(3)
+                    with cva:
+                        st.metric("Empleado", dvl.get("nombre", "—") or "—")
+                        st.caption(f"Cédula: {dvl.get('cedula', '—') or '—'}")
+                    with cvb:
+                        st.metric(
+                            "Total vacaciones",
+                            f"$ {dvl.get('total_vacaciones', 0):,}".replace(",", "."),
+                        )
+                        st.caption(f"{dvl.get('total_dias', 0)} días")
+                    with cvc:
+                        st.metric(
+                            "Neto a pagar",
+                            f"$ {dvl.get('neto_calculado', 0):,}".replace(",", "."),
+                        )
+
+                    st.dataframe(
+                        vacaciones_a_dataframe(dvl),
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(format="$ %d"),
+                        },
+                    )
+
+                    dpa, dpb, dpc = st.columns(3)
+                    with dpa:
+                        st.metric("Pensión 4%", f"$ {dvl['deduccion_pension']:,}".replace(",", "."))
+                    with dpb:
+                        st.metric("Salud 4%", f"$ {dvl['deduccion_salud']:,}".replace(",", "."))
+                    with dpc:
+                        st.metric("Deducción 8%", f"$ {dvl['deduccion_total_calculada']:,}".replace(",", "."))
+
+                    if dvl.get("deduccion_documento"):
+                        if dvl.get("deduccion_cuadra"):
+                            st.success("✅ La deducción 4%+4% coincide con la del documento.")
+                        else:
+                            st.warning("⚠️ La deducción del documento difiere de 4%+4%. Revísala.")
+
+                    # --- Plano contable del pago de vacaciones (Comp 11) ---
+                    st.markdown("**📄 Plano contable · pago de vacaciones (Comp 11)**")
+                    ultimo_dia = calendar.monthrange(int(anio), int(mes_idx))[1]
+                    fecha_plano = f"{int(mes_idx):02d}/{ultimo_dia:02d}/{int(anio)}"
+                    df_vac_plano = generar_plano_vacaciones(
+                        dvl,
+                        comprobante="11",
+                        documento=str(int(mes_idx)),
+                        fecha=fecha_plano,
+                        centro_costo="",
+                    )
+                    st.dataframe(
+                        df_vac_plano, use_container_width=True, hide_index=True,
+                        column_config={
+                            "VALOR": st.column_config.NumberColumn(format="%d"),
+                            "BASE": st.column_config.NumberColumn(format="%d"),
+                        },
+                    )
+                    db_v = int(df_vac_plano[df_vac_plano["TR"] == "1"]["VALOR"].sum())
+                    cr_v = int(df_vac_plano[df_vac_plano["TR"] == "2"]["VALOR"].sum())
+                    if db_v == cr_v:
+                        st.success(f"✅ Cuadra Db = Cr = $ {db_v:,}".replace(",", "."))
+                    else:
+                        st.error(f"❌ Descuadre: $ {db_v - cr_v:,}".replace(",", "."))
+
+                    cpa, cpb = st.columns(2)
+                    with cpa:
+                        st.download_button(
+                            "📥 Plano (.txt)",
+                            data=plano_vac_a_tsv(df_vac_plano, incluir_enc_excel),
+                            file_name=f"plano_vacaciones_{int(anio)}_{int(mes_idx):02d}_{dvl.get('cedula','')}.txt",
+                            mime="text/tab-separated-values",
+                            key=f"dlp_txt_{archivo_vl.name}",
+                            use_container_width=True,
+                        )
+                    with cpb:
+                        _bio = io.BytesIO()
+                        with pd.ExcelWriter(_bio, engine="openpyxl") as _w:
+                            df_vac_plano.to_excel(_w, sheet_name="PLANO", index=False)
+                        st.download_button(
+                            "📥 Plano (.xlsx)",
+                            data=_bio.getvalue(),
+                            file_name=f"plano_vacaciones_{int(anio)}_{int(mes_idx):02d}_{dvl.get('cedula','')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"dlp_xlsx_{archivo_vl.name}",
+                            use_container_width=True,
+                        )
+
+                # ---------- LIQUIDACIÓN DEFINITIVA ----------
+                else:
+                    st.info("Tipo: **Liquidación definitiva** (las vacaciones NO llevan deducción)")
+                    ca, cb = st.columns(2)
+                    with ca:
+                        st.metric("Empleado", dvl.get("nombre", "—") or "—")
+                        st.caption(f"Cédula: {dvl.get('cedula', '—') or '—'}")
+                    with cb:
+                        st.caption(f"Ingreso: {dvl.get('fecha_ingreso', '—') or '—'}")
+                        st.caption(f"Retiro: {dvl.get('fecha_retiro', '—') or '—'}")
+
+                    ddf = definitiva_a_dataframe(dvl)
+                    if len(ddf):
+                        st.dataframe(
+                            ddf, use_container_width=True, hide_index=True,
+                            column_config={
+                                "Valor": st.column_config.NumberColumn(format="$ %d"),
+                            },
+                        )
+                    else:
+                        st.warning("No se detectaron conceptos con importe. Revisa el texto crudo.")
+
+                    if dvl.get("valor_vacaciones"):
+                        st.warning(
+                            f"🏖️ Vacaciones dentro de la liquidación: "
+                            f"$ {dvl['valor_vacaciones']:,}".replace(",", ".") +
+                            " — **sin** deducción de 4% pensión ni 4% salud."
+                        )
+
+                    with st.expander("📄 Ver texto crudo del PDF"):
+                        st.code(dvl.get("texto_crudo", ""), language="text")
+
+                # ---------- Descarga ----------
+                st.download_button(
+                    "📊 Descargar Excel del desglose",
+                    data=exportar_vac_liq_excel(dvl),
+                    file_name=f"{archivo_vl.name.rsplit('.', 1)[0]}_desglose.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_vac_{archivo_vl.name}",
                 )
 
 

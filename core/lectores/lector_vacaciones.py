@@ -61,6 +61,20 @@ PORC_PENSION = 0.04
 PORC_SALUD = 0.04
 PORC_TOTAL_SS = PORC_PENSION + PORC_SALUD  # 8%
 
+# Cuentas PUC para el asiento del PAGO de vacaciones.
+# La cuenta de débito (pago de vacaciones) la definió el usuario: 25301501.
+# Las contrapartidas se reutilizan del módulo de nómina (procesador_nomina).
+CUENTA_PAGO_VACACIONES = "25301501"   # Db — pago de vacaciones (pasivo)
+CTA_DED_PENSION = "25503002"          # Cr — aporte pensión trabajador (4%)
+CTA_DED_SALUD = "25500502"            # Cr — deducción salud trabajador (4%)
+CTA_NETO = "25050501"                 # Cr — neto a pagar (salarios por pagar)
+
+# Columnas del plano de Contai (idénticas a procesador_nomina.COLUMNAS_PLANO)
+COLUMNAS_PLANO = [
+    "CUENTA", "COMPROBANTE", "FECHA", "DOCUMENTO", "DOC REFERENCIA",
+    "NIT", "DETALLE", "TR", "VALOR", "BASE", "CENTRO DE COSTO",
+]
+
 
 # ============================================================
 # Utilidades de números
@@ -413,6 +427,89 @@ def exportar_excel(d: dict) -> bytes:
             encabezado_vacaciones(d).to_excel(xl, sheet_name="Encabezado", index=False)
             vacaciones_a_dataframe(d).to_excel(xl, sheet_name="Desglose", index=False)
     return buf.getvalue()
+
+
+def generar_plano_vacaciones(
+    d: dict,
+    comprobante: str = "11",
+    documento: str = "",
+    fecha: str = "",
+    doc_referencia: str = "",
+    centro_costo: str = "",
+    cuenta_pago: str = CUENTA_PAGO_VACACIONES,
+) -> pd.DataFrame:
+    """Genera el plano contable del PAGO de vacaciones (solo tipo 'vacaciones').
+
+    Asiento (cuadra exacto):
+        Db  {cuenta_pago}   TOTAL VACACIONES
+          Cr  25503002      pensión 4%
+          Cr  25500502      salud 4%
+          Cr  25050501      neto a pagar
+
+    Args:
+        d: dict devuelto por leer_documento (tipo 'vacaciones').
+        comprobante: número de comprobante (por defecto '11', causación nómina).
+        documento: consecutivo del documento.
+        fecha: fecha en formato MM/DD/AAAA. Si viene vacía se deja en blanco.
+        doc_referencia: referencia (por defecto la cédula del empleado).
+        centro_costo: centro de costo (por defecto en blanco).
+        cuenta_pago: cuenta de débito del pago de vacaciones.
+
+    Returns:
+        DataFrame con las columnas de COLUMNAS_PLANO.
+
+    Raises:
+        ValueError si el documento no es de tipo vacaciones o no cuadra.
+    """
+    if d.get("tipo") != "vacaciones":
+        raise ValueError(
+            "El plano de pago de vacaciones solo aplica a documentos de tipo "
+            "'vacaciones', no a liquidaciones definitivas."
+        )
+
+    total = int(d.get("total_vacaciones", 0))
+    pension = int(d.get("deduccion_pension", 0))
+    salud = int(d.get("deduccion_salud", 0))
+    neto = total - pension - salud  # garantiza cuadre exacto
+
+    nit = d.get("cedula", "") or ""
+    ref = doc_referencia or nit
+    detalle = f"PAGO VACACIONES {d.get('nombre', '')}".strip()
+
+    def _fila(cuenta, tr, valor, base=0):
+        return {
+            "CUENTA": cuenta,
+            "COMPROBANTE": str(comprobante),
+            "FECHA": fecha,
+            "DOCUMENTO": str(documento),
+            "DOC REFERENCIA": str(ref),
+            "NIT": str(nit),
+            "DETALLE": detalle,
+            "TR": tr,           # '1' = Db, '2' = Cr
+            "VALOR": int(valor),
+            "BASE": int(base),
+            "CENTRO DE COSTO": centro_costo,
+        }
+
+    filas = [
+        _fila(cuenta_pago, "1", total),          # Db pago de vacaciones
+        _fila(CTA_DED_PENSION, "2", pension, base=total),  # Cr pensión 4%
+        _fila(CTA_DED_SALUD, "2", salud, base=total),      # Cr salud 4%
+        _fila(CTA_NETO, "2", neto),              # Cr neto a pagar
+    ]
+    return pd.DataFrame(filas, columns=COLUMNAS_PLANO)
+
+
+def plano_a_tsv(df: pd.DataFrame, incluir_encabezado_excel: bool = True) -> bytes:
+    """Exporta el plano a texto tab-delimitado CRLF (formato Contai)."""
+    lineas = []
+    if incluir_encabezado_excel:
+        lineas.append("sep=\t")
+    df_out = df[COLUMNAS_PLANO].copy()
+    lineas.append("\t".join(COLUMNAS_PLANO))
+    for _, row in df_out.iterrows():
+        lineas.append("\t".join(str(row[c]) for c in COLUMNAS_PLANO))
+    return ("\r\n".join(lineas) + "\r\n").encode("utf-8")
 
 
 def resumen_texto(d: dict) -> str:

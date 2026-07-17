@@ -1,21 +1,31 @@
-# Cómo subir estos archivos a tu repo (plataforma-contable)
+# Cómo subir estos archivos (plataforma-contable)
 
-Respeta EXACTAMENTE estas rutas dentro del repo:
+Todo se maneja DENTRO del módulo de Nómina. NO se crea página nueva.
 
-    Home.py                                  (REEMPLAZA el que ya tienes)
-    app_pages/3b_Vacaciones_Liquidaciones.py (NUEVO)
-    core/lectores/lector_vacaciones.py       (NUEVO)
+Respeta EXACTAMENTE estas rutas:
 
-## Pasos
-1. Sube `core/lectores/lector_vacaciones.py` a la carpeta `core/lectores/`.
-2. Sube `app_pages/3b_Vacaciones_Liquidaciones.py` a la carpeta `app_pages/`.
-3. Reemplaza `Home.py` en la raíz por el de esta entrega (ya trae el
-   `st.Page` declarado y agregado al `st.navigation`, grupo "Asistente Contable").
-4. Railway redespliega solo. El link aparece en el menú como
-   "Vacaciones y Liquidaciones" (🏖️), justo debajo de Nómina.
+    app_pages/3_Nomina.py                (REEMPLAZA el que ya tienes)
+    core/lectores/lector_vacaciones.py   (NUEVO)
+
+## Qué cambió
+- En la pestaña "Procesar nómina" ahora, además de la nómina y la PILA,
+  hay un tercer cargador OPCIONAL: **Vacaciones y liquidaciones definitivas**
+  (acepta varios PDF a la vez), para cuando aparezcan en el movimiento del mes.
+- Por cada PDF de VACACIONES:
+    * Extrae los datos y muestra el desglose.
+    * Aplica 4% pensión + 4% salud sobre el TOTAL VACACIONES y verifica
+      contra la deducción del documento.
+    * Genera el PLANO CONTABLE (Comp 11) del pago de vacaciones, cuadrado:
+        Db 25301501  Pago de vacaciones            (total)
+        Cr 25503002  Aporte pensión trabajador 4%
+        Cr 25500502  Deducción salud trabajador 4%
+        Cr 25050501  Neto a pagar (salarios x pagar)
+      Descargable en .txt (plano Contai) y .xlsx. Sin centro de costo.
+- Por cada PDF de LIQUIDACIÓN DEFINITIVA: muestra los conceptos detectados;
+  las vacaciones dentro de la liquidación NO llevan la deducción de 4%+4%.
 
 ## Recordatorio
-- `requirements.txt` ya tiene `pdfplumber` (se usa para leer el PDF).
-- Regla aplicada: a las VACACIONES (no definitivas) se les deduce 4% pensión
-  + 4% salud sobre el TOTAL VACACIONES. En LIQUIDACIÓN DEFINITIVA las
-  vacaciones NO llevan esa deducción.
+- requirements.txt ya trae pdfplumber (necesario para leer el PDF).
+- Home.py NO se toca (no hay página nueva).
+- Ejemplo validado (María Yorladis, mayo 2026):
+  TOTAL 1.870.741 → pensión 74.830 + salud 74.829 = 149.659 → neto 1.721.082.
