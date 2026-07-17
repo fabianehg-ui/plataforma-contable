@@ -90,7 +90,7 @@ def home_page():
     with col1:
         st.metric("Empresas asignadas", len(empresas))
     with col2:
-        st.metric("Módulos disponibles", "18")
+        st.metric("Módulos disponibles", "19")
     with col3:
         st.metric("Sesión", "Activa")
 
@@ -208,6 +208,12 @@ asistente_pila = st.Page(
     title="PILA",
     icon="📎",
     url_path="pila",
+)
+asistente_bancos = st.Page(
+    "app_pages/19_Bancos_a_Contai.py",
+    title="Bancos a Contai",
+    icon="🏦",
+    url_path="bancos-contai",
 )
 asistente_xml_descargador = st.Page(
     "app_pages/5b_Descargador_XML.py",
@@ -331,6 +337,7 @@ nav = st.navigation(
             asistente_siigo,
             asistente_siigo_web,
             asistente_pila,
+            asistente_bancos,
         ],
         "📊 Herramientas Tributarias": [
             trib_radian,
