@@ -1,37 +1,57 @@
-# CÓMO SUBIR — Libro Mayor y Balances + Comprobante de Diario (INTEGRAL)
+# CÓMO SUBIR — Atajos de Captura: Conceptos programados + Lectura de facturas (INTEGRAL)
 
-Entrega del ítem de roadmap **#2: Libro mayor y libros oficiales + comprobante
-de diario (impresión del asiento)**. Fecha: 18-jul-2026.
+Convierte la Captura en casi-sin-digitación: conceptos programados (IVA y
+retención parametrizados) que auto-arman el asiento, y lectura de facturas
+(XML DIAN, PDF, imagen) para prellenar valores. Fecha: 18-jul-2026.
 
-## Archivos (respetan la estructura del repo)
+## 1. Correr la migración (Supabase → SQL Editor → pegar → Run)
+
+**`db/migrations/016_conceptos_iva_retencion.sql`** — crea 3 tablas con RLS:
+`cn_tipos_iva`, `cn_tipos_retencion`, `cn_conceptos`. (Se crean vacías; el
+juego estándar se siembra por empresa desde la UI, ver paso 4.)
+
+> Recordatorio: la **015_terceros.sql** también sigue pendiente de correr.
+
+## 2. Archivos (estructura del repo)
 
 | Archivo | Estado | Qué hace |
 |---|---|---|
-| `core/contable/servicio_contable.py` | **MOD** | + `libro_mayor` / `_calc_libro_mayor` (con nivel de agregación), + `listar_comprobantes_periodo` / `_agrupar_comprobantes` (libro diario), + `comprobante_diario` / `_calc_comprobante` (arma el asiento). |
-| `core/contable/pdf_comprobante.py` | **NUEVO** | `generar_pdf_comprobante(datos)` → bytes. Impresión del asiento con reportlab (encabezado empresa, líneas Db/Cr, totales, cuadre, firmas). |
-| `app_pages/20_Contabilidad.py` | **MOD** | Dos tabs nuevos: **📓 Libro mayor** (y balances, por nivel) y **🧾 Comprobante de diario** (selector por período, asiento, PDF/Excel, y libro diario del período). |
-| `tests/test_libro_mayor_comprobante.py` | **NUEVO** | 17 pruebas puras (agregación por nivel, saldo anterior/final, cuadre por asiento, PDF válido). |
+| `db/migrations/016_conceptos_iva_retencion.sql` | **NUEVO** | Tablas de tipos IVA/retención y conceptos + RLS + grants. |
+| `core/contable/conceptos.py` | **NUEVO** | CRUD de tipos y conceptos; `aplicar_concepto(base, tipo_iva, retenciones, …)` que genera el asiento cuadrado Db=Cr; `sembrar_estandar()` con el juego colombiano. |
+| `core/contable/lector_factura.py` | **NUEVO** | `leer_factura(nombre, bytes)` → dict normalizado. XML reusa el parser UBL (`parsear_xml_dian`), PDF con pdfplumber+heurística, imagen con OCR (tesseract). |
+| `app_pages/21_Captura.py` | **MOD** | Bloque **📄 Leer factura** (prellena cabecera y base) y **⚡ Concepto programado** (autollena las líneas, editables). |
+| `app_pages/23_Conceptos.py` | **NUEVO** | Pantalla para administrar conceptos y tarifas + botón **⚡ Sembrar estándar**. |
+| `Home.py` | **MOD** | Registra la página **🧩 Conceptos y tarifas** en el menú Sistema. |
+| `tests/test_conceptos_lector.py` | **NUEVO** | 22 pruebas puras (cuadre de asientos, reteIVA sobre IVA, lectura XML, heurística de texto). |
+| `requirements.txt` | **MOD** | + `pytesseract`, `Pillow` (para OCR de imagen). |
+| `Dockerfile` | **MOD** | + `tesseract-ocr` y `tesseract-ocr-spa` (binario OCR). |
 
-## Pasos
+## 3. Desplegar
 
-1. Copia los 4 archivos en las mismas rutas del repo (reemplaza los MOD).
-2. **No requiere migración nueva.** Todo se lee de `cn_movimientos` y
-   `cn_plan_cuentas` / `cn_comprobantes` que ya existen (migración 014).
-3. `reportlab` ya está en `requirements.txt` (se usa en el F350), no hay que
-   agregar dependencias.
-4. No hay cambios en `Home.py`: los tabs viven dentro de la página
-   **Contabilidad (Libros)** que ya está registrada.
-5. (Opcional) Corre las pruebas: `pytest tests/test_libro_mayor_comprobante.py -v`.
+1. Copia todos los archivos en sus rutas.
+2. `requirements.txt` y `Dockerfile` cambiaron: en el próximo deploy de Railway
+   se instalan `pytesseract`/`Pillow` y el binario `tesseract`. **Sin ese deploy,
+   XML y PDF funcionan igual; solo el OCR de imagen queda deshabilitado** (la app
+   avisa con un mensaje claro, no se rompe).
+3. `reportlab`, `pdfplumber` y `lxml` ya estaban; el parser UBL ya existía.
 
-## Notas de uso
+## 4. Primer uso
 
-- **Libro Mayor y Balances**: elige rango Desde/Hasta y el *nivel de agregación*
-  (Clase 1 díg · Grupo/Mayor 2 díg · Cuenta 4 díg · Subcuenta 6 díg · Auxiliar
-  completo). Muestra saldo anterior, débitos, créditos y saldo final por cuenta,
-  con verificación de cuadre y descarga a Excel. El nivel "Grupo/Mayor (2 díg)"
-  es el libro mayor oficial clásico.
-- **Comprobante de diario**: elige período → *Cargar comprobantes* → aparece el
-  **libro diario** del período (lista cronológica de asientos con su cuadre) y un
-  selector de asiento. Al *Ver/imprimir* se muestra el asiento (débitos primero)
-  y se puede descargar el **PDF** del comprobante o el Excel.
-- El PDF marca claramente si el asiento **cuadra** (Db = Cr) o descuadra.
+1. Menú **⚙️ Sistema → 🧩 Conceptos y tarifas** → botón **⚡ Sembrar estándar**.
+   Crea tipos de IVA (19/5/0 y generados), retenciones (compras 2.5%, servicios
+   4/6%, honorarios 10/11%, arrendamiento 3.5%, reteIVA 15%, reteICA) y conceptos
+   comunes de compra/venta. **Revisa y ajusta las cuentas a tu PUC** (las cuentas
+   sembradas son defaults del PUC comercial).
+2. En **✍️ Captura**:
+   - **📄 Leer factura**: sube el XML/PDF/imagen → prellena NIT, número, fecha y base.
+   - **⚡ Concepto programado**: elige el concepto y confirma la base → **Generar
+     líneas** arma el asiento (Db=Cr) ya editable. Ajusta y **Guardar**.
+
+## Notas contables
+
+- Cada retención define su **base de cálculo**: `base` (retefuente, reteICA) o
+  `iva` (reteIVA = 15% del IVA). Editable por tarifa/cuenta.
+- Un concepto de **compra** arma: Db cuenta_base + Db IVA − Cr retención(es) −
+  Cr contrapartida (neto). El de **venta** es el simétrico. Todo cuadra Db=Cr.
+- El lector de XML es exacto (confianza *alta*); PDF/imagen son *mejor esfuerzo*
+  (confianza media/baja) y siempre quedan editables antes de guardar.

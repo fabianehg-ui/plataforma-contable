@@ -20,6 +20,36 @@ from auth.login import require_auth, sidebar_user_info, current_user
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from db.supabase_client import get_supabase
 from core.contable import servicio_contable as cont
+from core.contable import conceptos as cp
+from core.contable import lector_factura as lector
+
+
+COLS_EDITOR = ["Cuenta", "Detalle", "NIT", "Débito", "Crédito", "Base", "Centro costo"]
+
+
+def _lineas_vacias(n: int = 4) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"Cuenta": "", "Detalle": "", "NIT": "", "Débito": 0, "Crédito": 0,
+          "Base": 0, "Centro costo": ""} for _ in range(n)],
+        columns=COLS_EDITOR,
+    )
+
+
+def _a_editor_df(lineas: list[dict]) -> pd.DataFrame:
+    """Convierte las líneas de aplicar_concepto() al layout del editor."""
+    filas = []
+    for l in lineas:
+        filas.append({
+            "Cuenta": l.get("cuenta", ""),
+            "Detalle": l.get("detalle", ""),
+            "NIT": l.get("nit", ""),
+            "Débito": l["valor"] if l["tr"] == "1" else 0,
+            "Crédito": l["valor"] if l["tr"] == "2" else 0,
+            "Base": l.get("base", 0),
+            "Centro costo": "",
+        })
+    df = pd.DataFrame(filas, columns=COLS_EDITOR)
+    return pd.concat([df, _lineas_vacias(1)], ignore_index=True)
 
 
 require_auth()
@@ -95,24 +125,81 @@ if not comprobantes:
 
 
 # ============================================================
+# Estado de atajos
+# ============================================================
+st.session_state.setdefault("captura_ver", 0)
+if "captura_lineas" not in st.session_state:
+    st.session_state["captura_lineas"] = _lineas_vacias()
+
+
+# ============================================================
+# 📄 Leer factura (XML / PDF / imagen) — prellenar
+# ============================================================
+with st.expander("📄 Leer factura (XML DIAN · PDF · imagen) para prellenar", expanded=False):
+    st.caption("Sube la factura y extraigo NIT, número, fecha y valores (base, IVA, "
+               "retenciones, total). El XML DIAN es exacto; PDF/imagen es mejor esfuerzo.")
+    up = st.file_uploader(
+        "Factura", type=["xml", "pdf", "png", "jpg", "jpeg", "tiff", "tif", "webp"],
+        key="fac_file")
+    if up is not None and st.button("📥 Leer y prellenar", key="btn_leer_fac"):
+        try:
+            datos = lector.leer_factura(up.name, up.read())
+            st.session_state["factura_leida"] = datos
+            if datos.get("nit"):
+                st.session_state["cap_nit"] = datos["nit"]
+            if datos.get("numero"):
+                st.session_state["cap_doc"] = str(datos["numero"])
+            nom = datos.get("nombre") or ""
+            st.session_state["cap_det"] = (f"Factura {datos.get('numero', '')} {nom}").strip()
+            base_sug = datos.get("base") or max(0, int(datos.get("total", 0)) - int(datos.get("iva", 0)))
+            st.session_state["cap_base"] = int(base_sug)
+            f = datos.get("fecha")
+            if f and isinstance(f, str) and len(f) == 10:
+                try:
+                    y, m, d = (int(x) for x in f.split("-"))
+                    st.session_state["cap_fecha"] = date(y, m, d)
+                except Exception:
+                    pass
+            st.rerun()
+        except Exception as e:
+            st.error(f"No se pudo leer la factura: {e}")
+
+    fl = st.session_state.get("factura_leida")
+    if fl:
+        st.success(
+            f"Leída ({fl['formato']}, confianza **{fl['confianza']}**): "
+            f"NIT {fl.get('nit') or '—'} · base $ {int(fl.get('base', 0)):,} · "
+            f"IVA $ {int(fl.get('iva', 0)):,} · reteFte $ {int(fl.get('rete_fuente', 0)):,} · "
+            f"total $ {int(fl.get('total', 0)):,}".replace(",", "."))
+        for a in fl.get("advertencias", []):
+            st.warning("⚠️ " + a)
+
+
+# ============================================================
 # Cabecera del documento
 # ============================================================
 st.markdown("### 1️⃣ Cabecera")
+st.session_state.setdefault("cap_fecha", date.today())
+st.session_state.setdefault("cap_doc", "")
+st.session_state.setdefault("cap_nit", "")
+st.session_state.setdefault("cap_det", "")
+st.session_state.setdefault("cap_base", 0)
+
 c1, c2, c3 = st.columns(3)
 with c1:
     opciones = {f"{c['codigo']} · {c['nombre']}": c["codigo"] for c in comprobantes}
-    comp_label = st.selectbox("Comprobante", list(opciones.keys()))
+    comp_label = st.selectbox("Comprobante", list(opciones.keys()), key="cap_comp")
     comp_cod = opciones[comp_label]
 with c2:
-    fecha = st.date_input("Fecha", value=date.today(), format="DD/MM/YYYY")
+    fecha = st.date_input("Fecha", key="cap_fecha", format="DD/MM/YYYY")
 with c3:
-    documento = st.text_input("Documento (consecutivo)", value="")
+    documento = st.text_input("Documento (consecutivo)", key="cap_doc")
 
 c4, c5 = st.columns([1, 2])
 with c4:
-    nit_cab = st.text_input("NIT / tercero (opcional)", value="")
+    nit_cab = st.text_input("NIT / tercero (opcional)", key="cap_nit")
 with c5:
-    detalle_cab = st.text_input("Detalle / concepto", value="")
+    detalle_cab = st.text_input("Detalle / concepto", key="cap_det")
 
 periodo_cod = f"{fecha.year}{fecha.month:02d}"
 if cont.periodo_protegido(sb, emp["id"], periodo_cod):
@@ -120,22 +207,76 @@ if cont.periodo_protegido(sb, emp["id"], periodo_cod):
 
 
 # ============================================================
+# ⚡ Concepto programado — autollenar las líneas
+# ============================================================
+st.markdown("### ⚡ Concepto programado")
+conceptos_lst = cp.listar_conceptos(sb, emp["id"])
+if not conceptos_lst:
+    st.info("Aún no hay conceptos. Créalos en **🧩 Conceptos y tarifas** (menú Sistema) "
+            "o siembra el catálogo estándar desde allí.")
+else:
+    tipos_iva = cp.listar_tipos_iva(sb, emp["id"])
+    tipos_ret = cp.listar_tipos_retencion(sb, emp["id"])
+    iva_by = {t["codigo"]: t for t in tipos_iva}
+    ret_by = {t["codigo"]: t for t in tipos_ret}
+
+    cc1, cc2 = st.columns([3, 2])
+    with cc1:
+        c_op = {f"{c['codigo']} · {c['nombre']}": c for c in conceptos_lst}
+        c_lbl = st.selectbox("Concepto", list(c_op.keys()), key="cap_concepto")
+        concepto = c_op[c_lbl]
+    with cc2:
+        base_val = st.number_input("Base gravable", min_value=0, step=1000, key="cap_base")
+
+    ci1, ci2 = st.columns(2)
+    with ci1:
+        iva_ops = ["(sin IVA)"] + [t["codigo"] for t in tipos_iva]
+        iva_def = concepto.get("tipo_iva_codigo") if concepto.get("maneja_iva") else None
+        iva_idx = iva_ops.index(iva_def) if iva_def in iva_ops else 0
+        iva_sel = st.selectbox(
+            "Tipo de IVA", iva_ops, index=iva_idx,
+            format_func=lambda k: k if k == "(sin IVA)"
+            else f"{k} · {iva_by[k]['tarifa']}%")
+    with ci2:
+        ret_def = ([concepto["tipo_retencion_codigo"]]
+                   if (concepto.get("maneja_retencion") and concepto.get("tipo_retencion_codigo"))
+                   else [])
+        ret_sel = st.multiselect(
+            "Retenciones", [t["codigo"] for t in tipos_ret],
+            default=[r for r in ret_def if r in ret_by],
+            format_func=lambda k: f"{k} · {ret_by[k]['tarifa']}% ({ret_by[k].get('base_calculo')})")
+
+    # Vista previa del asiento
+    tiva = iva_by.get(iva_sel) if iva_sel != "(sin IVA)" else None
+    rets = [ret_by[r] for r in ret_sel]
+    prev = cp.aplicar_concepto(
+        concepto, base_val, tipo_iva=tiva, retenciones=rets,
+        nit=st.session_state.get("cap_nit", ""),
+        detalle=st.session_state.get("cap_det", "") or (concepto.get("nombre") or ""))
+    if prev:
+        rp = cp.resumen_asiento(prev)
+        st.caption(
+            f"Vista previa: {len(prev)} líneas · Db $ {rp['debitos']:,} · Cr $ {rp['creditos']:,} · "
+            f"{'cuadra ✅' if rp['cuadra'] else 'descuadra ⚠️'}".replace(",", "."))
+    if st.button("⚡ Generar líneas del asiento", type="secondary",
+                 key="btn_gen_concepto", disabled=(base_val <= 0)):
+        st.session_state["captura_lineas"] = _a_editor_df(prev)
+        st.session_state["captura_ver"] += 1
+        st.rerun()
+
+
+# ============================================================
 # Líneas (partida doble)
 # ============================================================
 st.markdown("### 2️⃣ Líneas")
-st.caption("Escribe la cuenta y el valor en **Débito** o en **Crédito** (uno de los dos por línea).")
-
-if "captura_lineas" not in st.session_state:
-    st.session_state["captura_lineas"] = pd.DataFrame(
-        [{"Cuenta": "", "Detalle": "", "NIT": "", "Débito": 0, "Crédito": 0,
-          "Base": 0, "Centro costo": ""} for _ in range(4)]
-    )
+st.caption("Escribe la cuenta y el valor en **Débito** o en **Crédito** (uno de los dos por línea). "
+           "Si usaste un concepto, aquí aparecen las líneas ya armadas y editables.")
 
 edit = st.data_editor(
     st.session_state["captura_lineas"],
     num_rows="dynamic",
     use_container_width=True,
-    key="editor_captura",
+    key=f"editor_captura_{st.session_state['captura_ver']}",
     column_config={
         "Cuenta": st.column_config.TextColumn(width="medium"),
         "Detalle": st.column_config.TextColumn(width="large"),
@@ -221,10 +362,8 @@ with col_g1:
                 f"({n} líneas, período {periodo_cod})."
             )
             # Limpiar para el siguiente documento
-            st.session_state["captura_lineas"] = pd.DataFrame(
-                [{"Cuenta": "", "Detalle": "", "NIT": "", "Débito": 0, "Crédito": 0,
-                  "Base": 0, "Centro costo": ""} for _ in range(4)]
-            )
+            st.session_state["captura_lineas"] = _lineas_vacias()
+            st.session_state["captura_ver"] += 1
             st.rerun()
         except PermissionError as e:
             st.error(f"🔒 {e}")
@@ -232,10 +371,8 @@ with col_g1:
             st.error(f"No se pudo guardar: {e}")
 with col_g2:
     if st.button("🧹 Limpiar líneas", use_container_width=True):
-        st.session_state["captura_lineas"] = pd.DataFrame(
-            [{"Cuenta": "", "Detalle": "", "NIT": "", "Débito": 0, "Crédito": 0,
-              "Base": 0, "Centro costo": ""} for _ in range(4)]
-        )
+        st.session_state["captura_lineas"] = _lineas_vacias()
+        st.session_state["captura_ver"] += 1
         st.rerun()
 
 if protegido:
