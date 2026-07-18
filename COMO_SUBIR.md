@@ -1,38 +1,41 @@
-# CÓMO SUBIR — Cruce de facturas: pagos y recaudos por tercero
+# CÓMO SUBIR — Estructura de catálogos por defecto (INTEGRAL)
 
-Cartera abierta: al poner el NIT, el sistema sugiere las **facturas pendientes**
-del tercero para marcarlas y cancelarlas (total o parcial), y arma el egreso o
-el recibo de caja cuadrado. Fecha: 18-jul-2026. **Sin migración.**
+Monta PUC, terceros, municipios, CIIU y calendario por defecto en toda empresa.
+Fecha: 18-jul-2026.
 
-## Cómo funciona (sin tablas nuevas)
+## 1. Correr en Supabase (SQL Editor → pegar → Run, en orden)
 
-Los pendientes se calculan de `cn_movimientos`: se agrupa por tercero (NIT) y
-por documento (usa `doc_referencia`, y si no, `documento`) sumando Db−Cr. El
-documento con saldo ≠ 0 está pendiente. Por eso **basta con que al causar/vender
-cada línea de la cuenta por pagar/cobrar lleve el número de factura** — que es
-justo lo que ya hace la Captura (documento = consecutivo de la factura).
+1. Si aún no lo hiciste: `015_terceros.sql` y `016_conceptos_iva_retencion.sql`.
+2. **`db/migrations/017_catalogos_plantilla_y_siembra.sql`** — crea las plantillas
+   (PUC 372 ctas, comprobantes, tipos IVA/retención, conceptos, terceros base),
+   el **directorio global de terceros**, la función `cn_inicializar_empresa()` y
+   el **trigger** que siembra cada empresa nueva. Idempotente.
+3. **`db/migrations/018_municipios_global.sql`** — siembra 1.092 municipios DANE.
 
-## Archivos
+## 2. Archivos de código
 
 | Archivo | Estado | Qué hace |
 |---|---|---|
-| `core/contable/servicio_contable.py` | **MOD** | + `documentos_pendientes(nit, prefijos)` y su cálculo puro `_calc_documentos_pendientes`. |
-| `app_pages/25_Cruce_Facturas.py` | **NUEVO** | Página **💳 Pagos y Recaudos** con dos tabs: Pagar (egreso, cuentas por pagar) y Recaudar (recibo de caja, por cobrar). |
-| `Home.py` | **MOD** | Registra la página en **🤖 Asistente Contable**. |
-| `tests/test_correcciones.py` | **MOD** | + pruebas de pendientes (abono parcial, factura saldada que desaparece, por cobrar). **81 pruebas del paquete pasan.** |
+| `db/migrations/017_...sql` | **NUEVO** | Plantillas + directorio + función + trigger. |
+| `db/migrations/018_...sql` | **NUEVO** | Municipios DANE globales. |
+| `core/contable/inicializar.py` | **NUEVO** | `inicializar_empresa(sb,id)`, `buscar_directorio(sb,nit)`, `listar_directorio`. |
+| `app_pages/0_Panel_Admin.py` | **MOD** | Sección **🌱 Inicializar catálogos** por empresa. |
 
-## Uso
+## 3. Inicializar las empresas existentes
 
-1. **🤖 Asistente Contable → 💳 Pagos y Recaudos**.
-2. Tab **Pagar** (o **Recaudar**): escribe el **NIT** → *Buscar facturas pendientes*.
-   - Aparecen las facturas con su saldo. Marca las que vas a cancelar y ajusta el
-     **valor a cruzar** (permite abono parcial).
-3. Elige el comprobante (egreso / recibo de caja), la fecha, el consecutivo y la
-   **cuenta de banco/caja**, y **Genera y guarda**. El sistema:
-   - Por cada factura marcada: Db la cuenta por pagar (o Cr la por cobrar), con
-     `doc_referencia` = el número de la factura cancelada.
-   - Contrapartida por el total a banco/caja. Cuadra Db = Cr.
-4. Al volver a buscar ese tercero, las facturas ya canceladas no aparecen; las
-   abonadas parcialmente muestran el saldo restante.
+En **🛡️ Panel Admin → 🌱 Inicializar catálogos por defecto**, elige JIPER y
+CASA UNOTRES y pulsa **Inicializar** (las creadas antes del trigger). Idempotente.
 
-Prefijos por defecto — Pagar: `2205,2335,2505`; Recaudar: `1305,1330` (editables).
+## Resultado
+
+- Toda **empresa nueva** nace con PUC, comprobantes, conceptos y terceros base
+  (por el trigger).
+- **Municipios, CIIU, calendario y valores anuales** son globales: se consultan.
+- Al digitar un **NIT** conocido, `cn_directorio_terceros` permite autocompletar
+  el nombre (servicio listo; se puede enganchar en la UI de Captura/Maestros).
+
+## Notas
+
+- La función está protegida: si 015/016 no están aplicadas, omite esas secciones
+  sin fallar; corre esas migraciones y vuelve a inicializar para completarlas.
+- Ver `ESTRUCTURA_CATALOGOS.md` para el diseño completo (global vs plantilla).

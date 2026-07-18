@@ -24,6 +24,7 @@ from auth.login import require_auth, sidebar_user_info, current_user
 from auth.empresas import seleccionar_empresa_sidebar
 from auth.superadmin import require_superadmin, es_superadmin
 from db.supabase_client import get_supabase
+from core.contable.inicializar import inicializar_empresa
 
 
 require_auth()
@@ -225,8 +226,27 @@ with tab_emp:
             if not nit_nuevo or not razon_nueva:
                 st.error("Completa NIT y Razón Social")
             elif crear_empresa(nit_nuevo.strip(), razon_nueva.strip().upper()):
-                st.success(f"✅ Empresa '{razon_nueva}' creada")
+                st.success(f"✅ Empresa '{razon_nueva}' creada. "
+                           "Los catálogos por defecto (PUC, comprobantes, conceptos, "
+                           "terceros base) se sembraron automáticamente.")
                 st.rerun()
+
+    st.markdown("---")
+
+    # Inicializar / reinicializar catálogos por defecto
+    if not df_emp.empty:
+        st.markdown("### 🌱 Inicializar catálogos por defecto")
+        st.caption("Copia el PUC estándar, comprobantes, conceptos y terceros base a la "
+                   "empresa. Las empresas nuevas ya lo reciben automáticamente; úsalo para "
+                   "empresas creadas antes de esta estructura (es idempotente, no duplica).")
+        op_init = {f"{r['razon_social']} ({r['nit']})": r["id"] for _, r in df_emp.iterrows()}
+        sel_init = st.selectbox("Empresa", [""] + list(op_init.keys()), key="sel_init_emp")
+        if sel_init and st.button("🌱 Inicializar / reinicializar", key="btn_init_emp"):
+            try:
+                inicializar_empresa(get_supabase(), op_init[sel_init])
+                st.success("✅ Catálogos por defecto sembrados en la empresa.")
+            except Exception as e:
+                st.error(f"No se pudo inicializar (¿corriste la migración 017?): {e}")
 
     st.markdown("---")
 
