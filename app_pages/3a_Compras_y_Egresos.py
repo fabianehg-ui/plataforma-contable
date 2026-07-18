@@ -33,6 +33,8 @@ import pandas as pd
 from auth.login import require_auth, sidebar_user_info
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from auth.modulos import require_modulo
+from db.supabase_client import get_supabase
+from core.contable.ui_contabilizar import render_contabilizar
 from core.procesadores.procesador_compras_egresos import (
     procesar_compras_y_egresos,
     dataframe_a_plano_tsv,
@@ -53,6 +55,7 @@ seleccionar_empresa_sidebar()
 sidebar_user_info()
 require_modulo("compras_y_egresos")
 emp = require_rol(["admin", "operador"])
+sb = get_supabase()
 
 
 # ============================================================
@@ -381,6 +384,11 @@ with tab_procesar:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
+
+            # Causar en la contabilidad de la empresa (INTEGRAL)
+            st.markdown("---")
+            render_contabilizar(sb, emp, df_plano, "compras",
+                                anio_default=int(anio), mes_default=int(mes_idx))
 
 
 # ------------------------------------------------------------

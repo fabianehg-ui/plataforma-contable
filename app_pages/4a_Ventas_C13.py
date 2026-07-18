@@ -29,6 +29,8 @@ import pandas as pd
 from auth.login import require_auth, sidebar_user_info
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from auth.modulos import require_modulo
+from db.supabase_client import get_supabase
+from core.contable.ui_contabilizar import render_contabilizar
 from core.procesadores.procesador_ventas_c13 import (
     procesar_ventas_c13,
     dataframe_a_plano_tsv,
@@ -45,6 +47,7 @@ seleccionar_empresa_sidebar()
 sidebar_user_info()
 require_modulo("ventas_c13")
 emp = require_rol(["admin", "operador"])
+sb = get_supabase()
 
 
 # ============================================================
@@ -226,6 +229,10 @@ with tab_procesar:
             # Plano completo
             with st.expander("📄 Ver plano completo"):
                 st.dataframe(df_plano, use_container_width=True, hide_index=True)
+
+            # Causar en la contabilidad de la empresa (INTEGRAL)
+            st.markdown("---")
+            render_contabilizar(sb, emp, df_plano, "ventas")
 
             # Log
             with st.expander("📜 Ver log de procesamiento"):

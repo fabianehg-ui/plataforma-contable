@@ -44,6 +44,10 @@ class _Query:
     def insert(self, payload):
         self._op = "insert"; self._payload = payload; return self
 
+    def upsert(self, payload, on_conflict=None, ignore_duplicates=False):
+        self._op = "upsert"; self._payload = payload
+        self._on = on_conflict; self._ignore = ignore_duplicates; return self
+
     def update(self, payload):
         self._op = "update"; self._payload = payload; return self
 
@@ -90,6 +94,27 @@ class _Query:
             removed = [dict(r) for r in rows if self._match(r)]
             self.t.rows[:] = [r for r in rows if not self._match(r)]
             return _Result(removed)
+        if self._op == "upsert":
+            payload = self._payload if isinstance(self._payload, list) else [self._payload]
+            keys = [k.strip() for k in (getattr(self, "_on", "") or "").split(",") if k.strip()]
+            out = []
+            for p in payload:
+                p = dict(p)
+                existing = None
+                if keys:
+                    for r in rows:
+                        if all(str(r.get(k)) == str(p.get(k)) for k in keys):
+                            existing = r
+                            break
+                if existing is not None:
+                    if not getattr(self, "_ignore", False):
+                        existing.update(p)
+                    out.append(existing)
+                else:
+                    p.setdefault("id", self.t.next_id())
+                    rows.append(p)
+                    out.append(p)
+            return _Result([dict(r) for r in out])
         return _Result([])
 
 

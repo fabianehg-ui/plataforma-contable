@@ -1,27 +1,37 @@
-# HOTFIX — ZIP con XML+PDF ya no duplica valores + crea el tercero
+# CÓMO SUBIR — Puente contable (todo conectado a cn_movimientos)
 
-Corrige el bug de importar un ZIP con el **XML y el PDF de la misma factura**:
-antes sumaba los dos valores. Fecha: 18-jul-2026. **Sin migración.**
-
-## Qué cambia
-
-- **`leer_zip`**: por cada documento lee **uno solo, prefiriendo el XML** sobre su
-  representación PDF/imagen. Agrupa por nombre de archivo (FE4587.xml / FE4587.pdf
-  → solo el XML) y, como segunda red, **deduplica por (NIT, número)** conservando
-  el XML. Ya no se duplican los valores.
-- Además, si una factura del ZIP **solo trae PDF**, ya no se descarta (antes, si
-  había algún XML, las de solo-PDF se perdían).
-- **Crear tercero si no existe**: al guardar el comprobante, cada NIT que no esté
-  en `cn_terceros` se crea automáticamente con el nombre y régimen de la factura
-  leída (o del directorio global de terceros si está disponible).
+Base para que cada módulo cause o lea de la contabilidad, + Centro Contable de
+trazabilidad. Fecha: 18-jul-2026. **Sin migración.**
 
 ## Archivos
 
-| Archivo | Cambio |
-|---|---|
-| `core/contable/lector_factura.py` | `leer_zip` reescrito (prioriza XML, no pierde solo-PDF) + `_dedupe_facturas` por (NIT, número). |
-| `app_pages/21_Captura.py` | Al guardar, `_asegurar_tercero()` crea el tercero faltante con datos de la factura/directorio. |
-| `tests/test_conceptos_lector.py` | + pruebas: XML+PDF misma factura no duplica; dedupe prefiere XML. **84 pruebas pasan.** |
+| Archivo | Estado | Qué hace |
+|---|---|---|
+| `core/contable/integracion.py` | **NUEVO** | `contabilizar`, `resumen_por_origen`, `reversar_origen`, `retenciones_practicadas`, registro `ORIGENES`. |
+| `core/contable/ui_contabilizar.py` | **NUEVO** | `render_contabilizar(sb, empresa, df_plano, origen)` — bloque reusable para causar desde cualquier módulo. |
+| `app_pages/26_Centro_Contable.py` | **NUEVO** | 🔗 Centro Contable: qué causó cada módulo por período + reversar. |
+| `app_pages/4a_Ventas_C13.py` | **MOD** | Conectado: botón de causar el plano de ventas. |
+| `app_pages/3a_Compras_y_Egresos.py` | **MOD** | Conectado: botón de causar el plano de compras. |
+| `Home.py` | **MOD** | Registra 🔗 Centro Contable (en Reportes). |
+| `tests/test_integracion.py` | **NUEVO** | Pruebas del puente (contabilizar, trazabilidad, reversar, retenciones). |
+| `tests/test_correcciones.py` | **MOD** | Fake Supabase con `upsert` (para las pruebas). |
 
-Súbelos encima de los anteriores. La creación de tercero es silenciosa si aún no
-corriste 015 (terceros) / 017 (directorio) — no rompe nada.
+Sin migración: usa `cn_movimientos` del núcleo. **91 pruebas pasan.**
+
+## Uso
+
+- **Causar desde un módulo**: en Ventas C13 y Compras, tras generar el plano,
+  aparece **💾 Contabilizar en INTEGRAL** (elige período → guarda). La nómina ya
+  lo hacía.
+- **Ver todo**: **📈 Reportes → 🔗 Centro Contable** muestra, por período, qué
+  causó cada módulo (nómina, ventas, compras, captura, pagos…) y permite
+  **reversar** lo de un módulo para reprocesar.
+
+## Conectar el resto (POS, Bancos, Bittal) y módulos nuevos
+
+Es de 1 línea donde el módulo tenga su `df_plano`:
+```python
+render_contabilizar(sb, emp, df_plano, "mi_origen")
+```
+Ver `ARQUITECTURA_PUENTE_CONTABLE.md` (POS usa la variable `empresa`; Bancos/Bittal
+producen texto/filas y hay que pasarlos a DataFrame de 11 columnas primero).
