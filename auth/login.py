@@ -208,31 +208,142 @@ def require_auth():
         st.stop()
 
 
-def login_form():
-    """Formulario de login: NIT de la empresa + correo + contraseña.
+# ============================================================
+# Branding de la pantalla de login (logo + estilos)
+# ============================================================
 
-    Oculta el sidebar (anti-espionaje: no se ven módulos sin sesión).
+# Logo de INTEGRAL (SVG inline). Reemplaza este bloque por el logo real de la
+# empresa cuando lo tengas (idealmente un SVG o un PNG en data URI).
+_LOGO_SVG = """
+<svg width="88" height="88" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ig" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="80" height="80" rx="20" fill="url(#ig)"/>
+  <path d="M32 22c6 0 8 4 8 10v24c0 6-2 10-8 10" stroke="#fff" stroke-width="6"
+        stroke-linecap="round" fill="none" opacity=".95"/>
+  <rect x="46" y="30" width="6" height="28" rx="3" fill="#fff" opacity=".9"/>
+  <rect x="56" y="24" width="6" height="34" rx="3" fill="#fff" opacity=".7"/>
+  <rect x="36" y="38" width="6" height="20" rx="3" fill="#fff" opacity=".8"/>
+</svg>
+"""
+
+_CSS_LOGIN = """
+<style>
+:root{ --brand1:#0b1f3a; --brand2:#123a5e; --accent:#2dd4bf; --accent2:#0ea5e9; }
+/* Fondo con degradado + brillo */
+.stApp{
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(45,212,191,.18), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(14,165,233,.20), transparent 55%),
+    linear-gradient(135deg, #081627 0%, #0b1f3a 45%, #0e2a44 100%);
+  background-attachment: fixed;
+}
+header[data-testid="stHeader"], #MainMenu, footer{ display:none!important; }
+section[data-testid='stSidebar'], div[data-testid='stSidebarNav']{ display:none!important; }
+.block-container{ max-width: 1050px; padding-top: 3.2rem; }
+
+/* Cabecera / logo */
+.ig-hero{ text-align:center; animation: igfade .7s ease both; }
+.ig-hero .ig-logo{ filter: drop-shadow(0 10px 24px rgba(45,212,191,.35)); }
+.ig-title{ font-size: 2.4rem; font-weight:800; letter-spacing:.5px; margin:.4rem 0 0;
+  background: linear-gradient(90deg,#e6f6ff,#9be8dc); -webkit-background-clip:text;
+  background-clip:text; color:transparent; }
+.ig-sub{ color:#9db6cf; font-size:1.02rem; margin-top:.15rem; }
+
+/* Tarjeta del formulario (el st.form) */
+[data-testid="stForm"]{
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px; padding: 1.6rem 1.5rem;
+  box-shadow: 0 24px 60px rgba(0,0,0,.35); backdrop-filter: blur(8px);
+  animation: igfade .8s .05s ease both;
+}
+[data-testid="stForm"] label{ color:#cfe1f2!important; font-weight:600; }
+.stTextInput input{
+  background: rgba(255,255,255,.95)!important; border-radius:10px!important;
+  border:1px solid rgba(255,255,255,.2)!important; color:#0b1f3a!important; }
+.stTextInput input:focus{ box-shadow:0 0 0 3px rgba(45,212,191,.35)!important; }
+[data-testid="stFormSubmitButton"] button{
+  background: linear-gradient(90deg, var(--accent), var(--accent2))!important;
+  color:#04202a!important; font-weight:800!important; border:0!important;
+  border-radius:11px!important; padding:.6rem 1rem!important;
+  box-shadow:0 10px 24px rgba(14,165,233,.35)!important; transition: transform .12s ease; }
+[data-testid="stFormSubmitButton"] button:hover{ transform: translateY(-1px); }
+
+/* Grid de servicios */
+.ig-servicios{ display:grid; grid-template-columns: repeat(2, 1fr); gap:.7rem; }
+.ig-serv{
+  display:flex; gap:.7rem; align-items:center; padding:.75rem .85rem;
+  background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10);
+  border-radius:13px; color:#dbe9f6; transition: transform .15s ease, background .2s ease;
+  animation: igfade .8s .1s ease both; }
+.ig-serv:hover{ transform: translateY(-2px); background: rgba(45,212,191,.12);
+  border-color: rgba(45,212,191,.4); }
+.ig-serv .ic{ font-size:1.25rem; }
+.ig-serv .tt{ font-weight:700; font-size:.92rem; line-height:1.1; }
+.ig-serv .ds{ color:#93aec9; font-size:.76rem; }
+.ig-panel-title{ color:#bcd4ea; font-weight:700; letter-spacing:.4px;
+  margin:.2rem 0 .6rem; font-size:.95rem; text-transform:uppercase; }
+.ig-foot{ text-align:center; color:#6f8bab; font-size:.8rem; margin-top:1.6rem; }
+@keyframes igfade{ from{opacity:0; transform: translateY(10px);} to{opacity:1; transform:none;} }
+</style>
+"""
+
+_SERVICIOS = [
+    ("📚", "Contabilidad y libros", "Balance, PyG, auxiliar, mayor"),
+    ("✍️", "Captura y comprobantes", "Partida doble e impresión"),
+    ("💼", "Nómina y PILA", "Causación automática del mes"),
+    ("🧾", "Compras y ventas", "Desde DIAN, Siigo o Excel"),
+    ("💳", "Cartera y pagos", "Cruce de facturas por tercero"),
+    ("📊", "Retención y exógena", "F350 y medios magnéticos"),
+    ("🏦", "Bancos", "Extractos → asientos"),
+    ("🔗", "Todo integrado", "Un solo movimiento por empresa"),
+]
+
+
+def login_form():
+    """Pantalla de acceso con branding: logo, servicios y formulario elegante.
+
+    Oculta el sidebar/menú (anti-espionaje) y pide NIT + correo + contraseña.
     """
-    # Ocultar sidebar y cualquier navegación mientras no haya sesión
+    st.markdown(_CSS_LOGIN, unsafe_allow_html=True)
+
+    # Cabecera con logo
     st.markdown(
-        "<style>section[data-testid='stSidebar']{display:none!important;}"
-        "div[data-testid='stSidebarNav']{display:none!important;}</style>",
+        f"<div class='ig-hero'><div class='ig-logo'>{_LOGO_SVG}</div>"
+        "<div class='ig-title'>INTEGRAL</div>"
+        "<div class='ig-sub'>Plataforma contable integral · todo el ciclo, una sola empresa</div></div>",
         unsafe_allow_html=True,
     )
-    st.markdown("## 🔐 Iniciar sesión")
-    st.caption("Ingresa el NIT de la empresa en la que vas a trabajar, tu correo y tu contraseña.")
+    st.write("")
 
-    with st.form("login_form", clear_on_submit=False):
-        nit = st.text_input("NIT de la empresa", key="login_nit",
-                            placeholder="901630218")
-        email = st.text_input("Correo electrónico", key="login_email")
-        password = st.text_input("Contraseña", type="password", key="login_pw")
-        submit = st.form_submit_button("Entrar", type="primary", use_container_width=True)
-        if submit:
-            _hacer_login(nit, email, password)
+    col_form, col_serv = st.columns([1, 1.15], gap="large")
 
-    st.caption("El registro está restringido. Si necesitas una cuenta, contacta al "
-               "administrador de la plataforma.")
+    with col_form:
+        st.markdown("<div class='ig-panel-title'>🔐 Iniciar sesión</div>", unsafe_allow_html=True)
+        with st.form("login_form", clear_on_submit=False):
+            nit = st.text_input("NIT de la empresa", key="login_nit", placeholder="901630218")
+            email = st.text_input("Correo electrónico", key="login_email", placeholder="tucorreo@empresa.com")
+            password = st.text_input("Contraseña", type="password", key="login_pw")
+            submit = st.form_submit_button("Entrar →", type="primary", use_container_width=True)
+            if submit:
+                _hacer_login(nit, email, password)
+        st.caption("Acceso restringido. Cada usuario entra solo a su empresa asignada.")
+
+    with col_serv:
+        st.markdown("<div class='ig-panel-title'>Servicios</div>", unsafe_allow_html=True)
+        cards = "".join(
+            f"<div class='ig-serv'><div class='ic'>{ic}</div>"
+            f"<div><div class='tt'>{tt}</div><div class='ds'>{ds}</div></div></div>"
+            for ic, tt, ds in _SERVICIOS
+        )
+        st.markdown(f"<div class='ig-servicios'>{cards}</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='ig-foot'>INTEGRAL · reimplementación limpia · "
+                "© 2026</div>", unsafe_allow_html=True)
 
 
 def _solo_digitos(s) -> str:
