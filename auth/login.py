@@ -209,31 +209,39 @@ def require_auth():
 
 
 def login_form():
-    """Muestra el formulario de login centrado en la página."""
+    """Formulario de login: NIT de la empresa + correo + contraseña.
+
+    Oculta el sidebar (anti-espionaje: no se ven módulos sin sesión).
+    """
+    # Ocultar sidebar y cualquier navegación mientras no haya sesión
+    st.markdown(
+        "<style>section[data-testid='stSidebar']{display:none!important;}"
+        "div[data-testid='stSidebarNav']{display:none!important;}</style>",
+        unsafe_allow_html=True,
+    )
     st.markdown("## 🔐 Iniciar sesión")
-    st.caption("Accede con tu usuario y contraseña para usar la plataforma.")
+    st.caption("Ingresa el NIT de la empresa en la que vas a trabajar, tu correo y tu contraseña.")
 
-    tab_login, tab_registro = st.tabs(["Iniciar sesión", "Crear cuenta"])
+    with st.form("login_form", clear_on_submit=False):
+        nit = st.text_input("NIT de la empresa", key="login_nit",
+                            placeholder="901630218")
+        email = st.text_input("Correo electrónico", key="login_email")
+        password = st.text_input("Contraseña", type="password", key="login_pw")
+        submit = st.form_submit_button("Entrar", type="primary", use_container_width=True)
+        if submit:
+            _hacer_login(nit, email, password)
 
-    with tab_login:
-        with st.form("login_form", clear_on_submit=False):
-            email = st.text_input("Correo electrónico", key="login_email")
-            password = st.text_input("Contraseña", type="password", key="login_pw")
-            submit = st.form_submit_button("Entrar", type="primary", use_container_width=True)
-
-            if submit:
-                _hacer_login(email, password)
-
-    with tab_registro:
-        st.info(
-            "El registro está restringido. Si necesitas una cuenta, "
-            "contacta al administrador de la plataforma."
-        )
+    st.caption("El registro está restringido. Si necesitas una cuenta, contacta al "
+               "administrador de la plataforma.")
 
 
-def _hacer_login(email: str, password: str):
-    if not email or not password:
-        st.error("Ingresa correo y contraseña")
+def _solo_digitos(s) -> str:
+    return "".join(ch for ch in str(s or "") if ch.isdigit())
+
+
+def _hacer_login(nit: str, email: str, password: str):
+    if not nit or not email or not password:
+        st.error("Ingresa el NIT de la empresa, el correo y la contraseña.")
         return
 
     sb = get_supabase()
@@ -248,7 +256,29 @@ def _hacer_login(email: str, password: str):
         return
 
     _set_session_state(resp.user, resp.session)
-    st.success("¡Sesión iniciada!")
+
+    # Verificar acceso a la empresa por NIT (privacidad multi-empresa)
+    try:
+        from auth.empresas import empresas_del_usuario
+        nit_norm = _solo_digitos(nit)
+        empresas = empresas_del_usuario()
+        match = next((e for e in empresas if _solo_digitos(e.get("nit")) == nit_norm), None)
+    except Exception as e:
+        match = None
+
+    if not match:
+        # Sin acceso a esa empresa → cerrar la sesión recién abierta
+        try:
+            sb.auth.sign_out()
+        except Exception:
+            pass
+        for k in ("user", "access_token", "refresh_token", "empresa_activa"):
+            st.session_state.pop(k, None)
+        st.error("No tienes acceso a una empresa con ese NIT, o el NIT es incorrecto.")
+        return
+
+    st.session_state["empresa_activa"] = match
+    st.success(f"¡Sesión iniciada en {match['razon_social']}!")
     st.rerun()
 
 

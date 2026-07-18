@@ -52,7 +52,12 @@ bootstrap_session()
 # ============================================================
 
 if not is_authenticated():
-    login_form()
+    # Llamar SIEMPRE a st.navigation (aquí, solo el login y oculto) suprime la
+    # auto-detección de la carpeta pages/ → NINGÚN módulo se ve sin sesión.
+    st.navigation(
+        [st.Page(login_form, title="Iniciar sesión", url_path="login")],
+        position="hidden",
+    ).run()
     st.stop()
 
 
