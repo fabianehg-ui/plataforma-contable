@@ -329,6 +329,12 @@ sistema_conceptos = st.Page(
     icon="🧩",
     url_path="conceptos",
 )
+sistema_correcciones = st.Page(
+    "app_pages/24_Correcciones.py",
+    title="Correcciones",
+    icon="🛠️",
+    url_path="correcciones",
+)
 sistema_config = st.Page(
     "app_pages/6_Configuracion.py",
     title="Configuración",
@@ -377,6 +383,7 @@ nav = st.navigation(
             sistema_panel_admin,
             sistema_maestros,
             sistema_conceptos,
+            sistema_correcciones,
             sistema_config,
         ],
     },

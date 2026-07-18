@@ -336,6 +336,107 @@ def eliminar_movimientos(sb, empresa_id: str, periodo: str,
     q.execute()
 
 
+def buscar_movimientos(sb, empresa_id: str, periodo: Optional[str] = None,
+                       comprobante: Optional[str] = None, documento: Optional[str] = None,
+                       cuenta: Optional[str] = None, nit: Optional[str] = None,
+                       origen: Optional[str] = None, limit: int = 2000) -> list[dict]:
+    """Lista movimientos con filtros combinables (para corrección por registros).
+
+    Devuelve filas COMPLETAS (incluye `id`), necesarias para editar/eliminar.
+    """
+    q = sb.table("cn_movimientos").select("*").eq("empresa_id", empresa_id)
+    if periodo:
+        q = q.eq("periodo", str(periodo))
+    if comprobante:
+        q = q.eq("comprobante", str(comprobante))
+    if documento:
+        q = q.eq("documento", str(documento))
+    if cuenta:
+        q = q.eq("cuenta", str(cuenta))
+    if nit:
+        q = q.eq("nit", str(nit))
+    if origen:
+        q = q.eq("origen", origen)
+    return (q.order("fecha").order("comprobante").order("documento")
+            .limit(limit).execute().data or [])
+
+
+# ============================================================
+# Corrección de movimientos (por registro y por comprobante)
+# ============================================================
+
+_CAMPOS_MOV = {
+    "cuenta", "comprobante", "fecha", "documento", "doc_referencia",
+    "nit", "detalle", "tr", "valor", "base", "centro_costo",
+}
+
+
+def actualizar_movimiento(sb, empresa_id: str, mov_id: str, campos: dict) -> dict:
+    """Actualiza un registro de cn_movimientos por su id (corrección puntual).
+
+    Solo toca los campos permitidos; normaliza fecha (→ISO) y valor/base (→int).
+    Respeta el período protegido del movimiento (si `periodo` o la fila lo están).
+    """
+    # Averiguar el período del registro para respetar protección
+    actual = (sb.table("cn_movimientos").select("periodo")
+              .eq("empresa_id", empresa_id).eq("id", mov_id).limit(1).execute())
+    if actual.data:
+        per = actual.data[0].get("periodo")
+        if per and periodo_protegido(sb, empresa_id, per):
+            raise PermissionError(f"El período {per} está PROTEGIDO; no se puede corregir.")
+
+    payload = {}
+    for k, v in campos.items():
+        if k not in _CAMPOS_MOV:
+            continue
+        if k == "fecha":
+            payload[k] = _fecha_iso(v)
+        elif k in ("valor", "base"):
+            payload[k] = _int(v)
+        else:
+            payload[k] = None if v is None or str(v) == "" else str(v)
+    if not payload:
+        return {}
+    res = (sb.table("cn_movimientos").update(payload)
+           .eq("empresa_id", empresa_id).eq("id", mov_id).execute())
+    return (res.data or [{}])[0]
+
+
+def eliminar_movimiento(sb, empresa_id: str, mov_id: str) -> None:
+    """Elimina un registro por id (respeta período protegido)."""
+    actual = (sb.table("cn_movimientos").select("periodo")
+              .eq("empresa_id", empresa_id).eq("id", mov_id).limit(1).execute())
+    if actual.data:
+        per = actual.data[0].get("periodo")
+        if per and periodo_protegido(sb, empresa_id, per):
+            raise PermissionError(f"El período {per} está PROTEGIDO; no se puede eliminar.")
+    sb.table("cn_movimientos").delete().eq("empresa_id", empresa_id).eq("id", mov_id).execute()
+
+
+def eliminar_comprobante(sb, empresa_id: str, periodo: str,
+                         comprobante: str, documento: str) -> None:
+    """Borra todas las líneas de un asiento (periodo, comprobante, documento)."""
+    (sb.table("cn_movimientos").delete()
+       .eq("empresa_id", empresa_id).eq("periodo", str(periodo))
+       .eq("comprobante", str(comprobante)).eq("documento", str(documento)).execute())
+
+
+def reemplazar_comprobante(sb, empresa_id: str, periodo: str,
+                           comprobante: str, documento: str, df: pd.DataFrame,
+                           user_id: Optional[str] = None) -> int:
+    """Corrección por comprobante: borra el asiento y lo reinserta desde el plano.
+
+    `df` = DataFrame de 11 columnas (COLUMNAS_PLANO) con las líneas corregidas.
+    Respeta el período protegido. Devuelve el número de líneas insertadas.
+    """
+    if periodo_protegido(sb, empresa_id, periodo):
+        raise PermissionError(
+            f"El período {periodo} está PROTEGIDO; no se puede corregir el comprobante.")
+    eliminar_comprobante(sb, empresa_id, periodo, comprobante, documento)
+    return guardar_plano(sb, empresa_id, periodo, df, origen="correccion",
+                         user_id=user_id, reemplazar=False)
+
+
 def saldos_por_cuenta(sb, empresa_id: str, periodo: str) -> pd.DataFrame:
     """Saldo por cuenta del período: débitos, créditos y saldo (Db−Cr)."""
     movs = listar_movimientos(sb, empresa_id, periodo)
