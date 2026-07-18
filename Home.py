@@ -77,12 +77,12 @@ def home_page():
     sidebar_user_info()
 
     user = current_user()
-    st.title("📊 INTEGRAL")
-    st.caption("Gestión contable integral")
-    st.markdown(f"Bienvenido, **{user['email']}**")
-    st.markdown("---")
-
     empresas = empresas_del_usuario()
+
+    # Hero llamativo: logo animado (engranajes girando) + fuentes que fluyen
+    from core.tema import render_hero_inicio
+    render_hero_inicio(email=user["email"], n_empresas=len(empresas))
+
     if not empresas:
         st.warning(
             "🏢 No tienes empresas asignadas todavía.\n\n"

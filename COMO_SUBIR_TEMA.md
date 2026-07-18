@@ -33,3 +33,14 @@ Acento `#7dd3fc` · Fondo `#f4f7fb`.
 > Nota: verificado con `py_compile` y con una maqueta visual. No pude correr
 > Streamlit de punta a punta aquí (no hay Supabase en vivo); al subir, revisa
 > que se vea como la maqueta.
+
+---
+
+## Novedades de esta versión
+- **Página de inicio con hero animado**: `home_page()` ahora llama
+  `render_hero_inicio(...)` — banner con el logo de engranajes girando y las
+  fuentes (PDF·IMG·XML·XLSX·TXT·WWW·DIAN) fluyendo hacia "⚙ contabilidad".
+- **Scroll asegurado**: se añadió `padding-bottom` y `overflow` para que SIEMPRE
+  se pueda llegar al final de cada página (p. ej. el botón 💾 Guardar en Captura).
+  Tip: si la rueda del mouse "no baja", es que está sobre un campo numérico y
+  cambia el valor; usa la barra de scroll o la tecla Fin/AvPág.
