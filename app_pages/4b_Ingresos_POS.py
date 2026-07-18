@@ -303,6 +303,11 @@ if modo_fuente == "💾 Excel del Token DIAN":
                     hide_index=True,
                 )
 
+            # Opción: agregar al movimiento del mes
+            from core.contable.ui_contabilizar import render_contabilizar_activa
+            st.markdown("---")
+            render_contabilizar_activa(rv.plano_df, "pos", key="pos_tok")
+
     # Reset
     st.markdown("---")
     if st.button("🔄 Limpiar resultado Token", key="btn_pos_tok_reset"):
@@ -516,6 +521,11 @@ if "pos_df" in st.session_state:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
+
+    # Opción: agregar al movimiento del mes
+    from core.contable.ui_contabilizar import render_contabilizar_activa
+    st.markdown("---")
+    render_contabilizar_activa(df, "pos", key="pos_excel")
 
     # ════════════════════════════════════════════════════════
     # PASO 4 — Conciliación opcional con Token DIAN

@@ -118,3 +118,11 @@ if st.button("Generar plano", type="primary", disabled=not centros):
                        data=eb.plano_a_texto(p["filas"]).encode("utf-8"),
                        file_name=f"plano_gastos_bancarios_{f_asiento:%Y_%m}.txt",
                        mime="text/plain")
+
+    # Opción: agregar al movimiento del mes
+    from core.contable import servicio_contable as _cont
+    from core.contable.ui_contabilizar import render_contabilizar_activa
+    st.markdown("---")
+    df_bancos = pd.DataFrame(p["filas"][1:], columns=_cont.COLUMNAS_PLANO)
+    render_contabilizar_activa(df_bancos, "bancos",
+                               anio_default=f_asiento.year, mes_default=f_asiento.month)

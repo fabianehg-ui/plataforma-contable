@@ -38,6 +38,25 @@ class TestCuadrePlano:
         assert integ.cuadre_plano(pd.DataFrame())["cuadra"] is True
 
 
+class TestPlanoTextoADf:
+    def test_tsv_sin_encabezado(self):
+        txt = ("143501\t3\t2026-06-15\tF1\tF1\t800\tCompra\t1\t100000\t100000\t01\n"
+               "220505\t3\t2026-06-15\tF1\tF1\t800\tCompra\t2\t100000\t\t")
+        df = integ.plano_texto_a_df(txt)
+        assert list(df.columns) == cont.COLUMNAS_PLANO
+        assert len(df) == 2
+        assert df.iloc[0]["CUENTA"] == "143501"
+        assert integ.cuadre_plano(df)["cuadra"] is True
+
+    def test_bytes_y_sep(self):
+        raw = b"sep=\t\n143501\t3\t2026-06-15\tF1\tF1\t800\tX\t1\t50\t0\t\n"
+        df = integ.plano_texto_a_df(raw)
+        assert len(df) == 1 and df.iloc[0]["VALOR"] == "50"
+
+    def test_vacio(self):
+        assert len(integ.plano_texto_a_df("")) == 0
+
+
 class TestContabilizarYTrazabilidad:
     def test_contabiliza_y_aparece_por_origen(self):
         sb = FakeSB(); sb.tables.setdefault("cn_movimientos", _Table()); sb.tables.setdefault("cn_periodos", _Table())

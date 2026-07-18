@@ -69,6 +69,15 @@ if st.button("Generar plano", type="primary"):
             file_name=f"{base}_{fecha_ini:%Y%m%d}_{fecha_fin:%Y%m%d}.{ext}",
             mime=mime,
         )
+
+        # Opción: agregar al movimiento del mes (solo planos de texto Contai)
+        if ext == "txt":
+            from core.contable.integracion import plano_texto_a_df
+            from core.contable.ui_contabilizar import render_contabilizar_activa
+            st.markdown("---")
+            render_contabilizar_activa(
+                plano_texto_a_df(plano), "bittal",
+                anio_default=fecha_fin.year, mes_default=fecha_fin.month)
     except NotImplementedError as e:
         st.warning(str(e))
     except Exception as e:

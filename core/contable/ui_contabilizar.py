@@ -88,3 +88,20 @@ def render_contabilizar(sb, empresa, df_plano, origen: str,
         except Exception as e:
             st.error(f"No se pudo contabilizar: {e}")
     return guardado
+
+
+def render_contabilizar_activa(df_plano, origen: str, **kwargs) -> bool:
+    """Igual que render_contabilizar pero toma la empresa activa y el cliente de
+    la sesión. Útil en páginas-herramienta (Bittal, Bancos) que no seleccionan
+    empresa por sí mismas: si no hay empresa activa, avisa y no hace nada."""
+    try:
+        from auth.empresas import empresa_activa
+        from db.supabase_client import get_supabase
+    except Exception:
+        return False
+    emp = empresa_activa()
+    if not emp:
+        st.info("Selecciona una empresa (menú lateral) para **agregar este plano al "
+                "movimiento del mes**.")
+        return False
+    return render_contabilizar(get_supabase(), emp, df_plano, origen, **kwargs)

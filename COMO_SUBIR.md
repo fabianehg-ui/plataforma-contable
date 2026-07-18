@@ -1,37 +1,39 @@
-# CÓMO SUBIR — Puente contable (todo conectado a cn_movimientos)
+# CÓMO SUBIR — "Agregar al movimiento del mes" en Bittal, Bancos y POS
 
-Base para que cada módulo cause o lea de la contabilidad, + Centro Contable de
-trazabilidad. Fecha: 18-jul-2026. **Sin migración.**
+Ahora cada módulo, junto a **Descargar plano**, ofrece **agregar al movimiento
+del mes** (causar en cn_movimientos). Fecha: 18-jul-2026. **Sin migración.**
+
+## Qué cambia
+
+- **Bittal → Contai**: tras *Generar plano*, aparece **💾 Contabilizar en INTEGRAL**
+  (para los informes que producen plano de texto). Elige período → causa con
+  `origen = bittal`.
+- **Bancos a Contai**: tras *Generar plano*, la opción de contabilizar con
+  `origen = bancos`.
+- **Ingresos POS**: en ambos modos (Token y Excel), la opción con `origen = pos`.
+- Adaptador universal `plano_texto_a_df()`: convierte cualquier plano de texto
+  Contai (TSV sin encabezado, bytes o str) a DataFrame de 11 columnas, para
+  causar planos que los módulos generan como texto.
+- `render_contabilizar_activa(df, origen)`: una línea; toma la **empresa activa**
+  del menú. Si no hay empresa seleccionada, avisa y no hace nada (Bittal y Bancos
+  son páginas-herramienta sin login propio).
 
 ## Archivos
 
-| Archivo | Estado | Qué hace |
+| Archivo | Estado | Cambio |
 |---|---|---|
-| `core/contable/integracion.py` | **NUEVO** | `contabilizar`, `resumen_por_origen`, `reversar_origen`, `retenciones_practicadas`, registro `ORIGENES`. |
-| `core/contable/ui_contabilizar.py` | **NUEVO** | `render_contabilizar(sb, empresa, df_plano, origen)` — bloque reusable para causar desde cualquier módulo. |
-| `app_pages/26_Centro_Contable.py` | **NUEVO** | 🔗 Centro Contable: qué causó cada módulo por período + reversar. |
-| `app_pages/4a_Ventas_C13.py` | **MOD** | Conectado: botón de causar el plano de ventas. |
-| `app_pages/3a_Compras_y_Egresos.py` | **MOD** | Conectado: botón de causar el plano de compras. |
-| `Home.py` | **MOD** | Registra 🔗 Centro Contable (en Reportes). |
-| `tests/test_integracion.py` | **NUEVO** | Pruebas del puente (contabilizar, trazabilidad, reversar, retenciones). |
-| `tests/test_correcciones.py` | **MOD** | Fake Supabase con `upsert` (para las pruebas). |
+| `core/contable/integracion.py` | **MOD** | + `plano_texto_a_df()`. |
+| `core/contable/ui_contabilizar.py` | **MOD** | + `render_contabilizar_activa()` (usa empresa activa). |
+| `app_pages/4c_Bittal_a_Contai.py` | **MOD** | Opción contabilizar (planos de texto). |
+| `app_pages/19_Bancos_a_Contai.py` | **MOD** | Opción contabilizar. |
+| `app_pages/4b_Ingresos_POS.py` | **MOD** | Opción contabilizar (2 modos). |
+| `tests/test_integracion.py` | **MOD** | + pruebas del adaptador de texto. **94 pruebas pasan.** |
 
-Sin migración: usa `cn_movimientos` del núcleo. **91 pruebas pasan.**
+> Requiere los archivos base del **Puente contable** (integracion.py,
+> ui_contabilizar.py, Centro Contable) de la entrega anterior.
 
-## Uso
+## Resultado
 
-- **Causar desde un módulo**: en Ventas C13 y Compras, tras generar el plano,
-  aparece **💾 Contabilizar en INTEGRAL** (elige período → guarda). La nómina ya
-  lo hacía.
-- **Ver todo**: **📈 Reportes → 🔗 Centro Contable** muestra, por período, qué
-  causó cada módulo (nómina, ventas, compras, captura, pagos…) y permite
-  **reversar** lo de un módulo para reprocesar.
-
-## Conectar el resto (POS, Bancos, Bittal) y módulos nuevos
-
-Es de 1 línea donde el módulo tenga su `df_plano`:
-```python
-render_contabilizar(sb, emp, df_plano, "mi_origen")
-```
-Ver `ARQUITECTURA_PUENTE_CONTABLE.md` (POS usa la variable `empresa`; Bancos/Bittal
-producen texto/filas y hay que pasarlos a DataFrame de 11 columnas primero).
+Todos los módulos quedan con el mismo par: **Descargar plano** (para Contai) o
+**Agregar al movimiento del mes** (a INTEGRAL), y lo causado se ve/reversa en
+🔗 Centro Contable. Los módulos nuevos siguen el mismo patrón de una línea.

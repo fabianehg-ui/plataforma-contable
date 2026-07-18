@@ -64,6 +64,30 @@ def cuadre_plano(df: pd.DataFrame) -> dict:
             "cuadra": db == cr, "lineas": int(len(d))}
 
 
+def plano_texto_a_df(contenido) -> pd.DataFrame:
+    """Convierte un plano de texto Contai (TSV, SIN encabezado) — bytes o str —
+    a un DataFrame de 11 columnas. Sirve para causar planos que los módulos
+    generan como texto/bytes (Bittal, Bancos, etc.)."""
+    if contenido is None:
+        return pd.DataFrame(columns=cont.COLUMNAS_PLANO)
+    if isinstance(contenido, (bytes, bytearray)):
+        try:
+            contenido = contenido.decode("utf-8")
+        except UnicodeDecodeError:
+            contenido = contenido.decode("latin-1")
+    lineas = [l for l in str(contenido).splitlines()
+              if l.strip() and not l.lower().startswith("sep=")]
+    if lineas and "CUENTA" in lineas[0].upper():   # quitar encabezado si viene
+        lineas = lineas[1:]
+    filas = [l.split("\t") for l in lineas]
+    df = pd.DataFrame(filas)
+    if df.empty:
+        return pd.DataFrame(columns=cont.COLUMNAS_PLANO)
+    df = df.iloc[:, :11]
+    df.columns = cont.COLUMNAS_PLANO[:df.shape[1]]
+    return df.fillna("")
+
+
 # ============================================================
 # ESCRIBIR — causar el plano de un módulo en cn_movimientos
 # ============================================================
