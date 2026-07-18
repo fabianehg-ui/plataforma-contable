@@ -160,17 +160,27 @@ if "captura_lineas" not in st.session_state:
 # 📄 Leer factura (XML / PDF / imagen) — prellenar
 # ============================================================
 with st.expander("📄 Leer factura (XML DIAN · PDF · imagen · ZIP) para prellenar", expanded=False):
-    st.caption("Sube la factura o un **ZIP** con varias (XML de la DIAN o PDFs). "
+    st.caption("**Arrastra y suelta** aquí una o varias facturas (o un **ZIP**), o "
+               "usa *Browse files*. Acepta XML de la DIAN, PDF, imagen y ZIP. "
                "Extraigo NIT, número, fecha, valores y el **régimen del proveedor** "
                "para sugerir la retención. El XML es exacto; PDF/imagen es mejor esfuerzo.")
-    up = st.file_uploader(
-        "Factura o ZIP", type=["xml", "pdf", "png", "jpg", "jpeg", "tiff", "tif", "webp", "zip"],
-        key="fac_file")
-    if up is not None and st.button("📥 Leer y prellenar", key="btn_leer_fac"):
+    ups = st.file_uploader(
+        "Arrastra y suelta las facturas o el ZIP",
+        type=["xml", "pdf", "png", "jpg", "jpeg", "tiff", "tif", "webp", "zip"],
+        accept_multiple_files=True, key="fac_file")
+    if ups and st.button("📥 Leer y prellenar", key="btn_leer_fac"):
         try:
-            facturas = lector.leer_facturas(up.name, up.read())
+            facturas = []
+            errores = []
+            for f in ups:
+                try:
+                    facturas.extend(lector.leer_facturas(f.name, f.read()))
+                except Exception as e:
+                    errores.append(f"{f.name}: {e}")
+            for msg in errores:
+                st.warning(f"⚠️ {msg}")
             if not facturas:
-                st.warning("No se encontraron facturas legibles en el archivo/ZIP.")
+                st.warning("No se encontraron facturas legibles en los archivos/ZIP.")
             elif len(facturas) == 1:
                 _prefill_factura(facturas[0])
                 st.rerun()
@@ -183,13 +193,13 @@ with st.expander("📄 Leer factura (XML DIAN · PDF · imagen · ZIP) para prel
 
     multi = st.session_state.get("facturas_multi")
     if multi:
-        st.info(f"📦 El ZIP trae **{len(multi)}** facturas. Elige cuál cargar:")
+        st.info(f"📦 Se leyeron **{len(multi)}** facturas. Elige cuál cargar:")
         op = {
             f"{i+1}. {f.get('numero') or 's/n'} · NIT {f.get('nit') or '—'} · "
             f"$ {int(f.get('total', 0)):,}".replace(",", "."): i
             for i, f in enumerate(multi)
         }
-        lbl = st.selectbox("Factura del ZIP", list(op.keys()), key="fac_multi_sel")
+        lbl = st.selectbox("Factura leída", list(op.keys()), key="fac_multi_sel")
         cM1, cM2 = st.columns([1, 1])
         with cM1:
             if st.button("✅ Usar esta factura", key="btn_use_multi"):
@@ -197,7 +207,7 @@ with st.expander("📄 Leer factura (XML DIAN · PDF · imagen · ZIP) para prel
                 st.session_state.pop("facturas_multi", None)
                 st.rerun()
         with cM2:
-            if st.button("✖️ Descartar ZIP", key="btn_drop_multi"):
+            if st.button("✖️ Descartar", key="btn_drop_multi"):
                 st.session_state.pop("facturas_multi", None)
                 st.rerun()
 

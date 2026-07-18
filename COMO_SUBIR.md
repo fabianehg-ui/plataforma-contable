@@ -1,35 +1,21 @@
-# CÓMO SUBIR — Compra de productos agrícolas/pecuarios
+# CÓMO SUBIR — Arrastrar y soltar facturas (drag & drop)
 
-Agrega el caso especial de **compra de productos agrícolas o pecuarios sin
-procesamiento industrial**: retención **1.5%** con base mínima **92 UVT**
-(≈ $4.818.408 con la UVT 2026), generalmente **excluidos de IVA**.
-Fecha: 18-jul-2026. **Sin migración.**
+Mejora de UX en la Captura. Fecha: 18-jul-2026. **Sin migración.**
 
-## Qué trae
+## Qué cambia
 
-- Nuevo tipo de retención **RFAGRO** (agrícolas/pecuarios 1.5%, base 92 UVT) y
-  **RFCAFE** (café pergamino/cereza 0.5%, base 160 UVT) en el catálogo estándar.
-- Nuevo concepto **COMPRA_AGRICOLA** ("Compra productos agrícolas/pecuarios sin
-  proceso", sin IVA por defecto, retención RFAGRO).
-- El **clasificador** reconoce facturas agrícolas (café, ganado, agropecuaria,
-  cosecha, hortalizas, avícola, porcícola…) y **sugiere el concepto agrícola**.
-  Ahora ignora tildes, así "café/plátano" se detectan bien.
-- Respeta la **base mínima de 92 UVT**: no retiene si la compra no la alcanza
-  (con la misma casilla "Permitir retención" para el acumulado del día).
+El cargador de facturas ahora:
+- Deja **arrastrar y soltar** una o varias facturas (o un ZIP) directamente sobre
+  la caja — el texto lo indica ("Arrastra y suelta las facturas o el ZIP").
+- Acepta **varios archivos a la vez** (`accept_multiple_files`): puedes soltar
+  varias facturas juntas; se leen todas y, si hay más de una, aparece el selector
+  para elegir cuál cargar en el asiento.
+- Si algún archivo falla, avisa cuál y sigue con los demás.
 
-## Archivos
+## Archivo
 
 | Archivo | Cambio |
 |---|---|
-| `core/contable/conceptos.py` | + RFAGRO/RFCAFE y concepto COMPRA_AGRICOLA en el seed; clasificador con categoría "agricola" y normalización de tildes. |
-| `tests/test_conceptos_lector.py` | + pruebas de clasificación agrícola, sugerencia y base mínima 92 UVT. **78 pruebas del paquete pasan.** |
+| `app_pages/21_Captura.py` | `st.file_uploader` con `accept_multiple_files=True` + textos de drag & drop; lee todos los archivos soltados y usa el selector cuando hay varias facturas. |
 
-## Cómo activarlo
-
-Como el juego estándar cambió, en **🧩 Conceptos y tarifas** vuelve a pulsar
-**⚡ Sembrar estándar** (es idempotente: no borra lo tuyo, agrega/actualiza).
-Aparecerán RFAGRO, RFCAFE y el concepto COMPRA_AGRICOLA. Ajusta las cuentas a tu
-PUC si hace falta.
-
-> Recuerda que la base mínima solo se valida si `cn_valores_anuales` tiene la UVT
-> del año (2026: 52.374).
+Súbelo encima del anterior. Nada más cambia.
