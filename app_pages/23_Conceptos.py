@@ -34,6 +34,12 @@ st.title("🧩 Conceptos y tarifas")
 st.caption(f"Empresa activa: **{emp['razon_social']}** · Atajos para la Captura")
 st.markdown("---")
 
+if not cp.tablas_existen(sb, emp["id"]):
+    st.error("⚠️ Faltan las tablas de conceptos. Corre la migración "
+             "**016_conceptos_iva_retencion.sql** en Supabase (SQL Editor → pegar → Run) "
+             "y recarga esta página.")
+    st.stop()
+
 # ---- Sembrar catálogo estándar -------------------------------------
 with st.container():
     cs1, cs2 = st.columns([3, 1])

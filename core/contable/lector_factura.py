@@ -187,8 +187,15 @@ def extraer_de_texto(texto: str, formato: str) -> dict:
     advert = []
     if not total and not base:
         advert.append("No se detectaron montos; revisa/edita manualmente.")
-    if base and iva and total and abs((base + iva - rfte - riva - rica) - total) > max(2, total * 0.02):
-        advert.append("Los montos detectados no cuadran exactamente; verifica.")
+    # Reconciliación: total ≈ base + IVA − retenciones. Si la base detectada no
+    # calza (típico cuando el 'total' ya trae el IVA incluido), se recalcula.
+    if total and iva:
+        esperado = base + iva - rfte - riva - rica
+        if abs(esperado - total) > max(2, int(total * 0.02)):
+            base_rec = total - iva + rfte + riva + rica
+            if base_rec > 0:
+                base = base_rec
+                advert.append("Base recalculada desde total e IVA; verifica.")
 
     confianza = "media" if (total or base) else "baja"
     if formato == "imagen":

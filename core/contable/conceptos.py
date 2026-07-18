@@ -152,6 +152,19 @@ def resumen_asiento(lineas: list[dict]) -> dict:
 # CRUD — tipos de IVA
 # ============================================================
 
+def tablas_existen(sb, empresa_id: str) -> bool:
+    """True si las tablas de conceptos ya existen (migración 016 aplicada).
+
+    Evita que las páginas revienten con APIError cuando la migración aún no
+    se corrió en Supabase.
+    """
+    try:
+        sb.table("cn_conceptos").select("id").eq("empresa_id", empresa_id).limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
 def listar_tipos_iva(sb, empresa_id: str) -> list[dict]:
     return (sb.table("cn_tipos_iva").select("*")
             .eq("empresa_id", empresa_id).order("codigo").execute().data or [])

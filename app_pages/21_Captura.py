@@ -210,8 +210,14 @@ if cont.periodo_protegido(sb, emp["id"], periodo_cod):
 # ⚡ Concepto programado — autollenar las líneas
 # ============================================================
 st.markdown("### ⚡ Concepto programado")
-conceptos_lst = cp.listar_conceptos(sb, emp["id"])
-if not conceptos_lst:
+_tablas_ok = cp.tablas_existen(sb, emp["id"])
+conceptos_lst = cp.listar_conceptos(sb, emp["id"]) if _tablas_ok else []
+if not _tablas_ok:
+    st.info("Para usar conceptos programados corre la migración "
+            "**016_conceptos_iva_retencion.sql** en Supabase (SQL Editor) y luego "
+            "siembra el catálogo estándar en **🧩 Conceptos y tarifas** (menú Sistema). "
+            "Mientras tanto puedes digitar las líneas abajo a mano.")
+elif not conceptos_lst:
     st.info("Aún no hay conceptos. Créalos en **🧩 Conceptos y tarifas** (menú Sistema) "
             "o siembra el catálogo estándar desde allí.")
 else:
