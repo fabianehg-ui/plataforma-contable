@@ -31,6 +31,8 @@ sb = get_supabase()
 
 st.title("🔗 Centro Contable")
 st.caption(f"Empresa activa: **{emp['razon_social']}** · Qué causó cada módulo en cn_movimientos")
+from core.ayuda import render_ayuda
+render_ayuda("centro_contable")
 st.markdown("---")
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",

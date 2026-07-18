@@ -123,6 +123,8 @@ sb = get_supabase()
 
 st.title("✍️ Captura de comprobantes")
 st.caption(f"Empresa activa: **{emp['razon_social']}** · Partida doble → cn_movimientos")
+from core.ayuda import render_ayuda
+render_ayuda("captura")
 st.markdown("---")
 
 # Comprobantes típicos que se pueden crear de un clic si no existen

@@ -37,6 +37,8 @@ sb = get_supabase()
 
 st.title("💳 Cruce de facturas — pagos y recaudos")
 st.caption(f"Empresa activa: **{emp['razon_social']}** · Cancela facturas pendientes por tercero")
+from core.ayuda import render_ayuda
+render_ayuda("cruce")
 st.markdown("---")
 
 comprobantes = cont.listar_comprobantes(sb, emp["id"])

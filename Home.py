@@ -358,6 +358,12 @@ sistema_config = st.Page(
     icon="⚙️",
     url_path="configuracion",
 )
+sistema_ayuda = st.Page(
+    "app_pages/27_Ayuda.py",
+    title="Ayuda",
+    icon="📖",
+    url_path="ayuda",
+)
 
 
 # ============================================================
@@ -404,6 +410,7 @@ nav = st.navigation(
             sistema_conceptos,
             sistema_correcciones,
             sistema_config,
+            sistema_ayuda,
         ],
     },
     position="sidebar",

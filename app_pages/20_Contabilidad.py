@@ -34,6 +34,8 @@ sb = get_supabase()
 
 st.title("📚 Contabilidad — Libros y reportes")
 st.caption(f"Empresa activa: **{emp['razon_social']}** · Movimiento e históricos de INTEGRAL")
+from core.ayuda import render_ayuda
+render_ayuda("contabilidad")
 st.markdown("---")
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
