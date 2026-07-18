@@ -488,3 +488,37 @@ class TestSugerirConcepto:
         fac = {"nombre": "FERRETERIA", "items": [{"descripcion": "Tornillos y tuercas"}]}
         assert cp.clasificar_factura(fac) == "compra"
         assert cp.sugerir_concepto(fac, CONCEPTOS_SEED) == "COMPRA_BIEN_19"
+
+
+# ============================================================
+# Productos agrícolas (base 92 UVT, tarifa 1.5%)
+# ============================================================
+
+RFAGRO = {"codigo": "RFAGRO", "nombre": "ReteFuente compras agrícolas/pecuarios 1.5%",
+          "tarifa": 1.5, "base_calculo": "base", "cuenta": "236540", "base_uvt": 92}
+
+CONCEPTOS_AGRO = CONCEPTOS_SEED + [
+    {"codigo": "COMPRA_AGRICOLA", "nombre": "Compra productos agrícolas/pecuarios",
+     "naturaleza": "compra"}]
+
+
+class TestAgricola:
+    def test_clasifica_agricola(self):
+        fac = {"nombre": "AGROPECUARIA EL CAMPO", "items": [{"descripcion": "Café pergamino y plátano"}]}
+        assert cp.clasificar_factura(fac) == "agricola"
+
+    def test_sugiere_concepto_agricola(self):
+        fac = {"nombre": "AGROPECUARIA EL CAMPO", "items": [{"descripcion": "Ganado en pie"}]}
+        assert cp.sugerir_concepto(fac, CONCEPTOS_AGRO) == "COMPRA_AGRICOLA"
+
+    def test_base_minima_92_uvt(self):
+        # 92 UVT ≈ 4.818.408. Base 3.000.000 → no retiene
+        assert cp.calcular_retencion(3_000_000, 0, RFAGRO, uvt=UVT_2026) == 0
+        # Base 5.000.000 → retiene 1.5% = 75.000
+        assert cp.calcular_retencion(5_000_000, 0, RFAGRO, uvt=UVT_2026) == 75_000
+
+    def test_semillas_en_catalogo_estandar(self):
+        cods_ret = {t[0] for t in cp.SEED_TIPOS_RETENCION}
+        cods_con = {c[0] for c in cp.SEED_CONCEPTOS}
+        assert "RFAGRO" in cods_ret
+        assert "COMPRA_AGRICOLA" in cods_con

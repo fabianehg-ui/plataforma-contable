@@ -1,41 +1,35 @@
-# CÓMO SUBIR — Retención respetando base mínima (UVT) + permitir por acumulado del día
+# CÓMO SUBIR — Compra de productos agrícolas/pecuarios
 
-Corrige la retención para que **respete la base mínima por normatividad** y no la
-saque "al azar" cuando la base no la alcanza; anula por régimen (ya existía) y
-agrega la opción de **permitir retención** por compras del día acumuladas.
+Agrega el caso especial de **compra de productos agrícolas o pecuarios sin
+procesamiento industrial**: retención **1.5%** con base mínima **92 UVT**
+(≈ $4.818.408 con la UVT 2026), generalmente **excluidos de IVA**.
 Fecha: 18-jul-2026. **Sin migración.**
 
-## El problema que corrige
+## Qué trae
 
-En la captura, una compra de base **$17.435** sacaba ReteFuente de $436, cuando
-la base mínima de retención por compras es **27 UVT (~$1.414.098 con la UVT 2026)**.
-Ahora **no retiene** si la base no alcanza el mínimo.
+- Nuevo tipo de retención **RFAGRO** (agrícolas/pecuarios 1.5%, base 92 UVT) y
+  **RFCAFE** (café pergamino/cereza 0.5%, base 160 UVT) en el catálogo estándar.
+- Nuevo concepto **COMPRA_AGRICOLA** ("Compra productos agrícolas/pecuarios sin
+  proceso", sin IVA por defecto, retención RFAGRO).
+- El **clasificador** reconoce facturas agrícolas (café, ganado, agropecuaria,
+  cosecha, hortalizas, avícola, porcícola…) y **sugiere el concepto agrícola**.
+  Ahora ignora tildes, así "café/plátano" se detectan bien.
+- Respeta la **base mínima de 92 UVT**: no retiene si la compra no la alcanza
+  (con la misma casilla "Permitir retención" para el acumulado del día).
 
-## Reglas
-
-- **Base mínima**: cada tipo de retención tiene `base_uvt`; el mínimo en pesos =
-  `base_uvt × UVT` (la UVT se lee de `cn_valores_anuales` del año). Si la base
-  gravable es menor, la retención **no se practica**.
-- **Por régimen** (ya estaba): autorretenedor / Régimen Simple → sin retefuente;
-  no responsable de IVA → sin IVA ni reteIVA.
-- **Permitir retención**: casilla en la Captura para **forzar** la retención
-  aunque la base no alcance el mínimo — para cuando una compra es parte de varias
-  facturas del mismo tercero/día que **sí** suman la base.
-
-## Archivos (reemplazan los de las entregas anteriores)
+## Archivos
 
 | Archivo | Cambio |
 |---|---|
-| `core/contable/conceptos.py` | `calcular_retencion(uvt, forzar)` respeta la base mínima; + `base_minima_pesos`, `evaluar_retenciones`; `aplicar_concepto(uvt, forzar_retencion)`. |
-| `app_pages/21_Captura.py` | Lee la **UVT** del año (`cn_valores_anuales`); casilla **“Permitir retención…”**; avisos por retención (“no se aplica — base $X < mínimo $Y (27 UVT)”). |
-| `tests/test_conceptos_lector.py` | + pruebas de base mínima, forzar y evaluación. **74 pruebas del paquete pasan.** |
+| `core/contable/conceptos.py` | + RFAGRO/RFCAFE y concepto COMPRA_AGRICOLA en el seed; clasificador con categoría "agricola" y normalización de tildes. |
+| `tests/test_conceptos_lector.py` | + pruebas de clasificación agrícola, sugerencia y base mínima 92 UVT. **78 pruebas del paquete pasan.** |
 
-## Uso
+## Cómo activarlo
 
-En **✍️ Captura → ⚡ Concepto programado**, al elegir base y retenciones verás,
-por cada retención, si **aplica** o **no** (con el motivo y el mínimo). Si la
-compra es parte de varias del día, marca **“Permitir retención…”** para forzarla.
+Como el juego estándar cambió, en **🧩 Conceptos y tarifas** vuelve a pulsar
+**⚡ Sembrar estándar** (es idempotente: no borra lo tuyo, agrega/actualiza).
+Aparecerán RFAGRO, RFCAFE y el concepto COMPRA_AGRICOLA. Ajusta las cuentas a tu
+PUC si hace falta.
 
-> Requiere que `cn_valores_anuales` tenga la **UVT** del año (2026: 52.374). Si no
-> la encuentra, avisa y no valida el mínimo (se comporta como antes). Estos
-> archivos incluyen todo lo previo de sus módulos.
+> Recuerda que la base mínima solo se valida si `cn_valores_anuales` tiene la UVT
+> del año (2026: 52.374).

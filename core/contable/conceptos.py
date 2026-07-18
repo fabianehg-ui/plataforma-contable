@@ -220,6 +220,10 @@ _KW_CATEGORIA = {
     "honorarios": ["honorar", "asesor", "consultor", "profesional", "abogad",
                    "contad", "revisor", "auditor"],
     "arrendamiento": ["arrend", "arriendo", "canon", "alquiler", "alquil"],
+    "agricola": ["agricol", "agropecu", "pecuari", "ganado", "ganader", "semilla",
+                 "cosecha", "cafe", "cacao", "arroz", "maiz", "platano", "yuca",
+                 "hortaliza", "verdura", "leche cruda", "aguacate", "panela",
+                 "cria de", "cultivo", "avicol", "porcicol"],
     "servicios": ["servicio", "mantenim", "reparac", "transporte", "vigilancia",
                   "aseo", "publicidad", "instalac", "soporte", "mano de obra"],
 }
@@ -227,19 +231,27 @@ _KW_CATEGORIA = {
 _CAT_A_CONCEPTO_KW = {
     "honorarios": ["honorar"],
     "arrendamiento": ["arrend", "arriendo", "canon"],
+    "agricola": ["agricol", "agropecu", "pecuari", "agro"],
     "servicios": ["servicio", "serv"],
     "compra": ["compra", "bien", "mercan", "insumo"],
 }
 
 
+def _sin_tildes(s: str) -> str:
+    s = str(s).lower()
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
+        s = s.replace(a, b)
+    return s
+
+
 def clasificar_factura(factura: dict) -> str:
     """Deduce la categoría de la factura por palabras clave del proveedor y de
-    los ítems: 'honorarios' | 'arrendamiento' | 'servicios' | 'compra'."""
+    los ítems: 'honorarios' | 'arrendamiento' | 'agricola' | 'servicios' | 'compra'."""
     partes = [str(factura.get("nombre") or "")]
     for it in factura.get("items", []) or []:
         partes.append(str(it.get("descripcion") or ""))
-    txt = " ".join(partes).lower()
-    for cat, kws in _KW_CATEGORIA.items():   # honorarios y arrendamiento antes que servicios
+    txt = _sin_tildes(" ".join(partes))
+    for cat, kws in _KW_CATEGORIA.items():   # orden: honorarios, arrend, agrícola, servicios
         if any(k in txt for k in kws):
             return cat
     return "compra"
@@ -252,7 +264,7 @@ def sugerir_concepto(factura: dict, conceptos: list[dict]) -> Optional[str]:
     kws = _CAT_A_CONCEPTO_KW.get(cat, [])
     compras = [c for c in conceptos if str(c.get("naturaleza") or "compra") == "compra"]
     for c in compras:
-        blob = f"{c.get('codigo', '')} {c.get('nombre', '')}".lower()
+        blob = _sin_tildes(f"{c.get('codigo', '')} {c.get('nombre', '')}")
         if any(k in blob for k in kws):
             return c["codigo"]
     return None
@@ -416,6 +428,10 @@ SEED_TIPOS_RETENCION = [
     ("RFHON10", "ReteFuente honorarios 10%",         10,  "base", 0,   "236515", "fuente"),
     ("RFHON11", "ReteFuente honorarios 11%",         11,  "base", 0,   "236515", "fuente"),
     ("RFARR",   "ReteFuente arrendamientos 3.5%",    3.5, "base", 27,  "236530", "fuente"),
+    ("RFAGRO",  "ReteFuente compras agrícolas/pecuarios 1.5%",
+                                                     1.5, "base", 92,  "236540", "fuente"),
+    ("RFCAFE",  "ReteFuente café pergamino/cereza 0.5%",
+                                                     0.5, "base", 160, "236540", "fuente"),
     ("RETEIVA", "ReteIVA 15% (sobre el IVA)",        15,  "iva",  0,   "236701", "iva"),
     ("RETEICA", "ReteICA (tarifa municipal)",        0.7, "base", 0,   "236805", "ica"),
 ]
@@ -435,6 +451,10 @@ SEED_CONCEPTOS = [
     ("ARRENDAMIENTO", "Arrendamiento 19% + Rete 3.5%", "compra", "3",
      "512010", "220505", "IVA19", "RFARR", True, True,
      "Arrendamiento de bienes con IVA descontable y retención por arrendamiento."),
+    ("COMPRA_AGRICOLA", "Compra productos agrícolas/pecuarios sin proceso (Rete 1.5%, base 92 UVT)",
+     "compra", "3", "143501", "220505", "IVA0", "RFAGRO", False, True,
+     "Compra de productos agrícolas o pecuarios SIN procesamiento industrial: "
+     "generalmente excluidos de IVA, retención 1.5% con base mínima de 92 UVT."),
     ("SERV_PUBLICOS", "Servicios públicos (sin IVA ni retención)", "compra", "2",
      "513535", "111005", "IVA0", None, False, False,
      "Servicios públicos: no llevan IVA descontable ni retención en la fuente."),
