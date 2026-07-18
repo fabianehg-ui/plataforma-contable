@@ -1,39 +1,41 @@
-# CÓMO SUBIR — "Agregar al movimiento del mes" en Bittal, Bancos y POS
+# CÓMO SUBIR — Conectar TODOS los módulos a la contabilidad central
 
-Ahora cada módulo, junto a **Descargar plano**, ofrece **agregar al movimiento
-del mes** (causar en cn_movimientos). Fecha: 18-jul-2026. **Sin migración.**
+Amplía "agregar al movimiento del mes" a más módulos y hace que cualquier plano
+en orden Contai se cause bien. Fecha: 18-jul-2026. **Sin migración.**
 
 ## Qué cambia
 
-- **Bittal → Contai**: tras *Generar plano*, aparece **💾 Contabilizar en INTEGRAL**
-  (para los informes que producen plano de texto). Elige período → causa con
-  `origen = bittal`.
-- **Bancos a Contai**: tras *Generar plano*, la opción de contabilizar con
-  `origen = bancos`.
-- **Ingresos POS**: en ambos modos (Token y Excel), la opción con `origen = pos`.
-- Adaptador universal `plano_texto_a_df()`: convierte cualquier plano de texto
-  Contai (TSV sin encabezado, bytes o str) a DataFrame de 11 columnas, para
-  causar planos que los módulos generan como texto.
-- `render_contabilizar_activa(df, origen)`: una línea; toma la **empresa activa**
-  del menú. Si no hay empresa seleccionada, avisa y no hace nada (Bittal y Bancos
-  son páginas-herramienta sin login propio).
+- **Normalizador de columnas** (`integracion.normalizar_columnas`): cualquier
+  plano en orden Contai se causa aunque sus columnas tengan otros nombres/caso
+  (p.ej. el formato *silla tres* de los XML DIAN: "Comprobante", "Fecha", "Doc ref").
+- **Nuevos módulos conectados** (opción de causar junto a descargar):
+  - **Caja Menor** (`origen = caja_menor`)
+  - **Compras DIAN** (`origen = compras_dian`)
+  - **Descargador XML** (5b): causa **por empresa** (`r.empresa_id`), correcto
+    para su flujo multi-empresa (`origen = dian_xml`).
+
+## Ya conectados antes (recordatorio)
+
+Nómina, Captura, Cruce (pagos/recaudos), Ventas C13, Compras y Egresos, Bittal,
+Bancos y POS. Todo lo causado se ve y se reversa en **🔗 Centro Contable**.
+
+## Casos especiales (a propósito NO se auto-causan a una sola empresa)
+
+- **DIAN XML masivo (5a)**: concatena varias empresas en un solo plano; causar a
+  una sola sería incorrecto. Se mantiene como exportador.
+- **PILA y Vacaciones**: se consolidan dentro del **plano de nómina** del mes
+  (para no duplicar); se causan al guardar la nómina.
+- **Siigo a Contai / Siigo Excel**: generan varios archivos .txt para exportar a
+  Contai; su causación en INTEGRAL queda como paso siguiente (por archivo).
 
 ## Archivos
 
-| Archivo | Estado | Cambio |
-|---|---|---|
-| `core/contable/integracion.py` | **MOD** | + `plano_texto_a_df()`. |
-| `core/contable/ui_contabilizar.py` | **MOD** | + `render_contabilizar_activa()` (usa empresa activa). |
-| `app_pages/4c_Bittal_a_Contai.py` | **MOD** | Opción contabilizar (planos de texto). |
-| `app_pages/19_Bancos_a_Contai.py` | **MOD** | Opción contabilizar. |
-| `app_pages/4b_Ingresos_POS.py` | **MOD** | Opción contabilizar (2 modos). |
-| `tests/test_integracion.py` | **MOD** | + pruebas del adaptador de texto. **94 pruebas pasan.** |
+| Archivo | Estado |
+|---|---|
+| `core/contable/integracion.py` | **MOD** — `normalizar_columnas`; orígenes caja_menor/compras_dian. |
+| `app_pages/1_Caja_Menor.py` | **MOD** — opción causar. |
+| `app_pages/2_Compras_DIAN.py` | **MOD** — opción causar. |
+| `app_pages/5b_Descargador_XML.py` | **MOD** — causar por empresa. |
+| `tests/test_integracion.py` | **MOD** — + pruebas del normalizador. **96 pruebas pasan.** |
 
-> Requiere los archivos base del **Puente contable** (integracion.py,
-> ui_contabilizar.py, Centro Contable) de la entrega anterior.
-
-## Resultado
-
-Todos los módulos quedan con el mismo par: **Descargar plano** (para Contai) o
-**Agregar al movimiento del mes** (a INTEGRAL), y lo causado se ve/reversa en
-🔗 Centro Contable. Los módulos nuevos siguen el mismo patrón de una línea.
+Requiere los archivos base del Puente contable. Sin migración.

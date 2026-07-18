@@ -224,6 +224,11 @@ with col_d2:
         use_container_width=True,
     )
 
+# Opción: agregar al movimiento del mes
+from core.contable.ui_contabilizar import render_contabilizar_activa
+st.markdown("---")
+render_contabilizar_activa(df, "caja_menor")
+
 if st.button("🔄 Procesar otro archivo"):
     st.session_state.pop("resultado_cm", None)
     st.rerun()

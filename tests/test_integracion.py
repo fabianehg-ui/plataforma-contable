@@ -38,6 +38,22 @@ class TestCuadrePlano:
         assert integ.cuadre_plano(pd.DataFrame())["cuadra"] is True
 
 
+class TestNormalizarColumnas:
+    def test_silla_tres_por_posicion(self):
+        # columnas en orden Contai pero con nombres distintos (formato silla tres)
+        df = pd.DataFrame([["143501", "3", "2026-06-15", "F1", "F1", "800", "X", "1", "100", "100", "01"]],
+                          columns=["CUENTA", "Comprobante", "Fecha", "DOCUMENTO", "Doc ref",
+                                   "Nit", "Detalle", "Tr", "Valor", "Base", "CC"])
+        out = integ.normalizar_columnas(df)
+        assert list(out.columns) == cont.COLUMNAS_PLANO
+        assert integ.cuadre_plano(df)["debitos"] == 100  # cuadre funciona pese a los nombres
+
+    def test_ya_normalizado(self):
+        df = pd.DataFrame([["1", "3", "", "", "", "", "", "1", "5", "0", ""]],
+                          columns=cont.COLUMNAS_PLANO)
+        assert list(integ.normalizar_columnas(df).columns) == cont.COLUMNAS_PLANO
+
+
 class TestPlanoTextoADf:
     def test_tsv_sin_encabezado(self):
         txt = ("143501\t3\t2026-06-15\tF1\tF1\t800\tCompra\t1\t100000\t100000\t01\n"

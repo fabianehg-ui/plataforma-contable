@@ -578,6 +578,13 @@ if "xml_resultados" in st.session_state:
                     key=f"dl_x_{r.empresa_id}", use_container_width=True,
                 )
 
+            # Opción: agregar al movimiento del mes (a ESTA empresa)
+            from db.supabase_client import get_supabase as _get_sb
+            from core.contable.ui_contabilizar import render_contabilizar
+            st.markdown("—")
+            render_contabilizar(_get_sb(), {"id": r.empresa_id}, df_plano,
+                                "dian_xml", key=f"ct_{r.empresa_id}")
+
     # ── Plano de TERCEROS NUEVOS ──────────────────────────────────
     st.markdown("---")
     st.markdown("### 👥 Plano de TERCEROS NUEVOS para Siigo")

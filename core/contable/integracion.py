@@ -31,6 +31,8 @@ ORIGENES = {
     "ventas": "Ventas C13",
     "pos": "Ingresos POS",
     "compras": "Compras y Egresos",
+    "compras_dian": "Compras DIAN",
+    "caja_menor": "Caja Menor",
     "bancos": "Bancos",
     "bittal": "Bittal",
     "dian_xml": "DIAN XML",
@@ -55,13 +57,38 @@ def cuadre_plano(df: pd.DataFrame) -> dict:
     """{debitos, creditos, diferencia, cuadra, lineas} de un plano de 11 col."""
     if df is None or len(df) == 0:
         return {"debitos": 0, "creditos": 0, "diferencia": 0, "cuadra": True, "lineas": 0}
-    d = df.copy()
+    d = normalizar_columnas(df.copy())
     tr = d["TR"].astype(str)
     val = pd.to_numeric(d["VALOR"], errors="coerce").fillna(0).astype(int)
     db = int(val[tr == "1"].sum())
     cr = int(val[tr == "2"].sum())
     return {"debitos": db, "creditos": cr, "diferencia": db - cr,
             "cuadra": db == cr, "lineas": int(len(d))}
+
+
+def _norm_col(s) -> str:
+    return "".join(ch for ch in str(s).lower() if ch.isalnum())
+
+
+def normalizar_columnas(df: pd.DataFrame) -> pd.DataFrame:
+    """Lleva las columnas de un plano a COLUMNAS_PLANO exactas.
+
+    Acepta variantes de nombre/caso (p.ej. el formato 'silla tres': Comprobante,
+    Fecha, Doc ref…). Si viene en orden Contai (primera col = CUENTA) y tiene
+    ≥11 columnas, reasigna por POSICIÓN (lo más seguro para los planos del repo).
+    """
+    if df is None or len(df) == 0:
+        return df
+    cols = list(df.columns)
+    if cols[:11] == cont.COLUMNAS_PLANO:
+        return df
+    if len(cols) >= 11 and _norm_col(cols[0]) == "cuenta":
+        out = df.iloc[:, :11].copy()
+        out.columns = cont.COLUMNAS_PLANO
+        return out
+    objetivo = {_norm_col(c): c for c in cont.COLUMNAS_PLANO}
+    ren = {c: objetivo[_norm_col(c)] for c in cols if _norm_col(c) in objetivo}
+    return df.rename(columns=ren) if ren else df
 
 
 def plano_texto_a_df(contenido) -> pd.DataFrame:
@@ -106,6 +133,7 @@ def contabilizar(sb, empresa_id: str, periodo: str, df_plano: pd.DataFrame,
     Returns: {insertados, periodo, origen, cuadre}.
     Raises: PermissionError si el período está protegido.
     """
+    df_plano = normalizar_columnas(df_plano)
     if crear_periodo:
         cont.crear_periodo(sb, empresa_id, str(periodo))
     n = cont.guardar_plano(

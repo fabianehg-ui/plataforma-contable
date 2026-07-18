@@ -327,6 +327,11 @@ with tab_compras:
             use_container_width=True,
         )
 
+    # Opción: agregar al movimiento del mes
+    from core.contable.ui_contabilizar import render_contabilizar_activa
+    st.markdown("---")
+    render_contabilizar_activa(df, "compras_dian")
+
     if st.button("🔄 Procesar otro archivo"):
         st.session_state.pop("resultado_dian", None)
         st.rerun()
