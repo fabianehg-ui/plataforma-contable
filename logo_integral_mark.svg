@@ -23,6 +23,10 @@
             markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e9e63"/>
     </marker>
+    <marker id="arrow_DIAN" viewBox="0 0 10 10" refX="8" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e6f5c"/>
+    </marker>
     <marker id="arrow_TXT" viewBox="0 0 10 10" refX="8" refY="5"
             markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
@@ -31,25 +35,35 @@
             markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#9b5de5"/>
     </marker>
+    <marker id="arrow_WWW" viewBox="0 0 10 10" refX="8" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0891b2"/>
+    </marker>
   </defs>
   
   <circle cx="0" cy="0" r="250" fill="url(#halo)"/>
   
-  <path d="M 0.0,-176.0 Q 18.0,-134.0 0.0,-92.0"
+  <path d="M 0.0,-185.0 Q 18.0,-138.5 0.0,-92.0"
         fill="none" stroke="#e4572e" stroke-width="4.5" stroke-linecap="round"
         marker-end="url(#arrow_PDF)" stroke-dasharray="0"></path>
-  <path d="M 149.3,-54.4 Q 124.0,-24.3 87.5,-28.4"
+  <path d="M 126.7,-115.3 Q 110.5,-72.3 71.9,-57.4"
         fill="none" stroke="#5b8def" stroke-width="4.5" stroke-linecap="round"
         marker-end="url(#arrow_XML)" stroke-dasharray="0"></path>
-  <path d="M 92.3,142.4 Q 58.6,119.0 54.1,74.4"
+  <path d="M 157.9,41.2 Q 119.8,48.4 89.7,20.5"
         fill="none" stroke="#1e9e63" stroke-width="4.5" stroke-linecap="round"
         marker-end="url(#arrow_XLSX)" stroke-dasharray="0"></path>
-  <path d="M -92.3,142.4 Q -87.7,97.8 -54.1,74.4"
+  <path d="M 70.3,166.7 Q 38.9,132.6 39.9,82.9"
+        fill="none" stroke="#1e6f5c" stroke-width="4.5" stroke-linecap="round"
+        marker-end="url(#arrow_DIAN)" stroke-dasharray="0"></path>
+  <path d="M -70.3,166.7 Q -71.3,117.0 -39.9,82.9"
         fill="none" stroke="#6b7280" stroke-width="4.5" stroke-linecap="round"
         marker-end="url(#arrow_TXT)" stroke-dasharray="0"></path>
-  <path d="M -149.3,-54.4 Q -112.8,-58.5 -87.5,-28.4"
+  <path d="M -157.9,41.2 Q -127.8,13.3 -89.7,20.5"
         fill="none" stroke="#9b5de5" stroke-width="4.5" stroke-linecap="round"
         marker-end="url(#arrow_IMG)" stroke-dasharray="0"></path>
+  <path d="M -126.7,-115.3 Q -88.1,-100.4 -71.9,-57.4"
+        fill="none" stroke="#0891b2" stroke-width="4.5" stroke-linecap="round"
+        marker-end="url(#arrow_WWW)" stroke-dasharray="0"></path>
   
   <g fill="url(#gearGrad)" fill-rule="evenodd" stroke="#0b1622" stroke-width="1.2">
     <path d="M 7.64,-11.83 L 17.66,-12.25 L 17.66,0.25 L 7.64,-0.17 L 6.25,6.85 L 15.67,10.29 L 10.88,21.84 L 1.79,17.62 L -2.19,23.57 L 5.19,30.35 L -3.65,39.19 L -10.43,31.81 L -16.38,35.79 L -12.16,44.88 L -23.71,49.67 L -27.15,40.25 L -34.17,41.64 L -33.75,51.66 L -46.25,51.66 L -45.83,41.64 L -52.85,40.25 L -56.29,49.67 L -67.84,44.88 L -63.62,35.79 L -69.57,31.81 L -76.35,39.19 L -85.19,30.35 L -77.81,23.57 L -81.79,17.62 L -90.88,21.84 L -95.67,10.29 L -86.25,6.85 L -87.64,-0.17 L -97.66,0.25 L -97.66,-12.25 L -87.64,-11.83 L -86.25,-18.85 L -95.67,-22.29 L -90.88,-33.84 L -81.79,-29.62 L -77.81,-35.57 L -85.19,-42.35 L -76.35,-51.19 L -69.57,-43.81 L -63.62,-47.79 L -67.84,-56.88 L -56.29,-61.67 L -52.85,-52.25 L -45.83,-53.64 L -46.25,-63.66 L -33.75,-63.66 L -34.17,-53.64 L -27.15,-52.25 L -23.71,-61.67 L -12.16,-56.88 L -16.38,-47.79 L -10.43,-43.81 L -3.65,-51.19 L 5.19,-42.35 L -2.19,-35.57 L 1.79,-29.62 L 10.88,-33.84 L 15.67,-22.29 L 6.25,-18.85 Z M -16.80,-6.00 L -17.38,-0.84 L -19.10,4.07 L -21.86,8.46 L -25.54,12.14 L -29.93,14.90 L -34.84,16.62 L -40.00,17.20 L -45.16,16.62 L -50.07,14.90 L -54.46,12.14 L -58.14,8.46 L -60.90,4.07 L -62.62,-0.84 L -63.20,-6.00 L -62.62,-11.16 L -60.90,-16.07 L -58.14,-20.46 L -54.46,-24.14 L -50.07,-26.90 L -45.16,-28.62 L -40.00,-29.20 L -34.84,-28.62 L -29.93,-26.90 L -25.54,-24.14 L -21.86,-20.46 L -19.10,-16.07 L -17.38,-11.16 Z"></path>
@@ -66,44 +80,60 @@
 
   
   <g>
-    <rect x="-44.0" y="-230.0" width="88" height="50" rx="12"
+    <rect x="-48.0" y="-239.0" width="96" height="50" rx="12"
           fill="#ffffff" stroke="#e4572e" stroke-width="3"/>
-    <rect x="-44.0" y="-230.0" width="10" height="50" rx="5" fill="#e4572e"/>
-    <text x="5.0" y="-205.0" font-family="Segoe UI, Arial, sans-serif"
-          font-size="21" font-weight="800" fill="#e4572e"
+    <rect x="-48.0" y="-239.0" width="10" height="50" rx="5" fill="#e4572e"/>
+    <text x="5.0" y="-214.0" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#e4572e"
           text-anchor="middle" dominant-baseline="central">PDF</text>
   </g>
   <g>
-    <rect x="151.0" y="-88.3" width="88" height="50" rx="12"
+    <rect x="119.3" y="-158.4" width="96" height="50" rx="12"
           fill="#ffffff" stroke="#5b8def" stroke-width="3"/>
-    <rect x="151.0" y="-88.3" width="10" height="50" rx="5" fill="#5b8def"/>
-    <text x="200.0" y="-63.3" font-family="Segoe UI, Arial, sans-serif"
-          font-size="21" font-weight="800" fill="#5b8def"
+    <rect x="119.3" y="-158.4" width="10" height="50" rx="5" fill="#5b8def"/>
+    <text x="172.3" y="-133.4" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#5b8def"
           text-anchor="middle" dominant-baseline="central">XML</text>
   </g>
   <g>
-    <rect x="76.5" y="140.8" width="88" height="50" rx="12"
+    <rect x="160.6" y="22.6" width="96" height="50" rx="12"
           fill="#ffffff" stroke="#1e9e63" stroke-width="3"/>
-    <rect x="76.5" y="140.8" width="10" height="50" rx="5" fill="#1e9e63"/>
-    <text x="125.5" y="165.8" font-family="Segoe UI, Arial, sans-serif"
-          font-size="21" font-weight="800" fill="#1e9e63"
+    <rect x="160.6" y="22.6" width="10" height="50" rx="5" fill="#1e9e63"/>
+    <text x="213.6" y="47.6" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#1e9e63"
           text-anchor="middle" dominant-baseline="central">XLSX</text>
   </g>
   <g>
-    <rect x="-164.5" y="140.8" width="88" height="50" rx="12"
+    <rect x="44.9" y="167.8" width="96" height="50" rx="12"
+          fill="#ffffff" stroke="#1e6f5c" stroke-width="3"/>
+    <path d="M 62.9 183.8 L 70.9 187.8 L 70.9 194.8 Q 70.9 200.8 62.9 202.8 Q 54.9 200.8 54.9 194.8 L 54.9 187.8 Z" fill="#1e6f5c"/><path d="M 59.9 192.8 L 61.9 195.8 L 66.9 189.8" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="101.9" y="192.8" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#1e6f5c"
+          text-anchor="middle" dominant-baseline="central">DIAN</text>
+  </g>
+  <g>
+    <rect x="-140.9" y="167.8" width="96" height="50" rx="12"
           fill="#ffffff" stroke="#6b7280" stroke-width="3"/>
-    <rect x="-164.5" y="140.8" width="10" height="50" rx="5" fill="#6b7280"/>
-    <text x="-115.5" y="165.8" font-family="Segoe UI, Arial, sans-serif"
-          font-size="21" font-weight="800" fill="#6b7280"
+    <rect x="-140.9" y="167.8" width="10" height="50" rx="5" fill="#6b7280"/>
+    <text x="-87.9" y="192.8" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#6b7280"
           text-anchor="middle" dominant-baseline="central">TXT</text>
   </g>
   <g>
-    <rect x="-239.0" y="-88.3" width="88" height="50" rx="12"
+    <rect x="-256.6" y="22.6" width="96" height="50" rx="12"
           fill="#ffffff" stroke="#9b5de5" stroke-width="3"/>
-    <rect x="-239.0" y="-88.3" width="10" height="50" rx="5" fill="#9b5de5"/>
-    <text x="-190.0" y="-63.3" font-family="Segoe UI, Arial, sans-serif"
-          font-size="21" font-weight="800" fill="#9b5de5"
+    <rect x="-256.6" y="22.6" width="10" height="50" rx="5" fill="#9b5de5"/>
+    <text x="-203.6" y="47.6" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#9b5de5"
           text-anchor="middle" dominant-baseline="central">IMG</text>
+  </g>
+  <g>
+    <rect x="-215.3" y="-158.4" width="96" height="50" rx="12"
+          fill="#ffffff" stroke="#0891b2" stroke-width="3"/>
+    <g stroke="#0891b2" stroke-width="2.2" fill="none"><circle cx="-197.3" cy="-133.4" r="9"/><ellipse cx="-197.3" cy="-133.4" rx="4" ry="9"/><line x1="-206.3" y1="-133.4" x2="-188.3" y2="-133.4"/></g>
+    <text x="-158.3" y="-133.4" font-family="Segoe UI, Arial, sans-serif"
+          font-size="20" font-weight="800" fill="#0891b2"
+          text-anchor="middle" dominant-baseline="central">WWW</text>
   </g>
   
 </svg>
