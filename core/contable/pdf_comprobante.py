@@ -78,25 +78,30 @@ def generar_pdf_comprobante(datos: dict, ruta: Optional[str] = None):
             "reportlab no está instalado. Instala con: pip install reportlab"
         )
 
-    AZUL = colors.HexColor("#1F4E78")
-    GRIS = colors.HexColor("#F2F2F2")
-    GRIS_LINEA = colors.HexColor("#BFBFBF")
+    # Paleta suave: azules/grises claros con texto NEGRO (mejor lectura).
+    AZUL_TX = colors.HexColor("#24506E")   # texto azul suave (nombre/título)
+    AZUL_BG = colors.HexColor("#E3ECF7")   # fondo encabezado de tabla (azul claro)
+    GRIS = colors.HexColor("#F4F6F9")      # franjas y zebra
+    GRIS_TOT = colors.HexColor("#EAF0F7")  # fila de totales (gris azulado claro)
+    GRIS_LINEA = colors.HexColor("#C9D4E0")
 
     ss = getSampleStyleSheet()
     st_empresa = ParagraphStyle("emp", parent=ss["Normal"], fontName="Helvetica-Bold",
-                                fontSize=13, textColor=AZUL, leading=15)
+                                fontSize=13, textColor=AZUL_TX, leading=15)
     st_sub = ParagraphStyle("sub", parent=ss["Normal"], fontSize=8.5, textColor=colors.black)
     st_titulo = ParagraphStyle("tit", parent=ss["Normal"], fontName="Helvetica-Bold",
-                               fontSize=12, alignment=TA_RIGHT, textColor=AZUL)
+                               fontSize=12, alignment=TA_RIGHT, textColor=AZUL_TX)
     st_titsub = ParagraphStyle("titsub", parent=ss["Normal"], fontSize=8.5,
                                alignment=TA_RIGHT, textColor=colors.black)
-    st_cell = ParagraphStyle("cell", parent=ss["Normal"], fontSize=7.5, leading=9)
+    st_cell = ParagraphStyle("cell", parent=ss["Normal"], fontSize=7.5, leading=9,
+                             textColor=colors.black)
     st_cell_b = ParagraphStyle("cellb", parent=ss["Normal"], fontSize=7.5, leading=9,
-                               fontName="Helvetica-Bold")
+                               fontName="Helvetica-Bold", textColor=colors.black)
     st_num = ParagraphStyle("num", parent=ss["Normal"], fontSize=7.5, leading=9,
-                            alignment=TA_RIGHT)
+                            alignment=TA_RIGHT, textColor=colors.black)
+    # Encabezado de tabla: texto NEGRO sobre fondo azul claro
     st_head = ParagraphStyle("head", parent=ss["Normal"], fontSize=7.5, leading=9,
-                             fontName="Helvetica-Bold", textColor=colors.white)
+                             fontName="Helvetica-Bold", textColor=colors.black)
     st_head_r = ParagraphStyle("headr", parent=st_head, alignment=TA_RIGHT)
 
     bio = io.BytesIO()
@@ -115,8 +120,18 @@ def generar_pdf_comprobante(datos: dict, ruta: Optional[str] = None):
     izq = [
         Paragraph(str(datos.get("empresa") or "Empresa"), st_empresa),
         Paragraph(f"NIT {datos.get('nit_empresa') or '—'}", st_sub),
-        Paragraph("INTEGRAL · Contabilidad", st_sub),
     ]
+    # Datos de contacto de la empresa (solo los que existan)
+    _ubic = " · ".join([str(x) for x in
+                        (datos.get("direccion_empresa"), datos.get("ciudad_empresa")) if x])
+    if _ubic:
+        izq.append(Paragraph(_ubic, st_sub))
+    _cont = " · ".join([str(x) for x in
+                        (datos.get("tel_empresa") and f"Tel. {datos.get('tel_empresa')}",
+                         datos.get("email_empresa")) if x])
+    if _cont:
+        izq.append(Paragraph(_cont, st_sub))
+    izq.append(Paragraph("INTEGRAL · Contabilidad", st_sub))
     der = [
         Paragraph("COMPROBANTE DE DIARIO", st_titulo),
         Paragraph(f"Comprobante: {comp_label}", st_titsub),
@@ -148,6 +163,28 @@ def generar_pdf_comprobante(datos: dict, ruta: Optional[str] = None):
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
     ]))
     elems.append(franja)
+
+    # ---- Franja del tercero (cliente / proveedor) ---------------------------
+    ter_nit = str(datos.get("tercero_nit") or "").strip()
+    ter_nom = str(datos.get("tercero_nombre") or "").strip()
+    if ter_nit or ter_nom:
+        etq = "Cliente / Proveedor"
+        cuerpo = " · ".join([x for x in
+                            (ter_nom, (f"NIT {ter_nit}" if ter_nit else "")) if x])
+        franja_ter = Table(
+            [[Paragraph(f"<b>{etq}:</b> {cuerpo}", st_sub)]],
+            colWidths=[18.0 * cm],
+        )
+        franja_ter.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EEF4FB")),
+            ("BOX", (0, 0), (-1, -1), 0.5, GRIS_LINEA),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.5, GRIS_LINEA),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        elems.append(franja_ter)
+
     if datos.get("detalle"):
         elems.append(Spacer(1, 3))
         elems.append(Paragraph(f"<b>Concepto:</b> {datos['detalle']}", st_sub))
@@ -182,7 +219,8 @@ def generar_pdf_comprobante(datos: dict, ruta: Optional[str] = None):
     t = Table(filas, colWidths=col_w, repeatRows=1)
     n = len(filas)
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), AZUL),
+        ("BACKGROUND", (0, 0), (-1, 0), AZUL_BG),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, GRIS_LINEA),
         ("GRID", (0, 0), (-1, -2), 0.4, GRIS_LINEA),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 2.5),
@@ -191,18 +229,18 @@ def generar_pdf_comprobante(datos: dict, ruta: Optional[str] = None):
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         # zebra en las filas de detalle
         ("ROWBACKGROUNDS", (0, 1), (-1, n - 2), [colors.white, GRIS]),
-        # fila de totales
+        # fila de totales: gris azulado claro con texto NEGRO
         ("SPAN", (0, n - 1), (4, n - 1)),
-        ("BACKGROUND", (0, n - 1), (-1, n - 1), AZUL),
-        ("TEXTCOLOR", (0, n - 1), (-1, n - 1), colors.white),
-        ("LINEABOVE", (0, n - 1), (-1, n - 1), 0.8, AZUL),
+        ("BACKGROUND", (0, n - 1), (-1, n - 1), GRIS_TOT),
+        ("TEXTCOLOR", (0, n - 1), (-1, n - 1), colors.black),
+        ("LINEABOVE", (0, n - 1), (-1, n - 1), 0.8, AZUL_TX),
         ("ALIGN", (0, n - 1), (0, n - 1), "RIGHT"),
     ]))
-    # totales en blanco negrita
-    st_tot = ParagraphStyle("tot", parent=st_num, textColor=colors.white,
+    # totales en NEGRO negrita
+    st_tot = ParagraphStyle("tot", parent=st_num, textColor=colors.black,
                             fontName="Helvetica-Bold")
     filas[n - 1][0] = Paragraph("TOTALES", ParagraphStyle(
-        "totl", parent=st_cell_b, textColor=colors.white, alignment=TA_RIGHT))
+        "totl", parent=st_cell_b, textColor=colors.black, alignment=TA_RIGHT))
     filas[n - 1][5] = Paragraph(_fmt(datos.get("total_debito")), st_tot)
     filas[n - 1][6] = Paragraph(_fmt(datos.get("total_credito")), st_tot)
     elems.append(t)

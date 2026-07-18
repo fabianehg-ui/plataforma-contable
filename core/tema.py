@@ -122,6 +122,21 @@ h1::after{
 
 /* Divisores con tinte de marca */
 hr{ border-color:rgba(14,165,233,.18); }
+
+/* ---- Legibilidad: en fondos blancos/claros, letras OSCURAS ----
+   (solo el área principal; la barra lateral mantiene su texto claro) */
+[data-testid="stMain"] p, [data-testid="stMain"] li, [data-testid="stMain"] label,
+[data-testid="stMain"] span, [data-testid="stMain"] h4, [data-testid="stMain"] h5,
+[data-testid="stMain"] .stMarkdown, [data-testid="stMain"] [data-testid="stWidgetLabel"],
+.main p, .main li, .main label{ color:#1f2b38 !important; }
+/* Texto dentro de campos y selects: oscuro */
+[data-testid="stMain"] input, [data-testid="stMain"] textarea,
+[data-testid="stMain"] [data-baseweb="select"] *{ color:#12324a !important; }
+/* Captions y textos secundarios: gris oscuro legible (no gris claro) */
+[data-testid="stMain"] [data-testid="stCaptionContainer"],
+[data-testid="stMain"] small, [data-testid="stMain"] .stCaption{ color:#46586b !important; }
+/* Editor de datos / tablas: texto oscuro sobre celdas claras */
+[data-testid="stDataFrame"] *, [data-testid="stDataEditor"] *{ color:#1f2b38; }
 </style>
 """
 

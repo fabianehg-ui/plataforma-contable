@@ -551,8 +551,33 @@ with col_g2:
 with col_g3:
     if len(lineas) > 0:
         comp_nombre = {c["codigo"]: c["nombre"] for c in comprobantes}.get(comp_cod, "")
+        # Datos del tercero (cliente/proveedor) por NIT — mejor esfuerzo
+        _ter_nit = (nit_cab or "").strip()
+        _ter_nom = ""
+        if _ter_nit:
+            try:
+                _t = cont.obtener_tercero(sb, emp["id"], _ter_nit) or {}
+                _ter_nom = _t.get("nombre") or _t.get("razon_social") or ""
+            except Exception:
+                _ter_nom = ""
+        # Datos de contacto de la empresa — mejor esfuerzo (si la tabla los tiene)
+        _emp_extra = {}
+        try:
+            _er = (sb.table("empresas").select("*").eq("id", emp["id"])
+                   .single().execute())
+            _ed = _er.data or {}
+            _emp_extra = {
+                "direccion_empresa": _ed.get("direccion"),
+                "ciudad_empresa": _ed.get("ciudad") or _ed.get("municipio"),
+                "tel_empresa": _ed.get("telefono") or _ed.get("celular"),
+                "email_empresa": _ed.get("email") or _ed.get("correo"),
+            }
+        except Exception:
+            _emp_extra = {}
         datos_pdf = {
             "empresa": emp["razon_social"], "nit_empresa": emp.get("nit"),
+            "tercero_nit": _ter_nit, "tercero_nombre": _ter_nom,
+            **_emp_extra,
             "comprobante_cod": comp_cod, "comprobante_nombre": comp_nombre,
             "documento": documento or "(borrador)", "fecha": fecha,
             "periodo": periodo_cod, "detalle": detalle_cab,
