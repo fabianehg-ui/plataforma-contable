@@ -23,6 +23,7 @@ from auth.login import require_auth, sidebar_user_info, current_user
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
 from db.supabase_client import get_supabase
 from core.contable import servicio_contable as cont
+from core.contable.pdf_comprobante import generar_pdf_comprobante
 
 
 require_auth()
@@ -63,12 +64,14 @@ def _fmt_cols(df, cols):
     return {c: st.column_config.NumberColumn(format="%d") for c in cols if c in df.columns}
 
 
-(tab_bal, tab_er, tab_bg, tab_aux, tab_cart,
+(tab_bal, tab_er, tab_bg, tab_mayor, tab_aux, tab_comp, tab_cart,
  tab_import, tab_per) = st.tabs([
     "⚖️ Balance de prueba",
     "📈 Estado de resultados",
     "🏛️ Balance general",
+    "📓 Libro mayor",
     "📒 Libro auxiliar",
+    "🧾 Comprobante de diario",
     "💳 Estado de cartera",
     "📥 Importar movimiento",
     "🗓️ Períodos",
@@ -166,6 +169,53 @@ with tab_bg:
 
 
 # ---------------------------------------------------------------------
+# Libro Mayor y Balances
+# ---------------------------------------------------------------------
+NIVELES_MAYOR = {
+    "Clase (1 díg)": 1,
+    "Grupo / Mayor (2 díg)": 2,
+    "Cuenta (4 díg)": 4,
+    "Subcuenta (6 díg)": 6,
+    "Auxiliar (cuenta completa)": None,
+}
+
+with tab_mayor:
+    st.markdown("### 📓 Libro Mayor y Balances")
+    st.caption("Por cuenta: saldo anterior · movimiento débito/crédito del rango · "
+               "saldo final. Elige el nivel de agregación (libro oficial).")
+    cA, cB, cC = st.columns([2, 2, 3])
+    with cA:
+        may_d = _sel_periodo("Desde", "may_d", default_mes=1)
+    with cB:
+        may_h = _sel_periodo("Hasta", "may_h")
+    with cC:
+        niv_lbl = st.selectbox("Nivel de agregación", list(NIVELES_MAYOR.keys()),
+                               index=1, key="may_niv")
+    if st.button("Generar libro mayor", type="primary", key="btn_may"):
+        with st.spinner("Calculando…"):
+            df = cont.libro_mayor(sb, emp["id"], may_d, may_h,
+                                  nivel=NIVELES_MAYOR[niv_lbl])
+        if len(df) == 0:
+            st.info("No hay movimiento en ese rango.")
+        else:
+            tot_db = int(df["Débitos"].sum())
+            tot_cr = int(df["Créditos"].sum())
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Cuentas", len(df))
+            m2.metric("Débitos período", f"$ {tot_db:,}".replace(",", "."))
+            m3.metric("Créditos período", f"$ {tot_cr:,}".replace(",", "."))
+            if tot_db == tot_cr:
+                st.success(f"✅ Movimiento cuadra: Db = Cr = $ {tot_db:,}".replace(",", "."))
+            else:
+                st.warning(f"⚠️ Descuadre del movimiento: $ {tot_db - tot_cr:,}".replace(",", "."))
+            st.dataframe(df, use_container_width=True, hide_index=True,
+                         column_config=_fmt_cols(df, ["Saldo anterior", "Débitos", "Créditos", "Saldo final"]))
+            st.download_button("📊 Excel", _excel(df, "LibroMayor"),
+                               file_name=f"libro_mayor_{may_d}_{may_h}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ---------------------------------------------------------------------
 # Libro auxiliar
 # ---------------------------------------------------------------------
 with tab_aux:
@@ -197,6 +247,113 @@ with tab_aux:
                 st.download_button("📊 Excel", _excel(df, "Auxiliar"),
                                    file_name=f"auxiliar_{cuenta or nit}_{desde_a}_{hasta_a}.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ---------------------------------------------------------------------
+# Comprobante de diario (impresión del asiento)
+# ---------------------------------------------------------------------
+with tab_comp:
+    st.markdown("### 🧾 Comprobante de diario")
+    st.caption("Elige un período, selecciona el asiento (comprobante · documento) "
+               "y visualízalo o imprímelo en PDF. El libro diario del período está "
+               "en el panel desplegable.")
+    per_c = _sel_periodo("Período", "comp_p")
+    filtro_comp = st.text_input("Filtrar por tipo de comprobante (código, opcional)",
+                                key="comp_filtro")
+    if st.button("Cargar comprobantes del período", key="btn_comp_load"):
+        with st.spinner("Consultando…"):
+            st.session_state["comp_lista"] = cont.listar_comprobantes_periodo(
+                sb, emp["id"], per_c, comprobante=filtro_comp or None)
+            st.session_state["comp_periodo"] = per_c
+            st.session_state.pop("comp_actual", None)
+
+    lista = st.session_state.get("comp_lista")
+    if lista is not None and st.session_state.get("comp_periodo") == per_c:
+        if not lista:
+            st.info("No hay comprobantes en ese período.")
+        else:
+            dfd = pd.DataFrame([{
+                "Fecha": g["fecha"], "Comp": g["comprobante"], "Documento": g["documento"],
+                "Concepto": g["detalle"], "Líneas": g["lineas"],
+                "Débitos": g["debitos"], "Créditos": g["creditos"],
+                "Cuadra": "✅" if g["cuadra"] else "❌",
+            } for g in lista])
+            with st.expander(f"📖 Libro diario del período ({len(lista)} asientos)"):
+                st.dataframe(dfd, use_container_width=True, hide_index=True,
+                             column_config=_fmt_cols(dfd, ["Débitos", "Créditos"]))
+                st.download_button("📊 Excel (libro diario)", _excel(dfd, "LibroDiario"),
+                                   file_name=f"libro_diario_{per_c}.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   key="dl_diario")
+
+            opciones = {}
+            for g in lista:
+                etq = (f"{g['comprobante']} · doc {g['documento']} · "
+                       f"{g['fecha'] or 's/f'} · $ {g['debitos']:,}".replace(",", ".")
+                       + ("  ⚠️ descuadra" if not g["cuadra"] else ""))
+                opciones[etq] = (g["comprobante"], g["documento"])
+            sel = st.selectbox("Asiento", list(opciones.keys()), key="comp_sel")
+            if st.button("Ver / imprimir comprobante", type="primary", key="btn_comp_ver"):
+                comp_cod, doc = opciones[sel]
+                with st.spinner("Armando comprobante…"):
+                    header, det, tot = cont.comprobante_diario(sb, emp["id"], per_c, comp_cod, doc)
+                    comps = {c["codigo"]: c.get("nombre", "")
+                             for c in cont.listar_comprobantes(sb, emp["id"])}
+                st.session_state["comp_actual"] = {
+                    "header": header, "det": det, "tot": tot,
+                    "comp_cod": comp_cod, "doc": doc, "periodo": per_c,
+                    "comp_nombre": comps.get(comp_cod, ""),
+                }
+
+    # Render del asiento seleccionado (fuera del guard del botón para que las
+    # descargas no lo hagan desaparecer al re-ejecutar Streamlit).
+    actual = st.session_state.get("comp_actual")
+    if actual and actual.get("periodo") == per_c:
+        header, det, tot = actual["header"], actual["det"], actual["tot"]
+        comp_cod, doc = actual["comp_cod"], actual["doc"]
+        st.markdown("---")
+        st.markdown(f"#### Comprobante {comp_cod} — {actual['comp_nombre'] or 'diario'} · "
+                    f"Documento {doc}")
+        st.caption(f"Fecha: {header.get('fecha') or '—'} · Período: {per_c}"
+                   + (f" · {header.get('detalle')}" if header.get("detalle") else ""))
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Débitos", f"$ {tot['debitos']:,}".replace(",", "."))
+        m2.metric("Créditos", f"$ {tot['creditos']:,}".replace(",", "."))
+        m3.metric("Cuadra", "✅" if tot["cuadra"]
+                  else f"❌ {tot['diferencia']:,}".replace(",", "."))
+        if not tot["cuadra"]:
+            st.warning("⚠️ Este comprobante NO cuadra (Db ≠ Cr).")
+        st.dataframe(det, use_container_width=True, hide_index=True,
+                     column_config=_fmt_cols(det, ["Débito", "Crédito"]))
+
+        datos_pdf = {
+            "empresa": emp["razon_social"], "nit_empresa": emp.get("nit"),
+            "comprobante_cod": comp_cod, "comprobante_nombre": actual["comp_nombre"],
+            "documento": doc, "fecha": header.get("fecha"),
+            "periodo": per_c, "detalle": header.get("detalle"),
+            "lineas": [
+                {"cuenta": r["Cuenta"], "nombre": r["Nombre"], "nit": r["NIT"],
+                 "detalle": r["Detalle"], "cc": r["C. Costo"],
+                 "debito": r["Débito"], "credito": r["Crédito"]}
+                for r in det.to_dict("records")
+            ],
+            "total_debito": tot["debitos"], "total_credito": tot["creditos"],
+        }
+        d1, d2 = st.columns(2)
+        with d1:
+            try:
+                pdf = generar_pdf_comprobante(datos_pdf)
+                st.download_button("🧾 PDF del comprobante", pdf,
+                                   file_name=f"comprobante_{comp_cod}_{doc}_{per_c}.pdf",
+                                   mime="application/pdf", key="dl_comp_pdf",
+                                   use_container_width=True)
+            except Exception as e:
+                st.error(f"No se pudo generar el PDF: {e}")
+        with d2:
+            st.download_button("📊 Excel del asiento", _excel(det, "Comprobante"),
+                               file_name=f"comprobante_{comp_cod}_{doc}_{per_c}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               key="dl_comp_xlsx", use_container_width=True)
 
 
 # ---------------------------------------------------------------------

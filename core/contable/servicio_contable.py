@@ -607,6 +607,188 @@ def balance_general(sb, empresa_id: str, hasta: str):
 
 
 # ============================================================
+# Libro Mayor y Balances  (libro oficial)
+# ============================================================
+#
+# El "Libro Mayor y Balances" resume, por cuenta, el saldo que traía antes del
+# rango (saldo anterior), el movimiento débito y crédito del rango y el saldo
+# final. La diferencia con el balance de prueba es que aquí se puede AGREGAR
+# a un nivel de cuenta (clase 1 díg, mayor 2, cuenta 4, subcuenta 6…), como lo
+# exige el libro oficial.
+
+def _nivel_cuenta(cta, nivel: Optional[int]) -> str:
+    s = str(cta)
+    return s[:nivel] if nivel else s
+
+
+def _calc_libro_mayor(movs: list[dict], desde: str, hasta: str,
+                      nivel: Optional[int] = None,
+                      nombres: Optional[dict] = None) -> pd.DataFrame:
+    """Libro mayor por cuenta (opcionalmente agregada a `nivel` dígitos).
+
+    Función PURA. `movs` debe traer todo el histórico <= hasta para que el
+    saldo anterior sea correcto.
+    """
+    nombres = nombres or {}
+    acc: dict[str, list[int]] = {}  # cuenta -> [saldo_ant, debitos, creditos]
+    for m in movs:
+        cta = _nivel_cuenta(m["cuenta"], nivel)
+        d = acc.setdefault(cta, [0, 0, 0])
+        p = m["periodo"]
+        if p < desde:
+            d[0] += _signed(m)
+        elif desde <= p <= hasta:
+            if str(m["tr"]) == "1":
+                d[1] += int(m["valor"])
+            else:
+                d[2] += int(m["valor"])
+    filas = []
+    for cta in sorted(acc):
+        s_ant, deb, cre = acc[cta]
+        s_fin = s_ant + deb - cre
+        if s_ant == 0 and deb == 0 and cre == 0:
+            continue
+        filas.append({
+            "Cuenta": cta,
+            "Nombre": nombres.get(cta, ""),
+            "Saldo anterior": s_ant,
+            "Débitos": deb,
+            "Créditos": cre,
+            "Saldo final": s_fin,
+        })
+    return pd.DataFrame(filas, columns=[
+        "Cuenta", "Nombre", "Saldo anterior", "Débitos", "Créditos", "Saldo final",
+    ])
+
+
+def libro_mayor(sb, empresa_id: str, desde: str, hasta: str,
+                nivel: Optional[int] = None) -> pd.DataFrame:
+    """Libro Mayor y Balances entre dos períodos 'AAAAMM' (inclusive).
+
+    `nivel`: si se da, agrega las cuentas a ese número de dígitos
+    (1=clase, 2=grupo/mayor, 4=cuenta, 6=subcuenta). None = cuenta tal como
+    está guardada (auxiliar).
+    """
+    movs = _fetch_paginado(sb, empresa_id, "cuenta,periodo,tr,valor", periodo_lte=str(hasta))
+    return _calc_libro_mayor(movs, str(desde), str(hasta), nivel, _nombres_cuentas(sb, empresa_id))
+
+
+# ============================================================
+# Libro Diario / Comprobante de Diario  (impresión del asiento)
+# ============================================================
+#
+# Un comprobante de diario se identifica por (comprobante, documento) dentro de
+# un período. Reúne todas las líneas del asiento (débitos y créditos) que deben
+# cuadrar Db=Cr. El "libro diario" es la lista cronológica de esos asientos.
+
+def _agrupar_comprobantes(movs: list[dict]) -> list[dict]:
+    """Agrupa movimientos por (comprobante, documento) → un asiento por grupo.
+
+    Devuelve la lista ordenada cronológicamente (libro diario) con totales y
+    bandera de cuadre por asiento. Función PURA.
+    """
+    grupos: dict[tuple, dict] = {}
+    for m in movs:
+        k = (str(m.get("comprobante") or ""), str(m.get("documento") or ""))
+        g = grupos.get(k)
+        if g is None:
+            g = {
+                "comprobante": k[0], "documento": k[1],
+                "fecha": m.get("fecha"), "detalle": m.get("detalle") or "",
+                "debitos": 0, "creditos": 0, "lineas": 0,
+            }
+            grupos[k] = g
+        if str(m.get("tr")) == "1":
+            g["debitos"] += int(m["valor"])
+        else:
+            g["creditos"] += int(m["valor"])
+        g["lineas"] += 1
+        f = m.get("fecha")
+        if f and (not g["fecha"] or f < g["fecha"]):
+            g["fecha"] = f
+        if not g["detalle"] and m.get("detalle"):
+            g["detalle"] = m["detalle"]
+    filas = list(grupos.values())
+    for g in filas:
+        g["cuadra"] = g["debitos"] == g["creditos"]
+        g["diferencia"] = g["debitos"] - g["creditos"]
+    filas.sort(key=lambda g: (g["fecha"] or "", g["comprobante"], g["documento"]))
+    return filas
+
+
+def _calc_comprobante(movs: list[dict], comprobante: str, documento: str,
+                      nombres: Optional[dict] = None):
+    """Arma el asiento (comprobante, documento): encabezado, líneas y totales.
+
+    Función PURA. Devuelve (header:dict, detalle:DataFrame, totales:dict).
+    Las líneas se ordenan débitos primero (tr=1) y luego por cuenta.
+    """
+    nombres = nombres or {}
+    lineas = [
+        m for m in movs
+        if str(m.get("comprobante") or "") == str(comprobante)
+        and str(m.get("documento") or "") == str(documento)
+    ]
+    lineas.sort(key=lambda m: (str(m.get("tr")), str(m.get("cuenta"))))
+    filas = []
+    tot_db = tot_cr = 0
+    for m in lineas:
+        deb = int(m["valor"]) if str(m["tr"]) == "1" else 0
+        cre = int(m["valor"]) if str(m["tr"]) == "2" else 0
+        tot_db += deb
+        tot_cr += cre
+        filas.append({
+            "Cuenta": m.get("cuenta"),
+            "Nombre": nombres.get(str(m.get("cuenta")), ""),
+            "NIT": m.get("nit"),
+            "Detalle": m.get("detalle"),
+            "C. Costo": m.get("centro_costo"),
+            "Débito": deb,
+            "Crédito": cre,
+        })
+    detalle = pd.DataFrame(filas, columns=[
+        "Cuenta", "Nombre", "NIT", "Detalle", "C. Costo", "Débito", "Crédito",
+    ])
+    fecha = next((m.get("fecha") for m in lineas if m.get("fecha")), None)
+    header = {
+        "comprobante": str(comprobante),
+        "documento": str(documento),
+        "fecha": fecha,
+        "periodo": lineas[0].get("periodo") if lineas else None,
+        "detalle": next((m.get("detalle") for m in lineas if m.get("detalle")), ""),
+        "lineas": len(lineas),
+    }
+    totales = {
+        "debitos": tot_db, "creditos": tot_cr,
+        "diferencia": tot_db - tot_cr, "cuadra": tot_db == tot_cr,
+    }
+    return header, detalle, totales
+
+
+def listar_comprobantes_periodo(sb, empresa_id: str, periodo: str,
+                                comprobante: Optional[str] = None) -> list[dict]:
+    """Libro diario del período: lista de asientos (comprobante, documento)."""
+    extra = {"comprobante": str(comprobante)} if comprobante else None
+    movs = _fetch_paginado(
+        sb, empresa_id, "comprobante,documento,fecha,detalle,tr,valor",
+        periodo_gte=str(periodo), periodo_lte=str(periodo), extra_eq=extra,
+    )
+    return _agrupar_comprobantes(movs)
+
+
+def comprobante_diario(sb, empresa_id: str, periodo: str,
+                       comprobante: str, documento: str):
+    """Trae un comprobante de diario completo para imprimir/exportar."""
+    movs = _fetch_paginado(
+        sb, empresa_id,
+        "cuenta,periodo,fecha,comprobante,documento,doc_referencia,nit,detalle,tr,valor,base,centro_costo",
+        periodo_gte=str(periodo), periodo_lte=str(periodo),
+        extra_eq={"comprobante": str(comprobante), "documento": str(documento)},
+    )
+    return _calc_comprobante(movs, comprobante, documento, _nombres_cuentas(sb, empresa_id))
+
+
+# ============================================================
 # Terceros (maestro de NITs)
 # ============================================================
 
