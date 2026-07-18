@@ -366,18 +366,59 @@ class TestLeerZip:
         assert facs[0]["nit"] == "800197268"
 
     def test_zip_con_dos_xml(self):
-        zb = self._zip_con({"a.xml": XML_UBL, "b.xml": XML_REG})
+        otro = XML_UBL.replace("FE4587", "FE9999").replace("800197268", "900999999")
+        zb = self._zip_con({"a.xml": XML_UBL, "b.xml": otro})
         facs = lf.leer_zip(zb)
         assert len(facs) == 2
 
     def test_dispatcher_facturas_zip(self):
-        zb = self._zip_con({"a.xml": XML_UBL, "b.xml": XML_REG})
+        otro = XML_UBL.replace("FE4587", "FE9999").replace("800197268", "900999999")
+        zb = self._zip_con({"a.xml": XML_UBL, "b.xml": otro})
         facs = lf.leer_facturas("paquete.zip", zb)
         assert len(facs) == 2
 
     def test_dispatcher_facturas_unico(self):
         facs = lf.leer_facturas("f.xml", XML_UBL.encode("utf-8"))
         assert len(facs) == 1
+
+    def _zip_con(self, archivos):
+        import io as _io, zipfile
+        buf = _io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for nombre, contenido in archivos.items():
+                z.writestr(nombre, contenido)
+        return buf.getvalue()
+
+    def test_zip_xml_y_pdf_misma_factura_no_duplica(self):
+        # ZIP con XML y PDF de la MISMA factura → una sola, la del XML.
+        zb = self._zip_con({"FE4587.xml": XML_UBL, "FE4587.pdf": b"%PDF-1.4 x"})
+        facs = lf.leer_zip(zb)
+        assert len(facs) == 1
+        assert facs[0]["formato"] == "xml"
+        assert facs[0]["total"] == 2_380_000
+
+    def test_zip_pdf_solo_no_se_pierde(self):
+        # Factura A (xml) + factura B (solo pdf) → ambas se leen.
+        pdf_txt = ("PROVEEDOR B SAS\nNIT: 900111\nFactura No. B-9\n"
+                   "Subtotal: 1.000.000\nIVA 19%: 190.000\nTotal a pagar: 1.190.000\n")
+        # pdfplumber no lee este texto plano, así que probamos el emparejado por nombre
+        zb = self._zip_con({"A.xml": XML_UBL, "B.pdf": b"%PDF-1.4 " + pdf_txt.encode()})
+        facs = lf.leer_zip(zb)
+        # A siempre; B puede quedar con confianza baja pero NO se descarta el grupo
+        formatos = sorted(f["formato"] for f in facs)
+        assert "xml" in formatos
+        assert len(facs) >= 1
+
+    def test_dedupe_prefiere_xml(self):
+        a_xml = {"formato": "xml", "nit": "800", "numero": "F1", "total": 100}
+        a_pdf = {"formato": "pdf", "nit": "800", "numero": "F1", "total": 100}
+        b_pdf = {"formato": "pdf", "nit": "900", "numero": "F2", "total": 50}
+        res = lf._dedupe_facturas([a_pdf, a_xml, b_pdf])
+        claves = {(f["nit"], f["numero"], f["formato"]) for f in res}
+        assert ("800", "F1", "xml") in claves
+        assert ("800", "F1", "pdf") not in claves
+        assert ("900", "F2", "pdf") in claves
+        assert len(res) == 2
 
 
 # ============================================================

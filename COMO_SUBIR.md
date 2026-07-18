@@ -1,41 +1,27 @@
-# CÓMO SUBIR — Estructura de catálogos por defecto (INTEGRAL)
+# HOTFIX — ZIP con XML+PDF ya no duplica valores + crea el tercero
 
-Monta PUC, terceros, municipios, CIIU y calendario por defecto en toda empresa.
-Fecha: 18-jul-2026.
+Corrige el bug de importar un ZIP con el **XML y el PDF de la misma factura**:
+antes sumaba los dos valores. Fecha: 18-jul-2026. **Sin migración.**
 
-## 1. Correr en Supabase (SQL Editor → pegar → Run, en orden)
+## Qué cambia
 
-1. Si aún no lo hiciste: `015_terceros.sql` y `016_conceptos_iva_retencion.sql`.
-2. **`db/migrations/017_catalogos_plantilla_y_siembra.sql`** — crea las plantillas
-   (PUC 372 ctas, comprobantes, tipos IVA/retención, conceptos, terceros base),
-   el **directorio global de terceros**, la función `cn_inicializar_empresa()` y
-   el **trigger** que siembra cada empresa nueva. Idempotente.
-3. **`db/migrations/018_municipios_global.sql`** — siembra 1.092 municipios DANE.
+- **`leer_zip`**: por cada documento lee **uno solo, prefiriendo el XML** sobre su
+  representación PDF/imagen. Agrupa por nombre de archivo (FE4587.xml / FE4587.pdf
+  → solo el XML) y, como segunda red, **deduplica por (NIT, número)** conservando
+  el XML. Ya no se duplican los valores.
+- Además, si una factura del ZIP **solo trae PDF**, ya no se descarta (antes, si
+  había algún XML, las de solo-PDF se perdían).
+- **Crear tercero si no existe**: al guardar el comprobante, cada NIT que no esté
+  en `cn_terceros` se crea automáticamente con el nombre y régimen de la factura
+  leída (o del directorio global de terceros si está disponible).
 
-## 2. Archivos de código
+## Archivos
 
-| Archivo | Estado | Qué hace |
-|---|---|---|
-| `db/migrations/017_...sql` | **NUEVO** | Plantillas + directorio + función + trigger. |
-| `db/migrations/018_...sql` | **NUEVO** | Municipios DANE globales. |
-| `core/contable/inicializar.py` | **NUEVO** | `inicializar_empresa(sb,id)`, `buscar_directorio(sb,nit)`, `listar_directorio`. |
-| `app_pages/0_Panel_Admin.py` | **MOD** | Sección **🌱 Inicializar catálogos** por empresa. |
+| Archivo | Cambio |
+|---|---|
+| `core/contable/lector_factura.py` | `leer_zip` reescrito (prioriza XML, no pierde solo-PDF) + `_dedupe_facturas` por (NIT, número). |
+| `app_pages/21_Captura.py` | Al guardar, `_asegurar_tercero()` crea el tercero faltante con datos de la factura/directorio. |
+| `tests/test_conceptos_lector.py` | + pruebas: XML+PDF misma factura no duplica; dedupe prefiere XML. **84 pruebas pasan.** |
 
-## 3. Inicializar las empresas existentes
-
-En **🛡️ Panel Admin → 🌱 Inicializar catálogos por defecto**, elige JIPER y
-CASA UNOTRES y pulsa **Inicializar** (las creadas antes del trigger). Idempotente.
-
-## Resultado
-
-- Toda **empresa nueva** nace con PUC, comprobantes, conceptos y terceros base
-  (por el trigger).
-- **Municipios, CIIU, calendario y valores anuales** son globales: se consultan.
-- Al digitar un **NIT** conocido, `cn_directorio_terceros` permite autocompletar
-  el nombre (servicio listo; se puede enganchar en la UI de Captura/Maestros).
-
-## Notas
-
-- La función está protegida: si 015/016 no están aplicadas, omite esas secciones
-  sin fallar; corre esas migraciones y vuelve a inicializar para completarlas.
-- Ver `ESTRUCTURA_CATALOGOS.md` para el diseño completo (global vs plantilla).
+Súbelos encima de los anteriores. La creación de tercero es silenciosa si aún no
+corriste 015 (terceros) / 017 (directorio) — no rompe nada.

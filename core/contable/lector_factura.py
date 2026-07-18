@@ -371,10 +371,45 @@ def leer_imagen(img_bytes: bytes, nombre: str = "") -> dict:
 # ZIP (paquete de facturas: XML de la DIAN, o PDFs)
 # ============================================================
 
-def leer_zip(zip_bytes: bytes, nombre: str = "") -> list[dict]:
-    """Extrae y lee todas las facturas de un ZIP (incluye sub-ZIPs del
-    bookmarklet DIAN). Prioriza XML; si no hay, intenta PDFs."""
+_IMG_EXT = (".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp")
+
+
+def _stem(nombre: str) -> str:
+    base = str(nombre).replace("\\", "/").rsplit("/", 1)[-1]
+    return base.rsplit(".", 1)[0].lower() if "." in base else base.lower()
+
+
+def _dedupe_facturas(facs: list[dict]) -> list[dict]:
+    """Una factura por documento, prefiriendo el XML sobre PDF/imagen.
+
+    Evita que un ZIP con XML **y** PDF de la misma factura sume el valor dos
+    veces: si dos entradas comparten (NIT, número) se conserva solo la de mayor
+    prioridad (xml > pdf > imagen).
+    """
+    orden = {"xml": 0, "pdf": 1, "imagen": 2}
+    facs = sorted(facs, key=lambda f: orden.get(f.get("formato"), 9))
+    vistos: set = set()
     out: list[dict] = []
+    for f in facs:
+        nit = str(f.get("nit") or "").strip()
+        num = str(f.get("numero") or "").strip()
+        clave = (nit, num) if (nit and num) else None
+        if clave is not None:
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+        out.append(f)
+    return out
+
+
+def leer_zip(zip_bytes: bytes, nombre: str = "") -> list[dict]:
+    """Lee las facturas de un ZIP. Por documento lee UNO solo, **prefiriendo el
+    XML** sobre su representación PDF/imagen (así no se duplican los valores).
+    Soporta el ZIP maestro del bookmarklet DIAN (sub-ZIPs con XML)."""
+    import zipfile
+
+    out: list[dict] = []
+    # 1) ZIP maestro del bookmarklet (sub-ZIPs) → solo XMLs.
     try:
         from core.procesadores.procesador_dian_xml import extraer_xmls_de_zip_maestro
         for nom, xb in extraer_xmls_de_zip_maestro(zip_bytes):
@@ -384,27 +419,38 @@ def leer_zip(zip_bytes: bytes, nombre: str = "") -> list[dict]:
                 pass
     except Exception:
         pass
-    if not out:
-        try:
-            import zipfile
-            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
-                for nom in z.namelist():
-                    low = nom.lower()
-                    if low.endswith(".xml") and not nom.split("/")[-1].startswith("_"):
-                        try:
-                            out.append(leer_xml(z.read(nom), nom))
-                        except Exception:
-                            pass
-                if not out:
-                    for nom in z.namelist():
-                        if nom.lower().endswith(".pdf"):
-                            try:
-                                out.append(leer_pdf(z.read(nom), nom))
-                            except Exception:
-                                pass
-        except Exception:
-            pass
-    return out
+    if out:
+        return _dedupe_facturas(out)
+
+    # 2) ZIP plano: agrupar por nombre de archivo; XML gana sobre PDF/imagen.
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+            grupos: dict[str, dict] = {}
+            for nom in z.namelist():
+                base = nom.replace("\\", "/").rsplit("/", 1)[-1]
+                if not base or base.startswith("_"):
+                    continue
+                low = base.lower()
+                g = grupos.setdefault(_stem(nom), {})
+                if low.endswith(".xml"):
+                    g["xml"] = nom
+                elif low.endswith(_IMG_EXT) and "img" not in g:
+                    g["img"] = nom
+            for g in grupos.values():
+                try:
+                    if "xml" in g:                       # prioridad al XML
+                        out.append(leer_xml(z.read(g["xml"]), g["xml"]))
+                    elif "img" in g:
+                        nm = g["img"]
+                        if nm.lower().endswith(".pdf"):
+                            out.append(leer_pdf(z.read(nm), nm))
+                        else:
+                            out.append(leer_imagen(z.read(nm), nm))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return _dedupe_facturas(out)
 
 
 # ============================================================

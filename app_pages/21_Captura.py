@@ -53,6 +53,45 @@ def _a_editor_df(lineas: list[dict]) -> pd.DataFrame:
     return pd.concat([df, _lineas_vacias(1)], ignore_index=True)
 
 
+def _asegurar_tercero(sb, empresa_id, nit, factura_leida=None):
+    """Crea el tercero en cn_terceros si no existe, con datos de la factura
+    leída o del directorio global. Silencioso si falla (p.ej. sin migración 015)."""
+    nit = str(nit or "").strip()
+    if not nit:
+        return
+    try:
+        if cont.obtener_tercero(sb, empresa_id, nit):
+            return
+    except Exception:
+        return
+    nombre, campos = "", {}
+    fl = factura_leida or {}
+    if str(fl.get("nit") or "").strip() == nit:
+        nombre = fl.get("nombre") or ""
+        reg = fl.get("regimen") or {}
+        if reg.get("iva") == "responsable":
+            campos["regimen"] = "Responsable de IVA"
+        elif reg.get("iva") == "no_responsable":
+            campos["regimen"] = "No responsable de IVA"
+    if not nombre:
+        try:
+            from core.contable.inicializar import buscar_directorio
+            d = buscar_directorio(sb, nit)
+            if d:
+                nombre = d.get("nombre") or ""
+                if d.get("dv"):
+                    campos["dv"] = d["dv"]
+                if d.get("tipo_persona"):
+                    campos["tipo_persona"] = d["tipo_persona"]
+        except Exception:
+            pass
+    if nombre:
+        try:
+            cont.upsert_tercero(sb, empresa_id, nit, nombre, **campos)
+        except Exception:
+            pass
+
+
 def _prefill_factura(datos: dict):
     """Vuelca los datos de una factura leída en la cabecera de la Captura."""
     import streamlit as _st
@@ -486,6 +525,10 @@ with col_g1:
                 sb, emp["id"], periodo_cod, df_plano,
                 origen="captura", user_id=usr.get("id"), reemplazar=False,
             )
+            # Crear terceros que no existan (con datos de la factura / directorio)
+            fl = st.session_state.get("factura_leida")
+            for _nit in {str(r["NIT"]).strip() or nit_cab for _, r in lineas.iterrows()}:
+                _asegurar_tercero(sb, emp["id"], _nit, fl)
             st.success(
                 f"✅ Comprobante {comp_cod}-{documento} guardado "
                 f"({n} líneas, período {periodo_cod})."
