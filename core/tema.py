@@ -42,15 +42,11 @@ _CSS_TEMA = """
 }
 [data-testid="stHeader"]{ background:transparent; }
 
-/* Aparición suave del contenido en cada página/subventana */
-.block-container{ animation: igfade .5s ease both; padding-top:2.2rem; padding-bottom:6rem; }
+/* Aparición suave del contenido en cada página/subventana.
+   Solo espacio extra abajo para que el último control respire; NO se toca el
+   overflow del contenedor (Streamlit maneja el scroll y overridearlo lo rompía). */
+.block-container{ animation: igfade .5s ease both; padding-top:2.2rem; padding-bottom:5rem; }
 @keyframes igfade{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
-
-/* Scroll asegurado: que SIEMPRE se pueda llegar al final (botón Guardar, etc.) */
-[data-testid="stAppViewContainer"]{ overflow-y:auto; }
-[data-testid="stAppViewContainer"] .main{ overflow:visible; }
-/* La rueda del mouse sobre campos numéricos no cambia el valor por accidente */
-[data-testid="stNumberInput"] input{ pointer-events:auto; }
 
 /* ---- Barra lateral: degradado de marca (como el fondo del inicio) ---- */
 section[data-testid="stSidebar"]{

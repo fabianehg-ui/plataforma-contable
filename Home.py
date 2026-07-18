@@ -340,7 +340,7 @@ sistema_conceptos = st.Page(
     icon="🧩",
     url_path="conceptos",
 )
-sistema_correcciones = st.Page(
+asistente_correcciones = st.Page(
     "app_pages/24_Correcciones.py",
     title="Correcciones",
     icon="🛠️",
@@ -365,6 +365,14 @@ sistema_ayuda = st.Page(
     url_path="ayuda",
 )
 
+# ----- Sección: Integraciones (importar información contable externa) -----
+integ_plano_contai = st.Page(
+    "app_pages/28_Cargar_Plano_Contai.py",
+    title="Cargar plano Contai (TXT)",
+    icon="📄",
+    url_path="cargar-plano-contai",
+)
+
 
 # ============================================================
 # Navegación agrupada
@@ -378,14 +386,15 @@ nav = st.navigation(
             asistente_caja,
             asistente_captura,
             asistente_cruce,
+            asistente_correcciones,
             asistente_nomina,
-            asistente_prov,
             asistente_ventas_c13,
             asistente_pos,
+        ],
+        "🔌 Integraciones": [
+            integ_plano_contai,
             asistente_bittal,
             asistente_siigo,
-            asistente_siigo_web,
-            asistente_pila,
             asistente_bancos,
         ],
         "📊 Herramientas Tributarias": [
@@ -408,7 +417,6 @@ nav = st.navigation(
             sistema_panel_admin,
             sistema_maestros,
             sistema_conceptos,
-            sistema_correcciones,
             sistema_config,
             sistema_ayuda,
         ],

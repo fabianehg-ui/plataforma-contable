@@ -38,6 +38,7 @@ ORIGENES = {
     "dian_xml": "DIAN XML",
     "siigo": "Siigo",
     "captura": "Captura manual",
+    "plano_contai": "Plano Contai (TXT)",
     "importado": "Importado",
     "correccion": "Corrección",
     "pago": "Pagos (egreso)",

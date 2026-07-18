@@ -54,6 +54,18 @@ AYUDAS: dict[str, dict] = {
         ],
         "tips": ["Las facturas ya canceladas dejan de aparecer; las abonadas muestran el saldo."],
     },
+    "plano_contai": {
+        "titulo": "Cargar plano contable (Contai)", "icono": "📄",
+        "resumen": "Sube el TXT de Contai (11 columnas) y agrégalo al movimiento del mes.",
+        "pasos": [
+            ("Sube o pega el plano", "Archivo .txt/.csv de 11 columnas separadas por TAB, sin encabezado."),
+            ("Revisa la vista previa", "Verifica las líneas y que el plano cuadre (Db = Cr)."),
+            ("Elige el período", "Selecciona año y mes; marca 'reemplazar' para no duplicar."),
+            ("Contabiliza", "Se guarda en cn_movimientos (se ve en Contabilidad y Centro Contable)."),
+        ],
+        "tips": ["Orden: CUENTA·COMPROBANTE·FECHA·DOCUMENTO·DOC REF·NIT·DETALLE·TR·VALOR·BASE·C.C.",
+                 "TR = 1 débito, 2 crédito. También puedes descargar el plano normalizado."],
+    },
     "correcciones": {
         "titulo": "Correcciones", "icono": "🛠️",
         "resumen": "Corrige asientos ya cargados por comprobante o por registro.",
