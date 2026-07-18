@@ -333,12 +333,44 @@ else:
             "cuenta": cta_por_tarifa.get(float(b["tarifa"])) or cta_fallback,
         } for b in buckets_val]
 
+    # Base gravable e IVA estimado (para validar la base mínima de retención)
+    if desglose:
+        base_grav = sum(int(b["base"]) for b in desglose)
+        iva_est = sum(int(b["iva"]) for b in desglose)
+    else:
+        base_grav = int(base_val)
+        iva_est = int(base_val * float(tiva["tarifa"]) / 100) if tiva else 0
+
+    # UVT del año (para la base mínima por normatividad)
+    try:
+        _val_anio = cont.obtener_valores_anuales(sb, fecha.year)
+        uvt = int(float(_val_anio.get("uvt") or 0))
+    except Exception:
+        uvt = 0
+
+    forzar_ret = False
+    if rets:
+        forzar_ret = st.checkbox(
+            "Permitir retención aunque la base no alcance el mínimo "
+            "(compra ligada a varias facturas del día que sí suman la base)",
+            value=False, key="cap_forzar_ret")
+        evaluacion = cp.evaluar_retenciones(base_grav, iva_est, rets, uvt=uvt, forzar=forzar_ret)
+        for e in evaluacion:
+            if e["aplicada"]:
+                st.caption(f"⚖️ {e['codigo']}: aplica $ {e['valor']:,}".replace(",", "."))
+            elif e["motivo"]:
+                st.caption(f"⚖️ {e['codigo']}: **no se aplica** — {e['motivo']}. "
+                           "Marca la casilla de arriba si esta compra es parte de varias del día.")
+        if uvt == 0:
+            st.caption("ℹ️ No encontré la UVT del año en el núcleo; no puedo validar la "
+                       "base mínima. Verifica cn_valores_anuales.")
+
     # Vista previa del asiento
     prev = cp.aplicar_concepto(
         concepto, base_val, tipo_iva=tiva, retenciones=rets,
         nit=st.session_state.get("cap_nit", ""),
         detalle=st.session_state.get("cap_det", "") or (concepto.get("nombre") or ""),
-        desglose_iva=desglose)
+        desglose_iva=desglose, uvt=uvt, forzar_retencion=forzar_ret)
     if prev:
         rp = cp.resumen_asiento(prev)
         st.caption(

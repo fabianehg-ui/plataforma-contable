@@ -49,13 +49,54 @@ def _int(v) -> int:
         return 0
 
 
-def calcular_retencion(base: int, iva: int, tipo_ret: dict) -> int:
-    """Valor de una retención según su base de cálculo ('base' o 'iva')."""
+def base_minima_pesos(tipo_ret: dict, uvt) -> int:
+    """Base mínima en pesos = base_uvt × UVT (0 si no aplica o no hay UVT)."""
+    min_uvt = _num(tipo_ret.get("base_uvt"))
+    uvt = _num(uvt)
+    return int(round(min_uvt * uvt)) if (min_uvt and uvt) else 0
+
+
+def calcular_retencion(base: int, iva: int, tipo_ret: dict,
+                       uvt=0, forzar: bool = False) -> int:
+    """Valor de una retención según su base de cálculo ('base' o 'iva').
+
+    Respeta la BASE MÍNIMA por normatividad: si la base gravable es menor que
+    `base_uvt × UVT`, la retención NO se practica (devuelve 0), salvo que
+    `forzar=True` (compra ligada a varias facturas del día que sí suman la base).
+    Si no se pasa `uvt` (o el tipo no tiene base_uvt), no valida el mínimo.
+    """
     if not tipo_ret:
+        return 0
+    min_pesos = base_minima_pesos(tipo_ret, uvt)
+    if min_pesos and _int(base) < min_pesos and not forzar:
         return 0
     tarifa = _num(tipo_ret.get("tarifa"))
     sobre = iva if str(tipo_ret.get("base_calculo", "base")).lower() == "iva" else base
     return _int(sobre * tarifa / 100.0)
+
+
+def evaluar_retenciones(base: int, iva: int, retenciones: list[dict],
+                        uvt=0, forzar: bool = False) -> list[dict]:
+    """Para la UI: por cada retención dice si aplica y por qué no (base mínima).
+
+    Devuelve [{codigo, nombre, valor, aplicada, min_pesos, motivo}].
+    """
+    out = []
+    for tr_ in retenciones or []:
+        if not tr_:
+            continue
+        min_pesos = base_minima_pesos(tr_, uvt)
+        val = calcular_retencion(base, iva, tr_, uvt=uvt, forzar=forzar)
+        aplicada = val > 0
+        motivo = ""
+        if not aplicada and min_pesos and _int(base) < min_pesos:
+            motivo = (f"base ${_int(base):,} < mínimo ${min_pesos:,} "
+                      f"({_num(tr_.get('base_uvt')):g} UVT)").replace(",", ".")
+        out.append({
+            "codigo": tr_.get("codigo"), "nombre": tr_.get("nombre"),
+            "valor": val, "aplicada": aplicada, "min_pesos": min_pesos, "motivo": motivo,
+        })
+    return out
 
 
 # ============================================================
@@ -72,6 +113,8 @@ def aplicar_concepto(
     cuenta_base: Optional[str] = None,
     cuenta_contrapartida: Optional[str] = None,
     desglose_iva: Optional[list[dict]] = None,
+    uvt=0,
+    forzar_retencion: bool = False,
 ) -> list[dict]:
     """Genera las líneas del asiento para un concepto y una base gravable.
 
@@ -121,7 +164,8 @@ def aplicar_concepto(
         for tr_ in retenciones:
             if not tr_:
                 continue
-            val = calcular_retencion(base_total, iva_total, tr_)
+            val = calcular_retencion(base_total, iva_total, tr_,
+                                     uvt=uvt, forzar=forzar_retencion)
             if val:
                 rets.append((tr_, val))
     total_ret = sum(v for _, v in rets)

@@ -99,6 +99,55 @@ class TestCalcularRetencion:
         assert cp.calcular_retencion(1_000_000, 190_000, RETEIVA) == 28_500
 
 
+# base mínima por normatividad (base_uvt × UVT)
+UVT_2026 = 52_374
+RFCOMP_MIN = {"codigo": "RFCOMP", "tarifa": 2.5, "base_calculo": "base",
+              "cuenta": "236540", "nombre": "ReteFuente compras 2.5%", "base_uvt": 27}
+
+
+class TestBaseMinimaRetencion:
+    def test_no_retiene_si_base_menor_al_minimo(self):
+        # base 17.435 << 27 UVT (~1.414.098) → no retiene
+        assert cp.calcular_retencion(17_435, 3_313, RFCOMP_MIN, uvt=UVT_2026) == 0
+
+    def test_retiene_si_base_supera_minimo(self):
+        assert cp.calcular_retencion(2_000_000, 380_000, RFCOMP_MIN, uvt=UVT_2026) == 50_000
+
+    def test_forzar_aplica_aunque_no_alcance(self):
+        assert cp.calcular_retencion(17_435, 3_313, RFCOMP_MIN, uvt=UVT_2026, forzar=True) == 436
+
+    def test_sin_uvt_no_valida_minimo(self):
+        # compatibilidad: sin UVT se comporta como antes
+        assert cp.calcular_retencion(17_435, 0, RFCOMP_MIN, uvt=0) == 436
+
+    def test_aplicar_concepto_omite_retefuente_bajo_minimo(self):
+        conc = {"naturaleza": "compra", "cuenta_base": "143501",
+                "cuenta_contrapartida": "220505", "maneja_iva": True, "maneja_retencion": True}
+        lineas = cp.aplicar_concepto(conc, 17_435, tipo_iva=IVA19,
+                                     retenciones=[RFCOMP_MIN], uvt=UVT_2026)
+        # sin línea de retención
+        assert not any(l["tipo"].startswith("retencion") for l in lineas)
+        assert cp.resumen_asiento(lineas)["cuadra"] is True
+
+    def test_aplicar_concepto_con_forzar_incluye_retefuente(self):
+        conc = {"naturaleza": "compra", "cuenta_base": "143501",
+                "cuenta_contrapartida": "220505", "maneja_iva": True, "maneja_retencion": True}
+        lineas = cp.aplicar_concepto(conc, 17_435, tipo_iva=IVA19,
+                                     retenciones=[RFCOMP_MIN], uvt=UVT_2026, forzar_retencion=True)
+        assert any(l["tipo"].startswith("retencion") for l in lineas)
+
+
+class TestEvaluarRetenciones:
+    def test_reporta_motivo_cuando_no_aplica(self):
+        ev = cp.evaluar_retenciones(17_435, 3_313, [RFCOMP_MIN], uvt=UVT_2026)
+        assert ev[0]["aplicada"] is False
+        assert "mínimo" in ev[0]["motivo"]
+
+    def test_aplica_cuando_supera(self):
+        ev = cp.evaluar_retenciones(2_000_000, 380_000, [RFCOMP_MIN], uvt=UVT_2026)
+        assert ev[0]["aplicada"] is True and ev[0]["valor"] == 50_000
+
+
 # ============================================================
 # Lector — parsing de números y heurística de texto
 # ============================================================
