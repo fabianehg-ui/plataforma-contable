@@ -417,5 +417,10 @@ nav = st.navigation(
 )
 
 
+# Tema visual global: mismos colores/efectos del inicio en TODAS las páginas
+# y subventanas. Se inyecta aquí (antes de nav.run) para que cada página lo herede.
+from core.tema import aplicar_tema
+aplicar_tema()
+
 # Ejecutar la página seleccionada
 nav.run()
