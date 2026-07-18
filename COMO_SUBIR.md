@@ -1,41 +1,38 @@
-# CÓMO SUBIR — Compras: régimen del proveedor + retención sugerida + lectura de ZIP
+# CÓMO SUBIR — Auto-concepto + IVA diferencial + Imprimir comprobante
 
-Mejora la lectura de facturas de compra: detecta el **régimen del proveedor**
-(del XML) para sugerir qué retención aplicar, y acepta **ZIP** con una o varias
-facturas. Fecha: 18-jul-2026.
+Tres mejoras en la Captura de compras. Fecha: 18-jul-2026. **Sin migración.**
 
-## Sin migración
+## Qué trae
 
-No requiere migración nueva. (Sigue pendiente correr la **016** para habilitar
-los conceptos, si aún no lo hiciste.)
+1. **Concepto automático.** Al leer una factura, INTEGRAL detecta la categoría
+   (compra de bienes, servicios, honorarios o arrendamiento) por las palabras
+   clave del proveedor y de los ítems, y **pre-selecciona el concepto** que calza.
+2. **IVA diferencial → bases separadas.** Si la factura trae varias tarifas de
+   IVA (19% + 5% + excluido…), el lector devuelve la **base y el IVA por tarifa**,
+   y el asiento se arma con **una línea de base y una de IVA por cada tarifa**
+   (cuadra Db = Cr). Ejemplo real probado: base 2.000.000 @19% + 1.000.000 @5%.
+3. **Imprimir (PDF).** Junto a *Guardar* hay ahora un botón **🖨️ Imprimir (PDF)**
+   que genera el comprobante de diario del asiento en pantalla (aunque sea
+   borrador), con encabezado, líneas Db/Cr, totales, cuadre y firmas.
 
-## Archivos (reemplazan los de la entrega de Conceptos + el hotfix)
+## Archivos (reemplazan los de las entregas anteriores)
 
 | Archivo | Cambio |
 |---|---|
-| `core/contable/lector_factura.py` | + `_extraer_regimen` (lee `cbc:TaxLevelCode`: responsable/no responsable de IVA, Gran contribuyente O-13, Autorretenedor O-15, Agente reteIVA O-23, RST O-47). `leer_xml` ahora devuelve `regimen`. + `leer_zip` y `leer_facturas` (ZIP con varias facturas, incluye sub-ZIPs del bookmarklet DIAN). |
-| `core/contable/conceptos.py` | + `ajustar_por_regimen(concepto, tipos_ret, tipos_iva, regimen)` → sugiere IVA y retenciones según el régimen, con notas. |
-| `app_pages/21_Captura.py` | El uploader acepta **.zip**; si trae varias facturas, muestra selector. Muestra el **régimen del proveedor** leído. El bloque de concepto **pre-selecciona** IVA y retenciones según el régimen (editable). |
-| `tests/test_conceptos_lector.py` | + pruebas de régimen, `ajustar_por_regimen` y lectura de ZIP (77… en total 59 pruebas del paquete pasan). |
+| `core/contable/lector_factura.py` | + `bases_por_tarifa` en `leer_xml` (agrupa ítems por tarifa) y en el resultado de texto (PDF/imagen). |
+| `core/contable/conceptos.py` | `aplicar_concepto` acepta `desglose_iva` (líneas de base e IVA separadas por tarifa); + `clasificar_factura` y `sugerir_concepto`. |
+| `app_pages/21_Captura.py` | Auto-selección del concepto sugerido; desglose por tarifa cuando la factura es multi-tarifa; botón **🖨️ Imprimir (PDF)** junto a Guardar. Importa `generar_pdf_comprobante`. |
+| `tests/test_conceptos_lector.py` | + pruebas de bases por tarifa, desglose en `aplicar_concepto` y sugeridor de concepto. **66 pruebas del paquete pasan.** |
 
-## Reglas de sugerencia (compras) — todas editables antes de guardar
-
-- **Proveedor NO responsable de IVA** → sin IVA descontable ni ReteIVA.
-- **Proveedor autorretenedor de renta (O-15)** o **Régimen Simple (O-47)** →
-  **no** se le practica ReteFuente de renta.
-- **ReteICA** depende del municipio/actividad → se deja manual.
-
-Son *sugerencias*: se pre-seleccionan en la Captura y tú las confirmas o cambias.
+> Requiere que ya exista `core/contable/pdf_comprobante.py` (entrega del Libro
+> Mayor + Comprobante). Estos archivos incluyen todo lo previo de sus módulos.
 
 ## Uso
 
-1. En **✍️ Captura → 📄 Leer factura**, sube el **XML**, **PDF**, **imagen** o un
-   **ZIP**. Si el ZIP trae varias, elige cuál cargar.
-2. Verás el **régimen del proveedor** (ej. "Responsable de IVA · Autorretenedor").
-3. En **⚡ Concepto programado**, el IVA y las retenciones vienen ya ajustados al
-   régimen (con una nota explicando por qué). Ajusta si hace falta y genera las
-   líneas.
+1. **✍️ Captura → 📄 Leer factura** (XML/PDF/imagen/ZIP). Al leerla:
+   - El **concepto** se pre-selecciona solo (verás "🤖 sugerido por la factura").
+   - Si trae **tarifas diferenciales**, aparece la tabla de bases por tarifa y el
+     asiento generado separa las bases (una línea por tarifa).
+2. Genera las líneas, revisa/ajusta, y usa **💾 Guardar** o **🖨️ Imprimir (PDF)**.
 
-> Nota: `lector_factura.py` reusa `parsear_xml_dian` y `extraer_xmls_de_zip_maestro`
-> de `core/procesadores/procesador_dian_xml.py` (ya en el repo). Estos archivos
-> incluyen todo lo de la entrega de Conceptos y el hotfix; súbelos encima.
+Todo sigue siendo editable antes de guardar; las sugerencias no obligan.

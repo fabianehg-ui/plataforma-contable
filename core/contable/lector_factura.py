@@ -168,9 +168,32 @@ def leer_xml(xml_bytes: bytes, nombre: str = "") -> dict:
         "moneda": doc.moneda or "COP",
         "confianza": "alta",
         "regimen": _extraer_regimen(xml_bytes),
+        "bases_por_tarifa": _bases_por_tarifa(
+            items, _a_int(str(doc.valor_base_gravable)), _a_int(str(doc.iva_total))),
         "items": items,
         "advertencias": list(getattr(doc, "advertencias", []) or []),
     }
+
+
+def _bases_por_tarifa(items: list[dict], base_total: int, iva_total: int) -> list[dict]:
+    """Agrupa las líneas por tarifa de IVA → [{tarifa, base, iva}] (desc).
+
+    Sirve para separar bases cuando la factura trae tarifas diferenciales
+    (19% + 5% + excluido). Si no hay detalle de líneas, devuelve un solo
+    bucket a partir de los totales de cabecera.
+    """
+    buckets: dict = {}
+    for it in items or []:
+        tar = round(float(it.get("iva_pct") or 0), 2)
+        b = buckets.setdefault(tar, {"tarifa": tar, "base": 0, "iva": 0})
+        b["base"] += int(it.get("base") or 0)
+        b["iva"] += int(it.get("iva") or 0)
+    filas = [b for b in buckets.values() if b["base"] or b["iva"]]
+    if not filas:
+        tar = round(iva_total / base_total * 100, 2) if base_total else 0
+        filas = [{"tarifa": tar, "base": base_total, "iva": iva_total}]
+    filas.sort(key=lambda x: -x["tarifa"])
+    return filas
 
 
 # ============================================================
@@ -266,18 +289,22 @@ def extraer_de_texto(texto: str, formato: str) -> dict:
     if formato == "imagen":
         confianza = "baja"  # OCR siempre requiere revisión
 
+    base_final = base or (total - iva if total and iva else total)
+    tar = round(iva / base_final * 100, 2) if base_final else 0
     return {
         "formato": formato,
         "nit": _buscar_nit(texto),
         "nombre": _buscar_nombre(texto),
         "fecha": _buscar_fecha(texto),
         "numero": _buscar_numero(texto),
-        "base": base or (total - iva if total and iva else total),
+        "base": base_final,
         "iva": iva,
         "rete_fuente": rfte, "rete_iva": riva, "rete_ica": rica,
         "total": total,
         "moneda": "COP",
         "confianza": confianza,
+        "regimen": None,
+        "bases_por_tarifa": [{"tarifa": tar, "base": base_final, "iva": iva}] if base_final else [],
         "items": [],
         "advertencias": advert,
     }

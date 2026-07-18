@@ -71,17 +71,21 @@ def aplicar_concepto(
     detalle: str = "",
     cuenta_base: Optional[str] = None,
     cuenta_contrapartida: Optional[str] = None,
+    desglose_iva: Optional[list[dict]] = None,
 ) -> list[dict]:
     """Genera las líneas del asiento para un concepto y una base gravable.
 
     Args:
         concepto: fila de cn_conceptos (dict). Usa naturaleza, cuenta_base,
                   cuenta_contrapartida, maneja_iva, maneja_retencion.
-        base: base gravable (número).
+        base: base gravable (número). Se ignora si se pasa desglose_iva.
         tipo_iva: fila de cn_tipos_iva (dict) o None.
         retenciones: lista de filas de cn_tipos_retencion (dicts) a aplicar.
         nit / detalle: se copian a cada línea.
         cuenta_base / cuenta_contrapartida: sobreescriben las del concepto.
+        desglose_iva: para facturas con TARIFAS DIFERENCIALES, lista de
+                      {tarifa, base, iva, cuenta}. Si se pasa, se generan
+                      líneas de base e IVA SEPARADAS por tarifa.
 
     Returns:
         lista de dicts {cuenta, tr, valor, base, nit, detalle, tipo} donde
@@ -92,25 +96,47 @@ def aplicar_concepto(
     naturaleza = str(concepto.get("naturaleza") or "compra").lower()
     c_base = cuenta_base or concepto.get("cuenta_base") or ""
     c_contra = cuenta_contrapartida or concepto.get("cuenta_contrapartida") or ""
+    maneja_iva = bool(concepto.get("maneja_iva", True))
 
-    maneja_iva = bool(concepto.get("maneja_iva", True)) and tipo_iva is not None
-    iva = _int(base * _num(tipo_iva.get("tarifa")) / 100.0) if maneja_iva else 0
+    # Buckets por tarifa (unifica el caso simple y el de tarifas diferenciales)
+    if desglose_iva:
+        buckets = [{
+            "tarifa": _num(b.get("tarifa")), "base": _int(b.get("base")),
+            "iva": _int(b.get("iva")),
+            "cuenta": b.get("cuenta") or (tipo_iva.get("cuenta") if tipo_iva else ""),
+        } for b in desglose_iva if _int(b.get("base"))]
+    elif maneja_iva and tipo_iva is not None:
+        iva = _int(base * _num(tipo_iva.get("tarifa")) / 100.0)
+        buckets = [{"tarifa": _num(tipo_iva.get("tarifa")), "base": base,
+                    "iva": iva, "cuenta": tipo_iva.get("cuenta") or ""}]
+    else:
+        buckets = [{"tarifa": 0, "base": base, "iva": 0, "cuenta": ""}]
 
-    # Retenciones (solo si el concepto las maneja)
+    base_total = sum(b["base"] for b in buckets)
+    iva_total = sum(b["iva"] for b in buckets)
+
+    # Retenciones (solo si el concepto las maneja) — sobre los totales
     rets = []
     if bool(concepto.get("maneja_retencion", True)):
         for tr_ in retenciones:
             if not tr_:
                 continue
-            val = calcular_retencion(base, iva, tr_)
+            val = calcular_retencion(base_total, iva_total, tr_)
             if val:
                 rets.append((tr_, val))
     total_ret = sum(v for _, v in rets)
+    neto = base_total + iva_total - total_ret
 
-    neto = base + iva - total_ret
+    es_venta = naturaleza == "venta"
+    tr_base = "2" if es_venta else "1"          # ingreso=Cr / gasto=Db
+    tr_iva = "2" if es_venta else "1"
+    tr_ret = "1" if es_venta else "2"           # a mí me retienen=Db / yo retengo=Cr
+    tr_contra = "1" if es_venta else "2"        # cliente=Db / proveedor-banco=Cr
+    multi = len(buckets) > 1
+
     lineas: list[dict] = []
 
-    def _add(cuenta, tr, valor, base_col=0, tipo=""):
+    def _add(cuenta, tr, valor, base_col=0, tipo="", suf=""):
         if not cuenta or valor == 0:
             return
         lineas.append({
@@ -119,26 +145,73 @@ def aplicar_concepto(
             "valor": _int(valor),
             "base": _int(base_col),
             "nit": nit,
-            "detalle": detalle,
+            "detalle": (detalle + suf) if suf else detalle,
             "tipo": tipo,
         })
 
-    es_venta = naturaleza == "venta"
-    tr_base = "2" if es_venta else "1"          # ingreso=Cr / gasto=Db
-    tr_iva = "2" if es_venta else "1"
-    tr_ret = "1" if es_venta else "2"           # a mí me retienen=Db / yo retengo=Cr
-    tr_contra = "1" if es_venta else "2"        # cliente=Db / proveedor-banco=Cr
-
-    _add(c_base, tr_base, base, base_col=base, tipo="base")
-    if iva:
-        cta_iva = tipo_iva.get("cuenta") or ""
-        _add(cta_iva, tr_iva, iva, base_col=base, tipo="iva")
+    # Base (una línea por tarifa cuando hay desglose)
+    for b in buckets:
+        suf = f" (IVA {b['tarifa']:g}%)" if multi else ""
+        _add(c_base, tr_base, b["base"], base_col=b["base"], tipo="base", suf=suf)
+    # IVA por tarifa
+    for b in buckets:
+        if b["iva"]:
+            suf = f" (IVA {b['tarifa']:g}%)" if multi else ""
+            _add(b["cuenta"], tr_iva, b["iva"], base_col=b["base"], tipo="iva", suf=suf)
+    # Retenciones
     for tr_, val in rets:
-        _add(tr_.get("cuenta") or "", tr_ret, val, base_col=base,
+        _add(tr_.get("cuenta") or "", tr_ret, val, base_col=base_total,
              tipo="retencion:" + str(tr_.get("codigo") or ""))
+    # Contrapartida
     _add(c_contra, tr_contra, neto, base_col=0, tipo="contrapartida")
 
     return lineas
+
+
+# ============================================================
+# Clasificación automática de la factura → concepto sugerido
+# ============================================================
+
+_KW_CATEGORIA = {
+    "honorarios": ["honorar", "asesor", "consultor", "profesional", "abogad",
+                   "contad", "revisor", "auditor"],
+    "arrendamiento": ["arrend", "arriendo", "canon", "alquiler", "alquil"],
+    "servicios": ["servicio", "mantenim", "reparac", "transporte", "vigilancia",
+                  "aseo", "publicidad", "instalac", "soporte", "mano de obra"],
+}
+
+_CAT_A_CONCEPTO_KW = {
+    "honorarios": ["honorar"],
+    "arrendamiento": ["arrend", "arriendo", "canon"],
+    "servicios": ["servicio", "serv"],
+    "compra": ["compra", "bien", "mercan", "insumo"],
+}
+
+
+def clasificar_factura(factura: dict) -> str:
+    """Deduce la categoría de la factura por palabras clave del proveedor y de
+    los ítems: 'honorarios' | 'arrendamiento' | 'servicios' | 'compra'."""
+    partes = [str(factura.get("nombre") or "")]
+    for it in factura.get("items", []) or []:
+        partes.append(str(it.get("descripcion") or ""))
+    txt = " ".join(partes).lower()
+    for cat, kws in _KW_CATEGORIA.items():   # honorarios y arrendamiento antes que servicios
+        if any(k in txt for k in kws):
+            return cat
+    return "compra"
+
+
+def sugerir_concepto(factura: dict, conceptos: list[dict]) -> Optional[str]:
+    """Devuelve el código del concepto (de compra) que mejor calza con la
+    factura, o None si no encuentra uno claro."""
+    cat = clasificar_factura(factura)
+    kws = _CAT_A_CONCEPTO_KW.get(cat, [])
+    compras = [c for c in conceptos if str(c.get("naturaleza") or "compra") == "compra"]
+    for c in compras:
+        blob = f"{c.get('codigo', '')} {c.get('nombre', '')}".lower()
+        if any(k in blob for k in kws):
+            return c["codigo"]
+    return None
 
 
 def ajustar_por_regimen(concepto: dict, tipos_ret: list[dict],

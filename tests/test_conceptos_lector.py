@@ -329,3 +329,113 @@ class TestLeerZip:
     def test_dispatcher_facturas_unico(self):
         facs = lf.leer_facturas("f.xml", XML_UBL.encode("utf-8"))
         assert len(facs) == 1
+
+
+# ============================================================
+# Bases por tarifa (IVA diferencial)
+# ============================================================
+
+# XML con dos líneas: una al 19% y otra al 5%
+XML_MULTI = """<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>FE99</cbc:ID><cbc:IssueDate>2026-06-30</cbc:IssueDate>
+  <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+  <cac:AccountingSupplierParty><cac:Party><cac:PartyTaxScheme>
+    <cbc:RegistrationName>MIXTA SAS</cbc:RegistrationName>
+    <cbc:CompanyID>900900</cbc:CompanyID></cac:PartyTaxScheme></cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount>3000000.00</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount>3000000.00</cbc:TaxExclusiveAmount>
+    <cbc:PayableAmount>3290000.00</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine><cbc:ID>1</cbc:ID>
+    <cbc:LineExtensionAmount>2000000.00</cbc:LineExtensionAmount>
+    <cac:TaxTotal><cbc:TaxAmount>380000.00</cbc:TaxAmount><cac:TaxSubtotal>
+      <cbc:TaxableAmount>2000000.00</cbc:TaxableAmount><cbc:TaxAmount>380000.00</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:Percent>19.00</cbc:Percent>
+      <cac:TaxScheme><cbc:ID>01</cbc:ID><cbc:Name>IVA</cbc:Name></cac:TaxScheme></cac:TaxCategory>
+    </cac:TaxSubtotal></cac:TaxTotal>
+    <cac:Item><cbc:Description>Bien gravado 19</cbc:Description></cac:Item></cac:InvoiceLine>
+  <cac:InvoiceLine><cbc:ID>2</cbc:ID>
+    <cbc:LineExtensionAmount>1000000.00</cbc:LineExtensionAmount>
+    <cac:TaxTotal><cbc:TaxAmount>50000.00</cbc:TaxAmount><cac:TaxSubtotal>
+      <cbc:TaxableAmount>1000000.00</cbc:TaxableAmount><cbc:TaxAmount>50000.00</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:Percent>5.00</cbc:Percent>
+      <cac:TaxScheme><cbc:ID>01</cbc:ID><cbc:Name>IVA</cbc:Name></cac:TaxScheme></cac:TaxCategory>
+    </cac:TaxSubtotal></cac:TaxTotal>
+    <cac:Item><cbc:Description>Bien gravado 5</cbc:Description></cac:Item></cac:InvoiceLine>
+</Invoice>"""
+
+
+class TestBasesPorTarifa:
+    def test_dos_tarifas(self):
+        r = lf.leer_xml(XML_MULTI.encode("utf-8"))
+        bt = {b["tarifa"]: b for b in r["bases_por_tarifa"]}
+        assert set(bt) == {19.0, 5.0}
+        assert bt[19.0]["base"] == 2_000_000 and bt[19.0]["iva"] == 380_000
+        assert bt[5.0]["base"] == 1_000_000 and bt[5.0]["iva"] == 50_000
+
+    def test_orden_descendente(self):
+        r = lf.leer_xml(XML_MULTI.encode("utf-8"))
+        tarifas = [b["tarifa"] for b in r["bases_por_tarifa"]]
+        assert tarifas == sorted(tarifas, reverse=True)
+
+
+class TestDesgloseIVA:
+    def test_asiento_con_bases_separadas_cuadra(self):
+        conc = {"naturaleza": "compra", "cuenta_base": "143501",
+                "cuenta_contrapartida": "220505", "maneja_iva": True,
+                "maneja_retencion": True}
+        desg = [
+            {"tarifa": 19, "base": 2_000_000, "iva": 380_000, "cuenta": "240820"},
+            {"tarifa": 5, "base": 1_000_000, "iva": 50_000, "cuenta": "240820"},
+        ]
+        rfc = {"codigo": "RFCOMP", "tarifa": 2.5, "base_calculo": "base", "cuenta": "236540"}
+        lineas = cp.aplicar_concepto(conc, 0, retenciones=[rfc], desglose_iva=desg)
+        r = cp.resumen_asiento(lineas)
+        assert r["cuadra"] is True
+        # dos líneas de base (una por tarifa) al débito
+        bases = [l for l in lineas if l["tipo"] == "base"]
+        assert len(bases) == 2
+        assert {l["valor"] for l in bases} == {2_000_000, 1_000_000}
+        # dos líneas de IVA (380.000 y 50.000)
+        ivas = [l for l in lineas if l["tipo"] == "iva"]
+        assert {l["valor"] for l in ivas} == {380_000, 50_000}
+        # retención sobre base total (3.000.000 * 2.5% = 75.000)
+        ret = [l for l in lineas if l["tipo"].startswith("retencion")][0]
+        assert ret["valor"] == 75_000
+
+
+# ============================================================
+# Sugerencia automática de concepto
+# ============================================================
+
+CONCEPTOS_SEED = [
+    {"codigo": "COMPRA_BIEN_19", "nombre": "Compra de bienes 19%", "naturaleza": "compra"},
+    {"codigo": "COMPRA_SERV_19", "nombre": "Servicios 19%", "naturaleza": "compra"},
+    {"codigo": "HONORARIOS", "nombre": "Honorarios 19%", "naturaleza": "compra"},
+    {"codigo": "ARRENDAMIENTO", "nombre": "Arrendamiento", "naturaleza": "compra"},
+]
+
+
+class TestSugerirConcepto:
+    def test_honorarios(self):
+        fac = {"nombre": "ASESORES XYZ", "items": [{"descripcion": "Honorarios asesoría contable"}]}
+        assert cp.clasificar_factura(fac) == "honorarios"
+        assert cp.sugerir_concepto(fac, CONCEPTOS_SEED) == "HONORARIOS"
+
+    def test_arrendamiento(self):
+        fac = {"nombre": "INMOBILIARIA", "items": [{"descripcion": "Canon de arrendamiento local"}]}
+        assert cp.sugerir_concepto(fac, CONCEPTOS_SEED) == "ARRENDAMIENTO"
+
+    def test_servicios(self):
+        fac = {"nombre": "ASEO TOTAL", "items": [{"descripcion": "Servicio de aseo mensual"}]}
+        assert cp.sugerir_concepto(fac, CONCEPTOS_SEED) == "COMPRA_SERV_19"
+
+    def test_compra_por_defecto(self):
+        fac = {"nombre": "FERRETERIA", "items": [{"descripcion": "Tornillos y tuercas"}]}
+        assert cp.clasificar_factura(fac) == "compra"
+        assert cp.sugerir_concepto(fac, CONCEPTOS_SEED) == "COMPRA_BIEN_19"

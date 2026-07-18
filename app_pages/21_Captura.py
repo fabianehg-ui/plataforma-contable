@@ -22,6 +22,7 @@ from db.supabase_client import get_supabase
 from core.contable import servicio_contable as cont
 from core.contable import conceptos as cp
 from core.contable import lector_factura as lector
+from core.contable.pdf_comprobante import generar_pdf_comprobante
 
 
 COLS_EDITOR = ["Cuenta", "Detalle", "NIT", "Débito", "Crédito", "Base", "Centro costo"]
@@ -57,6 +58,7 @@ def _prefill_factura(datos: dict):
     import streamlit as _st
     from datetime import date as _date
     _st.session_state["factura_leida"] = datos
+    _st.session_state["cap_autoselect"] = True   # sugerir concepto según la factura
     if datos.get("nit"):
         _st.session_state["cap_nit"] = datos["nit"]
     if datos.get("numero"):
@@ -264,13 +266,28 @@ else:
     iva_by = {t["codigo"]: t for t in tipos_iva}
     ret_by = {t["codigo"]: t for t in tipos_ret}
 
+    c_op = {f"{c['codigo']} · {c['nombre']}": c for c in conceptos_lst}
+
+    # Auto-selección del concepto según la factura recién leída
+    if st.session_state.pop("cap_autoselect", False):
+        fac = st.session_state.get("factura_leida") or {}
+        sug = cp.sugerir_concepto(fac, conceptos_lst)
+        if sug:
+            for label, c in c_op.items():
+                if c["codigo"] == sug:
+                    st.session_state["cap_concepto"] = label
+                    st.session_state["cap_concepto_sug"] = c["nombre"]
+                    break
+
     cc1, cc2 = st.columns([3, 2])
     with cc1:
-        c_op = {f"{c['codigo']} · {c['nombre']}": c for c in conceptos_lst}
         c_lbl = st.selectbox("Concepto", list(c_op.keys()), key="cap_concepto")
         concepto = c_op[c_lbl]
     with cc2:
         base_val = st.number_input("Base gravable", min_value=0, step=1000, key="cap_base")
+    _sug_nom = st.session_state.get("cap_concepto_sug")
+    if _sug_nom and concepto.get("nombre") == _sug_nom:
+        st.caption(f"🤖 Concepto sugerido automáticamente por la factura: **{_sug_nom}**")
 
     # Defaults sugeridos según el régimen del proveedor (si se leyó una factura)
     regimen = (st.session_state.get("factura_leida") or {}).get("regimen")
@@ -292,20 +309,44 @@ else:
             default=[r for r in ret_def if r in ret_by],
             format_func=lambda k: f"{k} · {ret_by[k]['tarifa']}% ({ret_by[k].get('base_calculo')})")
 
-    # Vista previa del asiento
+    # ¿La factura trae tarifas diferenciales de IVA? → desglose por tarifa
+    bases_tar = (st.session_state.get("factura_leida") or {}).get("bases_por_tarifa") or []
+    buckets_val = [b for b in bases_tar if int(b.get("base") or 0)]
+    multi_tarifa = len(buckets_val) > 1
     tiva = iva_by.get(iva_sel) if iva_sel != "(sin IVA)" else None
     rets = [ret_by[r] for r in ret_sel]
+
+    desglose = None
+    if multi_tarifa and concepto.get("maneja_iva", True):
+        st.info("🧾 Factura con **tarifas diferenciales de IVA**: se generarán bases "
+                "separadas por tarifa.")
+        st.dataframe(
+            pd.DataFrame([{"Tarifa %": b["tarifa"], "Base": int(b["base"]),
+                           "IVA": int(b["iva"])} for b in buckets_val]),
+            use_container_width=True, hide_index=True,
+            column_config={"Base": st.column_config.NumberColumn(format="%d"),
+                           "IVA": st.column_config.NumberColumn(format="%d")})
+        cta_por_tarifa = {float(t["tarifa"]): t.get("cuenta") for t in tipos_iva}
+        cta_fallback = (tiva or {}).get("cuenta") or "240820"
+        desglose = [{
+            "tarifa": b["tarifa"], "base": int(b["base"]), "iva": int(b["iva"]),
+            "cuenta": cta_por_tarifa.get(float(b["tarifa"])) or cta_fallback,
+        } for b in buckets_val]
+
+    # Vista previa del asiento
     prev = cp.aplicar_concepto(
         concepto, base_val, tipo_iva=tiva, retenciones=rets,
         nit=st.session_state.get("cap_nit", ""),
-        detalle=st.session_state.get("cap_det", "") or (concepto.get("nombre") or ""))
+        detalle=st.session_state.get("cap_det", "") or (concepto.get("nombre") or ""),
+        desglose_iva=desglose)
     if prev:
         rp = cp.resumen_asiento(prev)
         st.caption(
             f"Vista previa: {len(prev)} líneas · Db $ {rp['debitos']:,} · Cr $ {rp['creditos']:,} · "
             f"{'cuadra ✅' if rp['cuadra'] else 'descuadra ⚠️'}".replace(",", "."))
+    puede_generar = (base_val > 0) or bool(desglose)
     if st.button("⚡ Generar líneas del asiento", type="secondary",
-                 key="btn_gen_concepto", disabled=(base_val <= 0)):
+                 key="btn_gen_concepto", disabled=not puede_generar):
         st.session_state["captura_lineas"] = _a_editor_df(prev)
         st.session_state["captura_ver"] += 1
         st.rerun()
@@ -375,7 +416,7 @@ st.markdown("### 3️⃣ Guardar")
 protegido = cont.periodo_protegido(sb, emp["id"], periodo_cod)
 puede = (dif == 0 and len(lineas) > 0 and not errores and not protegido)
 
-col_g1, col_g2 = st.columns([2, 1])
+col_g1, col_g2, col_g3 = st.columns([2, 1, 1])
 with col_g1:
     if st.button("💾 Guardar comprobante en INTEGRAL", type="primary",
                  disabled=not puede, use_container_width=True):
@@ -420,6 +461,34 @@ with col_g2:
         st.session_state["captura_lineas"] = _lineas_vacias()
         st.session_state["captura_ver"] += 1
         st.rerun()
+with col_g3:
+    if len(lineas) > 0:
+        comp_nombre = {c["codigo"]: c["nombre"] for c in comprobantes}.get(comp_cod, "")
+        datos_pdf = {
+            "empresa": emp["razon_social"], "nit_empresa": emp.get("nit"),
+            "comprobante_cod": comp_cod, "comprobante_nombre": comp_nombre,
+            "documento": documento or "(borrador)", "fecha": fecha,
+            "periodo": periodo_cod, "detalle": detalle_cab,
+            "lineas": [{
+                "cuenta": str(r["Cuenta"]).strip(), "nombre": "",
+                "nit": str(r["NIT"]).strip() or nit_cab,
+                "detalle": str(r["Detalle"]).strip() or detalle_cab,
+                "cc": str(r["Centro costo"]).strip(),
+                "debito": int(r["Débito"]), "credito": int(r["Crédito"]),
+            } for _, r in lineas.iterrows()],
+            "total_debito": tot_db, "total_credito": tot_cr,
+        }
+        try:
+            pdf_bytes = generar_pdf_comprobante(datos_pdf)
+            st.download_button(
+                "🖨️ Imprimir (PDF)", pdf_bytes,
+                file_name=f"comprobante_{comp_cod}_{documento or 'borrador'}.pdf",
+                mime="application/pdf", use_container_width=True, key="btn_print_cap")
+        except Exception as e:
+            st.caption(f"PDF no disponible: {e}")
+    else:
+        st.button("🖨️ Imprimir (PDF)", disabled=True, use_container_width=True,
+                  key="btn_print_cap_dis")
 
 if protegido:
     st.caption("🔒 Guardado deshabilitado: el período de la fecha está protegido.")
