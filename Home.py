@@ -335,6 +335,12 @@ sistema_correcciones = st.Page(
     icon="🛠️",
     url_path="correcciones",
 )
+asistente_cruce = st.Page(
+    "app_pages/25_Cruce_Facturas.py",
+    title="Pagos y Recaudos",
+    icon="💳",
+    url_path="cruce-facturas",
+)
 sistema_config = st.Page(
     "app_pages/6_Configuracion.py",
     title="Configuración",
@@ -354,6 +360,7 @@ nav = st.navigation(
             asistente_xml_descargador,
             asistente_caja,
             asistente_captura,
+            asistente_cruce,
             asistente_nomina,
             asistente_prov,
             asistente_ventas_c13,

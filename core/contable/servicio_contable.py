@@ -603,6 +603,71 @@ def estado_cartera(sb, empresa_id: str, hasta: str = "999999",
 
 
 # ============================================================
+# Documentos pendientes por tercero (cartera abierta / cruce)
+# ============================================================
+
+def _clave_doc(m) -> str:
+    """Identificador de la factura para cruzar: doc_referencia si viene, si no documento."""
+    return str(m.get("doc_referencia") or m.get("documento") or "").strip()
+
+
+def _calc_documentos_pendientes(movs: list[dict], prefijos, nit: str) -> list[dict]:
+    """Agrupa por (cuenta, documento) y devuelve los saldos != 0 (facturas
+    pendientes). Función PURA.
+
+    `saldo` = Σ(Db−Cr): positivo en cuentas por cobrar (clase 1), negativo en
+    cuentas por pagar (clase 2). `pendiente` = |saldo| (monto natural del doc).
+    """
+    prefijos = tuple(str(p) for p in prefijos)
+    grupos: dict = {}
+    for m in movs:
+        cta = str(m.get("cuenta") or "")
+        if not cta.startswith(prefijos):
+            continue
+        clave = _clave_doc(m)
+        if not clave:
+            continue
+        key = (cta, clave)
+        g = grupos.get(key)
+        if g is None:
+            g = {"cuenta": cta, "documento": clave, "nit": str(nit),
+                 "saldo": 0, "fecha": m.get("fecha"), "detalle": m.get("detalle") or ""}
+            grupos[key] = g
+        g["saldo"] += _signed(m)
+        f = m.get("fecha")
+        if f and (not g["fecha"] or f < g["fecha"]):
+            g["fecha"] = f
+        if not g["detalle"] and m.get("detalle"):
+            g["detalle"] = m["detalle"]
+    filas = []
+    for g in grupos.values():
+        if g["saldo"] == 0:
+            continue
+        g["pendiente"] = abs(int(g["saldo"]))
+        filas.append(g)
+    filas.sort(key=lambda x: (x["fecha"] or "", x["documento"]))
+    return filas
+
+
+def documentos_pendientes(sb, empresa_id: str, nit: str,
+                          prefijos=("2205",), hasta: Optional[str] = None) -> list[dict]:
+    """Facturas/documentos pendientes de un tercero en las cuentas indicadas.
+
+    - Por pagar: prefijos = ('2205','2335','2505', ...)  → saldo negativo.
+    - Por cobrar: prefijos = ('1305','1330', ...)         → saldo positivo.
+
+    Devuelve [{cuenta, documento, nit, saldo, pendiente, fecha, detalle}].
+    """
+    movs = _fetch_paginado(
+        sb, empresa_id,
+        "cuenta,periodo,fecha,comprobante,documento,doc_referencia,nit,detalle,tr,valor",
+        periodo_lte=(str(hasta) if hasta else None),
+        extra_eq={"nit": str(nit)},
+    )
+    return _calc_documentos_pendientes(movs, prefijos, nit)
+
+
+# ============================================================
 # Estados financieros
 # ============================================================
 

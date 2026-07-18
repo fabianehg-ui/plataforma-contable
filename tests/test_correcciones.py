@@ -196,6 +196,58 @@ class TestReemplazarComprobante:
         assert len(sb.tables["cn_movimientos"].rows) == 2
 
 
+def _sb_con_cartera():
+    """Proveedor 800 con F1 abonada parcial y F2 saldada; cliente 900 con V1 abonada."""
+    sb = FakeSB()
+    movs = sb.tables.setdefault("cn_movimientos", _Table())
+    movs.rows.extend([
+        # Por pagar (2205) proveedor 800
+        {"id": "1", "empresa_id": EMP, "periodo": "202606", "fecha": "2026-06-01",
+         "cuenta": "220505", "documento": "F1", "doc_referencia": "F1", "nit": "800",
+         "detalle": "Factura F1", "tr": "2", "valor": 1_000_000},   # causación Cr
+        {"id": "2", "empresa_id": EMP, "periodo": "202606", "fecha": "2026-06-10",
+         "cuenta": "220505", "documento": "EG1", "doc_referencia": "F1", "nit": "800",
+         "detalle": "Abono F1", "tr": "1", "valor": 400_000},        # abono Db
+        {"id": "3", "empresa_id": EMP, "periodo": "202606", "fecha": "2026-06-02",
+         "cuenta": "220505", "documento": "F2", "doc_referencia": "F2", "nit": "800",
+         "detalle": "Factura F2", "tr": "2", "valor": 500_000},
+        {"id": "4", "empresa_id": EMP, "periodo": "202606", "fecha": "2026-06-11",
+         "cuenta": "220505", "documento": "EG2", "doc_referencia": "F2", "nit": "800",
+         "detalle": "Pago F2", "tr": "1", "valor": 500_000},         # F2 saldada
+        # Por cobrar (1305) cliente 900
+        {"id": "5", "empresa_id": EMP, "periodo": "202606", "fecha": "2026-06-03",
+         "cuenta": "130505", "documento": "V1", "doc_referencia": "V1", "nit": "900",
+         "detalle": "Venta V1", "tr": "1", "valor": 2_000_000},      # venta Db
+        {"id": "6", "empresa_id": EMP, "periodo": "202606", "fecha": "2026-06-12",
+         "cuenta": "130505", "documento": "RC1", "doc_referencia": "V1", "nit": "900",
+         "detalle": "Recaudo V1", "tr": "2", "valor": 800_000},      # recaudo Cr
+    ])
+    sb.tables.setdefault("cn_periodos", _Table())
+    return sb
+
+
+class TestDocumentosPendientes:
+    def test_por_pagar_saldo_parcial(self):
+        sb = _sb_con_cartera()
+        pend = cont.documentos_pendientes(sb, EMP, "800", prefijos=("2205",))
+        docs = {d["documento"]: d for d in pend}
+        assert "F2" not in docs                       # saldada, no aparece
+        assert docs["F1"]["pendiente"] == 600_000     # 1.000.000 - 400.000
+        assert docs["F1"]["saldo"] == -600_000        # por pagar → negativo
+
+    def test_por_cobrar(self):
+        sb = _sb_con_cartera()
+        pend = cont.documentos_pendientes(sb, EMP, "900", prefijos=("1305", "130505"))
+        assert len(pend) == 1
+        assert pend[0]["documento"] == "V1"
+        assert pend[0]["pendiente"] == 1_200_000
+        assert pend[0]["saldo"] == 1_200_000          # por cobrar → positivo
+
+    def test_tercero_sin_pendientes(self):
+        sb = _sb_con_cartera()
+        assert cont.documentos_pendientes(sb, EMP, "999", prefijos=("2205",)) == []
+
+
 class TestBuscarMovimientos:
     def test_filtra_por_cuenta(self):
         sb = _sb_con_asiento()
