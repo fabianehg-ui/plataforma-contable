@@ -607,6 +607,138 @@ def balance_general(sb, empresa_id: str, hasta: str):
 
 
 # ============================================================
+# Terceros (maestro de NITs)
+# ============================================================
+
+def listar_terceros(sb, empresa_id: str, query: Optional[str] = None,
+                    limit: int = 5000) -> list[dict]:
+    q = sb.table("cn_terceros").select("*").eq("empresa_id", empresa_id)
+    if query:
+        q = q.ilike("nombre", f"%{query}%")
+    return q.order("nit").limit(limit).execute().data or []
+
+
+def obtener_tercero(sb, empresa_id: str, nit: str) -> dict:
+    res = (
+        sb.table("cn_terceros").select("*")
+          .eq("empresa_id", empresa_id).eq("nit", str(nit)).limit(1).execute()
+    )
+    return (res.data or [{}])[0]
+
+
+def upsert_tercero(sb, empresa_id: str, nit: str, nombre: str, **campos) -> dict:
+    payload = {"empresa_id": empresa_id, "nit": str(nit), "nombre": nombre, **campos}
+    res = sb.table("cn_terceros").upsert(payload, on_conflict="empresa_id,nit").execute()
+    return (res.data or [{}])[0]
+
+
+# ============================================================
+# Importación de maestros (desde DataFrame / plano)
+# ============================================================
+
+def _norm(s: str) -> str:
+    """Normaliza un encabezado: minúsculas, sin tildes ni espacios/símbolos."""
+    s = str(s).strip().lower()
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
+        s = s.replace(a, b)
+    return "".join(ch for ch in s if ch.isalnum())
+
+
+def _bool_sn(v) -> bool:
+    return str(v).strip().upper() in ("S", "SI", "SÍ", "1", "TRUE", "X", "V")
+
+
+# Alias de columnas -> campo canónico
+_ALIAS_TERCEROS = {
+    "nit": "nit", "identificacion": "nit", "cedula": "nit", "documento": "nit",
+    "nombre": "nombre", "razonsocial": "nombre", "nombrerazonsocial": "nombre", "tercero": "nombre",
+    "tipo": "tipo_persona", "tipopersona": "tipo_persona", "tipodepersona": "tipo_persona",
+    "dv": "dv", "digitoverificacion": "dv",
+    "regimen": "regimen", "email": "email", "correo": "email",
+    "telefono": "telefono", "tel": "telefono",
+    "direccion": "direccion", "municipio": "municipio", "ciudad": "municipio",
+}
+
+_ALIAS_CUENTAS = {
+    "cuenta": "codigo", "codigo": "codigo", "cod": "codigo", "cuentacontable": "codigo",
+    "nombre": "nombre", "descripcion": "nombre", "nombrecuenta": "nombre",
+    "naturaleza": "naturaleza", "nat": "naturaleza",
+    "tipo": "tipo_cuenta", "tipocuenta": "tipo_cuenta",
+    "manejanit": "maneja_nit", "nit": "maneja_nit",
+    "manejacc": "maneja_cc", "centrocosto": "maneja_cc", "cc": "maneja_cc",
+    "manejabase": "maneja_base", "base": "maneja_base",
+}
+
+
+def _mapear_columnas(df: pd.DataFrame, alias: dict, posicional: list[str]) -> pd.DataFrame:
+    """Renombra columnas de df a campos canónicos usando alias por nombre; si no
+    hay encabezados reconocibles, usa mapeo POSICIONAL (col0, col1, ...)."""
+    ren = {}
+    for col in df.columns:
+        canon = alias.get(_norm(col))
+        if canon:
+            ren[col] = canon
+    if ren:
+        out = df.rename(columns=ren)
+        # dejar solo columnas canónicas conocidas
+        cols = [c for c in out.columns if c in set(alias.values())]
+        return out[cols]
+    # Sin encabezados reconocibles -> posicional
+    out = df.iloc[:, :len(posicional)].copy()
+    out.columns = posicional[:out.shape[1]]
+    return out
+
+
+def importar_terceros(sb, empresa_id: str, df: pd.DataFrame, lote: int = 500) -> int:
+    """Importa terceros desde un DataFrame. Reconoce columnas por nombre
+    (NIT, NOMBRE, TIPO, DV, REGIMEN, EMAIL, TELEFONO, DIRECCION, MUNICIPIO)
+    o, si no hay encabezados, asume posición: NIT, NOMBRE, TIPO."""
+    m = _mapear_columnas(df, _ALIAS_TERCEROS, ["nit", "nombre", "tipo_persona"])
+    filas = []
+    for _, r in m.iterrows():
+        nit = str(r.get("nit", "")).strip()
+        nombre = str(r.get("nombre", "")).strip()
+        if not nit or not nombre:
+            continue
+        fila = {"empresa_id": empresa_id, "nit": nit, "nombre": nombre}
+        for c in ("tipo_persona", "dv", "regimen", "email", "telefono", "direccion", "municipio"):
+            v = r.get(c)
+            if v is not None and str(v).strip() != "":
+                fila[c] = str(v).strip()[:1] if c == "tipo_persona" else str(v).strip()
+        filas.append(fila)
+    total = 0
+    for i in range(0, len(filas), lote):
+        chunk = filas[i:i + lote]
+        sb.table("cn_terceros").upsert(chunk, on_conflict="empresa_id,nit").execute()
+        total += len(chunk)
+    return total
+
+
+def importar_cuentas_desde_df(sb, empresa_id: str, df: pd.DataFrame, lote: int = 500) -> int:
+    """Importa plan de cuentas desde un DataFrame. Reconoce CODIGO, NOMBRE,
+    NATURALEZA, TIPO, MANEJA NIT/CC/BASE; o posición: CODIGO, NOMBRE, NATURALEZA."""
+    m = _mapear_columnas(df, _ALIAS_CUENTAS, ["codigo", "nombre", "naturaleza"])
+    filas = []
+    for _, r in m.iterrows():
+        codigo = str(r.get("codigo", "")).strip()
+        nombre = str(r.get("nombre", "")).strip()
+        if not codigo or not nombre:
+            continue
+        fila = {"codigo": codigo, "nombre": nombre, "nivel": len(codigo)}
+        nat = str(r.get("naturaleza", "")).strip().upper()[:1]
+        if nat in ("D", "C"):
+            fila["naturaleza"] = nat
+        tc = str(r.get("tipo_cuenta", "")).strip().upper()[:1]
+        if tc:
+            fila["tipo_cuenta"] = tc
+        for c in ("maneja_nit", "maneja_cc", "maneja_base"):
+            if c in m.columns:
+                fila[c] = _bool_sn(r.get(c))
+        filas.append(fila)
+    return importar_plan_cuentas(sb, empresa_id, filas, lote=lote)
+
+
+# ============================================================
 # Importación de históricos (plano de 11 columnas -> cn_movimientos)
 # ============================================================
 
