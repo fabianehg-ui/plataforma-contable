@@ -1,26 +1,21 @@
-# CÓMO SUBIR — Pantalla de acceso con branding (INTEGRAL)
+# CÓMO SUBIR — Animación de procesamiento + servicio Conciliación de bancos
 
-Le da elegancia al login: logo, fondo con degradado, tarjeta de acceso pulida,
-grid de servicios y animaciones sutiles. Fecha: 18-jul-2026. **Sin migración.**
+Agrega al login una animación "pipeline": formatos (PDF · IMG · XML · XLS · TXT)
+→ engranajes girando (procesando) → cifras y gráfico de barras. Y suma el
+servicio **Conciliación de bancos**. Fecha: 18-jul-2026. **Sin migración.**
 
 ## Archivo
 
-- `auth/login.py` (MOD) — `login_form()` rediseñado. La **lógica de login no
-  cambia** (NIT + correo + contraseña, verificación por empresa, sidebar oculto).
+- `auth/login.py` (MOD) — nueva animación (`_PIPELINE` + CSS con engranajes SVG
+  y barras animadas), y `_SERVICIOS` incluye "🔄 Conciliación de bancos".
+  La lógica de login no cambia.
 
-## Personalizar (fácil)
+## Personalizar
 
-Dentro de `auth/login.py`:
-- **Logo**: reemplaza el bloque `_LOGO_SVG` por el logo real de la empresa (un
-  SVG inline, o un `<img src="data:image/png;base64,...">`). Si me pasas el PNG/SVG,
-  lo dejo incrustado.
-- **Colores**: en `_CSS_LOGIN`, las variables `--accent` (#2dd4bf) y `--accent2`
-  (#0ea5e9) y el degradado del fondo (`.stApp{...}`) definen la paleta.
-- **Servicios**: la lista `_SERVICIOS` (ícono, título, descripción) define las
-  tarjetas de la derecha.
+- La cifra/gráfico son decorativos (CSS puro, sin datos reales). Si quieres que
+  muestren datos reales de la empresa tras entrar, eso iría en el dashboard.
+- Colores: variables `--accent` / `--accent2` como antes.
+- Todo el estilo aplica solo en la pantalla de acceso.
 
-## Nota
-
-El estilo solo aplica en la pantalla de login (antes de entrar); el resto de la
-app queda igual. Si tu Streamlit es < 1.36 algún selector podría variar, pero el
-formulario sigue funcionando (los estilos son cosméticos).
+> Nota: la animación es CSS puro (sin JavaScript), así que funciona en cualquier
+> navegador moderno dentro de Streamlit.

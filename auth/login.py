@@ -230,6 +230,35 @@ _LOGO_SVG = """
 </svg>
 """
 
+# Animación "pipeline": formatos → engranajes → cifras/gráficos
+_GEAR_A = "M22.0,0.0 L29.5,5.3 L28.2,10.2 L19.1,11.0 L17.8,12.9 L20.8,21.6 L16.9,24.8 L9.0,20.1 L6.8,20.9 L4.1,29.7 L-0.9,30.0 L-4.5,21.5 L-6.8,20.9 L-14.1,26.5 L-18.4,23.7 L-16.3,14.8 L-17.8,12.9 L-27.0,13.1 L-28.8,8.4 L-21.9,2.3 L-22.0,0.0 L-29.5,-5.3 L-28.2,-10.2 L-19.1,-11.0 L-17.8,-12.9 L-20.8,-21.6 L-16.9,-24.8 L-9.0,-20.1 L-6.8,-20.9 L-4.1,-29.7 L0.9,-30.0 L4.5,-21.5 L6.8,-20.9 L14.1,-26.5 L18.4,-23.7 L16.3,-14.8 L17.8,-12.9 L27.0,-13.1 L28.8,-8.4 L21.9,-2.3 Z"
+_GEAR_B = "M16.0,0.0 L21.5,4.8 L20.0,9.2 L12.7,9.7 L11.3,11.3 L11.8,18.6 L7.6,20.6 L2.1,15.9 L0.0,16.0 L-4.8,21.5 L-9.2,20.0 L-9.7,12.7 L-11.3,11.3 L-18.6,11.8 L-20.6,7.6 L-15.9,2.1 L-16.0,0.0 L-21.5,-4.8 L-20.0,-9.2 L-12.7,-9.7 L-11.3,-11.3 L-11.8,-18.6 L-7.6,-20.6 L-2.1,-15.9 L-0.0,-16.0 L4.8,-21.5 L9.2,-20.0 L9.7,-12.7 L11.3,-11.3 L18.6,-11.8 L20.6,-7.6 L15.9,-2.1 Z"
+
+_PIPELINE = f"""
+<div class='ig-pipe'>
+  <div class='ig-in'>
+    <span class='fchip pdf'>PDF</span><span class='fchip img'>IMG</span>
+    <span class='fchip xml'>XML</span><span class='fchip xls'>XLS</span>
+    <span class='fchip txt'>TXT</span>
+  </div>
+  <div class='ig-arrow'>➜</div>
+  <div class='ig-gearbox'>
+    <svg viewBox='-60 -40 120 80' xmlns='http://www.w3.org/2000/svg'>
+      <defs><linearGradient id='gg' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0' stop-color='#2dd4bf'/><stop offset='1' stop-color='#0ea5e9'/></linearGradient></defs>
+      <g transform='translate(-14,2)'><path class='g1' d='{_GEAR_A}' fill='url(#gg)'/></g>
+      <g transform='translate(24,9)'><path class='g2' d='{_GEAR_B}' fill='#7fdcd0'/></g>
+    </svg>
+  </div>
+  <div class='ig-arrow'>➜</div>
+  <div class='ig-out'>
+    <div class='bars'><i></i><i></i><i></i><i></i><i></i></div>
+    <div class='ig-num'>$ 2.480.000<br><span class='ig-numsub'>Db = Cr ✓</span></div>
+  </div>
+</div>
+<div class='ig-cap'>Lee <b>PDF · imagen · XML · Excel · TXT</b> → engranajes que contabilizan → cifras y gráficos</div>
+"""
+
 _CSS_LOGIN = """
 <style>
 :root{ --brand1:#0b1f3a; --brand2:#123a5e; --accent:#2dd4bf; --accent2:#0ea5e9; }
@@ -289,6 +318,39 @@ section[data-testid='stSidebar'], div[data-testid='stSidebarNav']{ display:none!
   margin:.2rem 0 .6rem; font-size:.95rem; text-transform:uppercase; }
 .ig-foot{ text-align:center; color:#6f8bab; font-size:.8rem; margin-top:1.6rem; }
 @keyframes igfade{ from{opacity:0; transform: translateY(10px);} to{opacity:1; transform:none;} }
+
+/* Animación pipeline: formatos → engranajes → cifras/gráficos */
+.ig-pipe{ display:flex; align-items:center; justify-content:center; gap:.55rem; flex-wrap:wrap;
+  margin:1.3rem auto .3rem; padding:.9rem 1rem; max-width:640px;
+  background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10);
+  border-radius:16px; animation: igfade .8s .1s ease both; }
+.ig-in{ display:flex; flex-direction:column; gap:.32rem; }
+.fchip{ font-size:.7rem; font-weight:800; color:#04202a; padding:.18rem .5rem; border-radius:7px;
+  box-shadow:0 4px 12px rgba(0,0,0,.25); animation: feed 3.2s ease-in-out infinite; }
+.fchip.pdf{background:#ff9a9a;} .fchip.img{background:#ffd59e;} .fchip.xml{background:#9be8dc;}
+.fchip.xls{background:#bfe3a6;} .fchip.txt{background:#dcdcf0;}
+.fchip:nth-child(2){animation-delay:.35s;} .fchip:nth-child(3){animation-delay:.7s;}
+.fchip:nth-child(4){animation-delay:1.05s;} .fchip:nth-child(5){animation-delay:1.4s;}
+@keyframes feed{ 0%{opacity:.3; transform:translateX(-7px);} 50%{opacity:1; transform:translateX(7px);}
+  100%{opacity:.3; transform:translateX(-7px);} }
+.ig-arrow{ color:#5fd0c4; font-size:1.3rem; animation: apulse 1.6s ease-in-out infinite; }
+@keyframes apulse{ 0%,100%{opacity:.35;} 50%{opacity:1;} }
+.ig-gearbox svg{ width:150px; height:88px; filter: drop-shadow(0 8px 20px rgba(45,212,191,.4)); }
+.g1,.g2{ transform-box: fill-box; transform-origin:center; }
+.g1{ animation: spin 7s linear infinite; }
+.g2{ animation: spin 4.5s linear infinite reverse; }
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.ig-out{ display:flex; align-items:flex-end; gap:.55rem; }
+.bars{ display:flex; align-items:flex-end; gap:3px; height:46px; }
+.bars i{ width:7px; background: linear-gradient(180deg,#2dd4bf,#0ea5e9); border-radius:3px 3px 0 0;
+  transform-origin:bottom; animation: grow 1.8s ease-in-out infinite; }
+.bars i:nth-child(1){height:38%;} .bars i:nth-child(2){height:70%; animation-delay:.2s;}
+.bars i:nth-child(3){height:28%; animation-delay:.4s;} .bars i:nth-child(4){height:92%; animation-delay:.6s;}
+.bars i:nth-child(5){height:55%; animation-delay:.8s;}
+@keyframes grow{ 0%,100%{transform:scaleY(.45); opacity:.7;} 50%{transform:scaleY(1); opacity:1;} }
+.ig-num{ font-weight:800; color:#9be8dc; font-size:1rem; line-height:1.05; text-align:left; }
+.ig-numsub{ font-size:.68rem; color:#7f9ab8; font-weight:600; }
+.ig-cap{ text-align:center; color:#8fa8c4; font-size:.82rem; margin:.1rem auto 0; max-width:640px; }
 </style>
 """
 
@@ -299,7 +361,7 @@ _SERVICIOS = [
     ("🧾", "Compras y ventas", "Desde DIAN, Siigo o Excel"),
     ("💳", "Cartera y pagos", "Cruce de facturas por tercero"),
     ("📊", "Retención y exógena", "F350 y medios magnéticos"),
-    ("🏦", "Bancos", "Extractos → asientos"),
+    ("🔄", "Conciliación de bancos", "Extractos vs libros, cuadre"),
     ("🔗", "Todo integrado", "Un solo movimiento por empresa"),
 ]
 
@@ -318,6 +380,9 @@ def login_form():
         "<div class='ig-sub'>Plataforma contable integral · todo el ciclo, una sola empresa</div></div>",
         unsafe_allow_html=True,
     )
+
+    # Animación: formatos → engranajes → cifras/gráficos
+    st.markdown(_PIPELINE, unsafe_allow_html=True)
     st.write("")
 
     col_form, col_serv = st.columns([1, 1.15], gap="large")
