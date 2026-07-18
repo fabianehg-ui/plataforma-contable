@@ -14,12 +14,37 @@ from auth.login import current_user
 
 
 def empresas_del_usuario():
-    """Retorna [{id, nit, razon_social, rol}, ...] para el usuario actual."""
+    """Retorna [{id, nit, razon_social, rol}, ...] para el usuario actual.
+
+    Privacidad multi-empresa:
+    - Usuario normal: SOLO las empresas a las que fue asignado (usuario_empresa).
+    - Superadmin (usuario general): TODAS las empresas, y puede cambiar entre
+      ellas en cualquier momento desde el sidebar.
+    """
     user = current_user()
     if not user:
         return []
 
     sb = get_supabase()
+
+    # Superadmin → acceso a todas las empresas (bypasa RLS con la función admin)
+    try:
+        from auth.superadmin import es_superadmin
+        if es_superadmin():
+            resp = sb.rpc("admin_listar_empresas").execute()
+            todas = []
+            for e in (resp.data or []):
+                if e.get("activa") is False:
+                    continue
+                todas.append({
+                    "id": e["id"], "nit": e.get("nit"),
+                    "razon_social": e.get("razon_social"), "rol": "admin",
+                })
+            todas.sort(key=lambda x: (x.get("razon_social") or "").upper())
+            return todas
+    except Exception:
+        pass
+
     try:
         resp = (
             sb.table("usuario_empresa")
@@ -64,8 +89,19 @@ def seleccionar_empresa_sidebar():
     if len(empresas) == 1 and not empresa_activa():
         st.session_state["empresa_activa"] = empresas[0]
 
+    _es_sa = False
+    try:
+        from auth.superadmin import es_superadmin
+        _es_sa = es_superadmin()
+    except Exception:
+        _es_sa = False
+
     with st.sidebar:
         st.markdown("### 🏢 Empresa activa")
+        if _es_sa:
+            st.caption("🔑 Superadmin — acceso a todas las empresas")
+        elif len(empresas) == 1:
+            st.caption("Acceso restringido a tu empresa asignada")
         nombres = [f"{e['razon_social']} ({e['nit']})" for e in empresas]
         actual = empresa_activa()
         idx_default = 0

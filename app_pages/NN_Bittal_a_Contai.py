@@ -9,8 +9,10 @@ import datetime as dt
 import streamlit as st
 
 from core.bittal.reportes import INFORMES, generar_plano
+from auth.guard import guard_empresa
 
-st.title("Bittal -> Contai")
+st.title("Bittal → Contai")
+emp, sb = guard_empresa()
 
 # Seleccion de informe (las llaves del registro)
 opciones = {v["nombre"]: k for k, v in INFORMES.items()}

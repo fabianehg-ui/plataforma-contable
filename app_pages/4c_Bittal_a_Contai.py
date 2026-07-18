@@ -14,8 +14,10 @@ import streamlit as st
 
 from core.bittal.reportes import INFORMES, generar_plano
 from core.bittal.cliente_bittal import BittalCreds
+from auth.guard import guard_empresa
 
-st.title("Bittal -> Contai")
+st.title("Bittal → Contai")
+emp, sb = guard_empresa()
 
 # Informe (llaves del registro)
 opciones = {v["nombre"]: k for k, v in INFORMES.items()}

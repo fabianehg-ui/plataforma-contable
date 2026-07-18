@@ -56,6 +56,9 @@ st.set_page_config(
     layout='wide',
 )
 
+from auth.guard import guard_empresa
+emp, sb = guard_empresa()
+
 
 # =============================================================================
 # HEADER

@@ -14,8 +14,10 @@ import json
 import streamlit as st
 
 from core.siigo import web
+from auth.guard import guard_empresa
 
 st.title("Siigo Web (sin API)")
+emp, sb = guard_empresa()
 st.caption("Para empresas sin API habilitada. Pega el token de tu sesion de Siigo; el repo hace el resto.")
 ss = st.session_state
 

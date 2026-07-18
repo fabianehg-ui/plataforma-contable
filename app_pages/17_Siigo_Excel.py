@@ -9,8 +9,10 @@ from __future__ import annotations
 import streamlit as st
 
 from core.siigo import excel_planos as E
+from auth.guard import guard_empresa
 
-st.title("Siigo Excel -> Contai (con IVA y retencion)")
+st.title("Siigo Excel → Contai (con IVA y retención)")
+emp, sb = guard_empresa()
 st.caption("Para empresas sin API. Exporta en Siigo el informe 'Movimiento ventas' a Excel y subelo aqui.")
 ss = st.session_state
 

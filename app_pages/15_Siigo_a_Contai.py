@@ -19,8 +19,10 @@ import streamlit as st
 
 from core.siigo import cliente, planos
 from core.siigo import empresas as store
+from auth.guard import guard_empresa
 
-st.title("Siigo -> Contai")
+st.title("Siigo → Contai")
+emp, sb = guard_empresa()
 ss = st.session_state
 
 

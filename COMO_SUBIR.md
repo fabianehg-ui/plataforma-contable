@@ -1,41 +1,49 @@
-# CÓMO SUBIR — Conectar TODOS los módulos a la contabilidad central
+# CÓMO SUBIR — Guarda de empresa en todas las páginas + acceso por empresa
 
-Amplía "agregar al movimiento del mes" a más módulos y hace que cualquier plano
-en orden Contai se cause bien. Fecha: 18-jul-2026. **Sin migración.**
+Ninguna página opera ya sin saber a qué empresa pertenece, y cada usuario solo
+ve su(s) empresa(s); tu usuario general (superadmin) las ve todas y puede
+cambiar. Fecha: 18-jul-2026. **Sin migración.**
 
-## Qué cambia
+## 1. Guarda estándar de página (nuevo)
 
-- **Normalizador de columnas** (`integracion.normalizar_columnas`): cualquier
-  plano en orden Contai se causa aunque sus columnas tengan otros nombres/caso
-  (p.ej. el formato *silla tres* de los XML DIAN: "Comprobante", "Fecha", "Doc ref").
-- **Nuevos módulos conectados** (opción de causar junto a descargar):
-  - **Caja Menor** (`origen = caja_menor`)
-  - **Compras DIAN** (`origen = compras_dian`)
-  - **Descargador XML** (5b): causa **por empresa** (`r.empresa_id`), correcto
-    para su flujo multi-empresa (`origen = dian_xml`).
+`auth/guard.py`:
+- `guard_empresa(roles=…)` — una línea al inicio de una página: exige login,
+  fija la **empresa activa** (sidebar) y muestra el banner **"🏢 Empresa activa:
+  X"**. Devuelve `(emp, sb)`.
+- `guard_login()` — solo login, para páginas multi-empresa.
 
-## Ya conectados antes (recordatorio)
+Aplicada a las páginas que antes NO fijaban empresa: **Bittal (4c y NN), Bancos,
+Siigo (a Contai / Web / Excel), RADIAN (acuses recibidos y VPFE)**. El **DIAN XML
+masivo (5a)** se deja multi-empresa a propósito, con un aviso claro de que causa
+a la empresa de cada documento (no a una sola).
 
-Nómina, Captura, Cruce (pagos/recaudos), Ventas C13, Compras y Egresos, Bittal,
-Bancos y POS. Todo lo causado se ve y se reversa en **🔗 Centro Contable**.
+Toda página futura usa la misma línea: `emp, sb = guard_empresa()`.
 
-## Casos especiales (a propósito NO se auto-causan a una sola empresa)
+## 2. Acceso por empresa (privacidad multi-empresa)
 
-- **DIAN XML masivo (5a)**: concatena varias empresas en un solo plano; causar a
-  una sola sería incorrecto. Se mantiene como exportador.
-- **PILA y Vacaciones**: se consolidan dentro del **plano de nómina** del mes
-  (para no duplicar); se causan al guardar la nómina.
-- **Siigo a Contai / Siigo Excel**: generan varios archivos .txt para exportar a
-  Contai; su causación en INTEGRAL queda como paso siguiente (por archivo).
+`auth/empresas.py → empresas_del_usuario()`:
+- **Usuario normal**: SOLO las empresas a las que fue asignado (tabla
+  `usuario_empresa`). Si tiene una, queda fija en esa; no ve las demás.
+- **Superadmin (tu usuario general)**: TODAS las empresas activas, y puede
+  **cambiar de empresa** en cualquier momento desde el sidebar.
+
+El sidebar ahora indica el modo: "🔑 Superadmin — todas las empresas" o "Acceso
+restringido a tu empresa asignada".
 
 ## Archivos
 
 | Archivo | Estado |
 |---|---|
-| `core/contable/integracion.py` | **MOD** — `normalizar_columnas`; orígenes caja_menor/compras_dian. |
-| `app_pages/1_Caja_Menor.py` | **MOD** — opción causar. |
-| `app_pages/2_Compras_DIAN.py` | **MOD** — opción causar. |
-| `app_pages/5b_Descargador_XML.py` | **MOD** — causar por empresa. |
-| `tests/test_integracion.py` | **MOD** — + pruebas del normalizador. **96 pruebas pasan.** |
+| `auth/guard.py` | **NUEVO** — guarda reusable. |
+| `auth/empresas.py` | **MOD** — superadmin ve todas; normal solo asignadas; indicador en sidebar. |
+| `app_pages/4c_Bittal…`, `NN_Bittal…`, `19_Bancos…`, `15/16/17_Siigo…`, `1/6_RADIAN…` | **MOD** — guarda de empresa. |
+| `app_pages/5a_DIAN_XML.py` | **MOD** — aviso multi-empresa. |
 
-Requiere los archivos base del Puente contable. Sin migración.
+Sin migración: usa `usuario_empresa`, `superadmins` y el RPC `admin_listar_empresas`
+que ya existen. **96 pruebas contables pasan.**
+
+## Cómo asignar usuarios a empresas
+
+Desde **🛡️ Panel Admin** se asignan usuarios a empresas con su rol (admin /
+operador / consulta). Un usuario solo entrará a las empresas que le asignes; tu
+usuario superadmin entra a todas.

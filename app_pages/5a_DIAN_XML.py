@@ -59,6 +59,9 @@ st.caption(
     "El sistema detecta el tipo de cada documento, aplica mapeo NIT, "
     "asigna CC desde dirección/notas y genera el plano contable."
 )
+st.info("🏢 **Modo multi-empresa**: esta página procesa varias empresas a la vez. "
+        "Lo causado va a la **empresa de cada documento** (por su NIT/mapeo), no a "
+        "una sola del sidebar. Para causar a una empresa puntual usa el **Descargador XML**.")
 
 # ----------------------------------------------------------- Registry
 @st.cache_resource

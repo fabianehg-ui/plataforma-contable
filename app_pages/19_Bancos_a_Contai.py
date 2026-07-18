@@ -21,7 +21,9 @@ import streamlit as st
 from core.procesadores import extractos_bancarios as eb
 
 st.set_page_config(page_title="Bancos a Contai", page_icon="🏦", layout="wide")
+from auth.guard import guard_empresa
 st.title("🏦 Extractos bancarios → resumen y plano Contai")
+emp, sb = guard_empresa()
 st.caption("Sube los PDF de Bancolombia, Banco de Bogotá y BBVA. Se leen directo del PDF, "
            "sin Word ni programas externos.")
 
