@@ -976,6 +976,13 @@ def obtener_tercero(sb, empresa_id: str, nit: str) -> dict:
 
 def upsert_tercero(sb, empresa_id: str, nit: str, nombre: str, **campos) -> dict:
     payload = {"empresa_id": empresa_id, "nit": str(nit), "nombre": nombre, **campos}
+    # Calcular el dígito de verificación si no viene (algoritmo oficial DIAN)
+    if not payload.get("dv"):
+        try:
+            from core.contable.dv import digito_verificacion
+            payload["dv"] = str(digito_verificacion(nit))
+        except Exception:
+            pass
     res = sb.table("cn_terceros").upsert(payload, on_conflict="empresa_id,nit").execute()
     return (res.data or [{}])[0]
 
