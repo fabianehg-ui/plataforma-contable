@@ -1,31 +1,41 @@
-# HOTFIX — Captura no debe crashear si falta la migración 016 + base de factura
+# CÓMO SUBIR — Compras: régimen del proveedor + retención sugerida + lectura de ZIP
 
-## Qué pasó
+Mejora la lectura de facturas de compra: detecta el **régimen del proveedor**
+(del XML) para sugerir qué retención aplicar, y acepta **ZIP** con una o varias
+facturas. Fecha: 18-jul-2026.
 
-El error `postgrest.exceptions.APIError` en la Captura (línea
-`cp.listar_conceptos(...)`) ocurre porque la tabla **`cn_conceptos` aún no
-existe**: falta correr la migración **016_conceptos_iva_retencion.sql** en
-Supabase. La página crasheaba en vez de avisar.
+## Sin migración
 
-## ▶️ Acción principal (esto habilita los conceptos)
+No requiere migración nueva. (Sigue pendiente correr la **016** para habilitar
+los conceptos, si aún no lo hiciste.)
 
-En **Supabase → SQL Editor → New query**, pega y corre:
-`db/migrations/016_conceptos_iva_retencion.sql` (venía en la entrega de
-"Conceptos + lectura de facturas"). Luego, en **🧩 Conceptos y tarifas**,
-pulsa **⚡ Sembrar estándar**.
-
-## Archivos de este hotfix (reemplazan los de la entrega anterior)
+## Archivos (reemplazan los de la entrega de Conceptos + el hotfix)
 
 | Archivo | Cambio |
 |---|---|
-| `core/contable/conceptos.py` | + `tablas_existen()`: detecta si la migración 016 está aplicada, sin reventar. |
-| `app_pages/21_Captura.py` | El bloque **⚡ Concepto programado** ahora degrada con un aviso ("corre la migración 016…") si las tablas no existen; puedes seguir digitando a mano. |
-| `app_pages/23_Conceptos.py` | Si faltan las tablas, muestra el aviso y no intenta cargar (sin crash). |
-| `core/contable/lector_factura.py` | **Base recalculada**: cuando el total ya incluye IVA (ej. total 26.900, IVA 2.016 → base **24.884**), la base se ajusta a `total − IVA + retenciones`. |
+| `core/contable/lector_factura.py` | + `_extraer_regimen` (lee `cbc:TaxLevelCode`: responsable/no responsable de IVA, Gran contribuyente O-13, Autorretenedor O-15, Agente reteIVA O-23, RST O-47). `leer_xml` ahora devuelve `regimen`. + `leer_zip` y `leer_facturas` (ZIP con varias facturas, incluye sub-ZIPs del bookmarklet DIAN). |
+| `core/contable/conceptos.py` | + `ajustar_por_regimen(concepto, tipos_ret, tipos_iva, regimen)` → sugiere IVA y retenciones según el régimen, con notas. |
+| `app_pages/21_Captura.py` | El uploader acepta **.zip**; si trae varias facturas, muestra selector. Muestra el **régimen del proveedor** leído. El bloque de concepto **pre-selecciona** IVA y retenciones según el régimen (editable). |
+| `tests/test_conceptos_lector.py` | + pruebas de régimen, `ajustar_por_regimen` y lectura de ZIP (77… en total 59 pruebas del paquete pasan). |
 
-## Notas
+## Reglas de sugerencia (compras) — todas editables antes de guardar
 
-- Sin correr la 016, XML y PDF/imagen siguen leyéndose para prellenar la
-  cabecera; solo los **conceptos programados** quedan en espera con su aviso.
-- La base leída siempre es editable antes de guardar (PDF/imagen es mejor esfuerzo).
-- 49 pruebas siguen pasando.
+- **Proveedor NO responsable de IVA** → sin IVA descontable ni ReteIVA.
+- **Proveedor autorretenedor de renta (O-15)** o **Régimen Simple (O-47)** →
+  **no** se le practica ReteFuente de renta.
+- **ReteICA** depende del municipio/actividad → se deja manual.
+
+Son *sugerencias*: se pre-seleccionan en la Captura y tú las confirmas o cambias.
+
+## Uso
+
+1. En **✍️ Captura → 📄 Leer factura**, sube el **XML**, **PDF**, **imagen** o un
+   **ZIP**. Si el ZIP trae varias, elige cuál cargar.
+2. Verás el **régimen del proveedor** (ej. "Responsable de IVA · Autorretenedor").
+3. En **⚡ Concepto programado**, el IVA y las retenciones vienen ya ajustados al
+   régimen (con una nota explicando por qué). Ajusta si hace falta y genera las
+   líneas.
+
+> Nota: `lector_factura.py` reusa `parsear_xml_dian` y `extraer_xmls_de_zip_maestro`
+> de `core/procesadores/procesador_dian_xml.py` (ya en el repo). Estos archivos
+> incluyen todo lo de la entrega de Conceptos y el hotfix; súbelos encima.

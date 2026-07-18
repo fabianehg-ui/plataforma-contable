@@ -141,6 +141,50 @@ def aplicar_concepto(
     return lineas
 
 
+def ajustar_por_regimen(concepto: dict, tipos_ret: list[dict],
+                        tipos_iva: list[dict], regimen: Optional[dict]):
+    """Sugiere IVA y retenciones según el régimen del proveedor (compras).
+
+    Reglas prácticas (editables por el usuario en la Captura):
+      - Proveedor NO responsable de IVA → sin IVA descontable ni reteIVA.
+      - Proveedor autorretenedor de renta o Régimen Simple (RST) → no se le
+        practica ReteFuente de renta.
+      - ReteICA depende del municipio/actividad → se deja manual.
+
+    Returns: (iva_codigo|None, [retencion_codigos], [notas]).
+    """
+    ret_by = {t["codigo"]: t for t in tipos_ret}
+    notas: list[str] = []
+
+    iva_cod = concepto.get("tipo_iva_codigo") if concepto.get("maneja_iva") else None
+
+    rets: list[str] = []
+    if concepto.get("maneja_retencion") and concepto.get("tipo_retencion_codigo"):
+        rets = [concepto["tipo_retencion_codigo"]]
+
+    if regimen:
+        if regimen.get("iva") == "no_responsable":
+            if iva_cod is not None:
+                iva_cod = None
+                notas.append("Proveedor NO responsable de IVA → sin IVA descontable.")
+            iva_prev = len(rets)
+            rets = [r for r in rets if ret_by.get(r, {}).get("clase") != "iva"]
+            if len(rets) != iva_prev:
+                notas.append("Sin ReteIVA (proveedor no responsable de IVA).")
+
+        if regimen.get("autorretenedor") or regimen.get("regimen_simple"):
+            quitados = [r for r in rets if ret_by.get(r, {}).get("clase") == "fuente"]
+            if quitados:
+                rets = [r for r in rets if r not in quitados]
+                motivo = ("autorretenedor de renta" if regimen.get("autorretenedor")
+                          else "Régimen Simple (RST)")
+                notas.append(f"Proveedor {motivo} → no se practica ReteFuente de renta.")
+
+    # solo dejar códigos que existan
+    rets = [r for r in rets if r in ret_by]
+    return iva_cod, rets, notas
+
+
 def resumen_asiento(lineas: list[dict]) -> dict:
     """{debitos, creditos, cuadra} de un conjunto de líneas."""
     db = sum(l["valor"] for l in lineas if l["tr"] == "1")

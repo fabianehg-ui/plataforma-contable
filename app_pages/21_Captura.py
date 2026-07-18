@@ -52,6 +52,28 @@ def _a_editor_df(lineas: list[dict]) -> pd.DataFrame:
     return pd.concat([df, _lineas_vacias(1)], ignore_index=True)
 
 
+def _prefill_factura(datos: dict):
+    """Vuelca los datos de una factura leída en la cabecera de la Captura."""
+    import streamlit as _st
+    from datetime import date as _date
+    _st.session_state["factura_leida"] = datos
+    if datos.get("nit"):
+        _st.session_state["cap_nit"] = datos["nit"]
+    if datos.get("numero"):
+        _st.session_state["cap_doc"] = str(datos["numero"])
+    nom = datos.get("nombre") or ""
+    _st.session_state["cap_det"] = (f"Factura {datos.get('numero', '')} {nom}").strip()
+    base_sug = datos.get("base") or max(0, int(datos.get("total", 0)) - int(datos.get("iva", 0)))
+    _st.session_state["cap_base"] = int(base_sug)
+    f = datos.get("fecha")
+    if f and isinstance(f, str) and len(f) == 10:
+        try:
+            y, m, d = (int(x) for x in f.split("-"))
+            _st.session_state["cap_fecha"] = _date(y, m, d)
+        except Exception:
+            pass
+
+
 require_auth()
 seleccionar_empresa_sidebar()
 sidebar_user_info()
@@ -135,34 +157,47 @@ if "captura_lineas" not in st.session_state:
 # ============================================================
 # 📄 Leer factura (XML / PDF / imagen) — prellenar
 # ============================================================
-with st.expander("📄 Leer factura (XML DIAN · PDF · imagen) para prellenar", expanded=False):
-    st.caption("Sube la factura y extraigo NIT, número, fecha y valores (base, IVA, "
-               "retenciones, total). El XML DIAN es exacto; PDF/imagen es mejor esfuerzo.")
+with st.expander("📄 Leer factura (XML DIAN · PDF · imagen · ZIP) para prellenar", expanded=False):
+    st.caption("Sube la factura o un **ZIP** con varias (XML de la DIAN o PDFs). "
+               "Extraigo NIT, número, fecha, valores y el **régimen del proveedor** "
+               "para sugerir la retención. El XML es exacto; PDF/imagen es mejor esfuerzo.")
     up = st.file_uploader(
-        "Factura", type=["xml", "pdf", "png", "jpg", "jpeg", "tiff", "tif", "webp"],
+        "Factura o ZIP", type=["xml", "pdf", "png", "jpg", "jpeg", "tiff", "tif", "webp", "zip"],
         key="fac_file")
     if up is not None and st.button("📥 Leer y prellenar", key="btn_leer_fac"):
         try:
-            datos = lector.leer_factura(up.name, up.read())
-            st.session_state["factura_leida"] = datos
-            if datos.get("nit"):
-                st.session_state["cap_nit"] = datos["nit"]
-            if datos.get("numero"):
-                st.session_state["cap_doc"] = str(datos["numero"])
-            nom = datos.get("nombre") or ""
-            st.session_state["cap_det"] = (f"Factura {datos.get('numero', '')} {nom}").strip()
-            base_sug = datos.get("base") or max(0, int(datos.get("total", 0)) - int(datos.get("iva", 0)))
-            st.session_state["cap_base"] = int(base_sug)
-            f = datos.get("fecha")
-            if f and isinstance(f, str) and len(f) == 10:
-                try:
-                    y, m, d = (int(x) for x in f.split("-"))
-                    st.session_state["cap_fecha"] = date(y, m, d)
-                except Exception:
-                    pass
-            st.rerun()
+            facturas = lector.leer_facturas(up.name, up.read())
+            if not facturas:
+                st.warning("No se encontraron facturas legibles en el archivo/ZIP.")
+            elif len(facturas) == 1:
+                _prefill_factura(facturas[0])
+                st.rerun()
+            else:
+                st.session_state["facturas_multi"] = facturas
+                st.session_state.pop("factura_leida", None)
+                st.rerun()
         except Exception as e:
-            st.error(f"No se pudo leer la factura: {e}")
+            st.error(f"No se pudo leer: {e}")
+
+    multi = st.session_state.get("facturas_multi")
+    if multi:
+        st.info(f"📦 El ZIP trae **{len(multi)}** facturas. Elige cuál cargar:")
+        op = {
+            f"{i+1}. {f.get('numero') or 's/n'} · NIT {f.get('nit') or '—'} · "
+            f"$ {int(f.get('total', 0)):,}".replace(",", "."): i
+            for i, f in enumerate(multi)
+        }
+        lbl = st.selectbox("Factura del ZIP", list(op.keys()), key="fac_multi_sel")
+        cM1, cM2 = st.columns([1, 1])
+        with cM1:
+            if st.button("✅ Usar esta factura", key="btn_use_multi"):
+                _prefill_factura(multi[op[lbl]])
+                st.session_state.pop("facturas_multi", None)
+                st.rerun()
+        with cM2:
+            if st.button("✖️ Descartar ZIP", key="btn_drop_multi"):
+                st.session_state.pop("facturas_multi", None)
+                st.rerun()
 
     fl = st.session_state.get("factura_leida")
     if fl:
@@ -171,6 +206,9 @@ with st.expander("📄 Leer factura (XML DIAN · PDF · imagen) para prellenar",
             f"NIT {fl.get('nit') or '—'} · base $ {int(fl.get('base', 0)):,} · "
             f"IVA $ {int(fl.get('iva', 0)):,} · reteFte $ {int(fl.get('rete_fuente', 0)):,} · "
             f"total $ {int(fl.get('total', 0)):,}".replace(",", "."))
+        reg = fl.get("regimen")
+        if reg and reg.get("texto") and reg["texto"] != "Régimen no detectado":
+            st.info(f"🏷️ Régimen del proveedor: **{reg['texto']}**")
         for a in fl.get("advertencias", []):
             st.warning("⚠️ " + a)
 
@@ -234,19 +272,21 @@ else:
     with cc2:
         base_val = st.number_input("Base gravable", min_value=0, step=1000, key="cap_base")
 
+    # Defaults sugeridos según el régimen del proveedor (si se leyó una factura)
+    regimen = (st.session_state.get("factura_leida") or {}).get("regimen")
+    iva_def, ret_def, notas_reg = cp.ajustar_por_regimen(concepto, tipos_ret, tipos_iva, regimen)
+    for nota in notas_reg:
+        st.caption("🏷️ " + nota)
+
     ci1, ci2 = st.columns(2)
     with ci1:
         iva_ops = ["(sin IVA)"] + [t["codigo"] for t in tipos_iva]
-        iva_def = concepto.get("tipo_iva_codigo") if concepto.get("maneja_iva") else None
         iva_idx = iva_ops.index(iva_def) if iva_def in iva_ops else 0
         iva_sel = st.selectbox(
             "Tipo de IVA", iva_ops, index=iva_idx,
             format_func=lambda k: k if k == "(sin IVA)"
             else f"{k} · {iva_by[k]['tarifa']}%")
     with ci2:
-        ret_def = ([concepto["tipo_retencion_codigo"]]
-                   if (concepto.get("maneja_retencion") and concepto.get("tipo_retencion_codigo"))
-                   else [])
         ret_sel = st.multiselect(
             "Retenciones", [t["codigo"] for t in tipos_ret],
             default=[r for r in ret_def if r in ret_by],

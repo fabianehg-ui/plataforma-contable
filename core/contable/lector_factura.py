@@ -73,6 +73,70 @@ def _norm_fecha(texto: str) -> Optional[str]:
 
 
 # ============================================================
+# Régimen / responsabilidades fiscales del emisor (para sugerir retención)
+# ============================================================
+
+_RESP_NOMBRES = {
+    "O-13": "Gran contribuyente",
+    "O-15": "Autorretenedor",
+    "O-23": "Agente de retención IVA",
+    "O-47": "Régimen simple (RST)",
+    "R-99-PN": "No responsable",
+}
+
+
+def _texto_regimen(reg: dict) -> str:
+    partes = []
+    if reg["iva"] == "responsable":
+        partes.append("Responsable de IVA")
+    elif reg["iva"] == "no_responsable":
+        partes.append("No responsable de IVA")
+    for code, flag in (("O-13", "gran_contribuyente"), ("O-15", "autorretenedor"),
+                       ("O-23", "agente_retencion_iva"), ("O-47", "regimen_simple")):
+        if reg.get(flag):
+            partes.append(_RESP_NOMBRES[code])
+    return " · ".join(partes) if partes else "Régimen no detectado"
+
+
+def _extraer_regimen(xml_bytes: bytes) -> dict:
+    """Lee régimen de IVA (48/49) y responsabilidades fiscales (O-13, O-15…)
+    del emisor, desde cbc:TaxLevelCode (texto + atributo listName)."""
+    reg = {
+        "codigo_iva": "", "responsabilidades": [], "iva": "desconocido",
+        "gran_contribuyente": False, "autorretenedor": False,
+        "agente_retencion_iva": False, "regimen_simple": False, "texto": "",
+    }
+    try:
+        import xml.etree.ElementTree as ET
+        from core.procesadores.procesador_dian_xml import _find, _extraer_documento_anidado
+        root = ET.fromstring(xml_bytes)
+        interno = _extraer_documento_anidado(root)
+        if interno is not None:
+            root = interno
+        tlc = _find(root, "cac:AccountingSupplierParty/cac:Party/"
+                          "cac:PartyTaxScheme/cbc:TaxLevelCode")
+        if tlc is None:
+            return reg
+        cod = (tlc.text or "").strip()
+        listname = tlc.get("listName", "") or ""
+        resp = [c.strip() for c in re.split(r"[;,|]", listname) if c.strip()]
+        reg["codigo_iva"] = cod
+        reg["responsabilidades"] = resp
+        reg["gran_contribuyente"] = "O-13" in resp
+        reg["autorretenedor"] = "O-15" in resp
+        reg["agente_retencion_iva"] = "O-23" in resp
+        reg["regimen_simple"] = "O-47" in resp
+        if "48" in cod or "O-48" in resp:
+            reg["iva"] = "responsable"
+        elif "49" in cod or "R-99-PN" in (resp + [cod]) or "O-49" in resp:
+            reg["iva"] = "no_responsable"
+        reg["texto"] = _texto_regimen(reg)
+    except Exception:
+        pass
+    return reg
+
+
+# ============================================================
 # XML — reusa el parser UBL entrante existente
 # ============================================================
 
@@ -103,6 +167,7 @@ def leer_xml(xml_bytes: bytes, nombre: str = "") -> dict:
         "total": _a_int(str(doc.valor_total)),
         "moneda": doc.moneda or "COP",
         "confianza": "alta",
+        "regimen": _extraer_regimen(xml_bytes),
         "items": items,
         "advertencias": list(getattr(doc, "advertencias", []) or []),
     }
@@ -276,13 +341,70 @@ def leer_imagen(img_bytes: bytes, nombre: str = "") -> dict:
 
 
 # ============================================================
+# ZIP (paquete de facturas: XML de la DIAN, o PDFs)
+# ============================================================
+
+def leer_zip(zip_bytes: bytes, nombre: str = "") -> list[dict]:
+    """Extrae y lee todas las facturas de un ZIP (incluye sub-ZIPs del
+    bookmarklet DIAN). Prioriza XML; si no hay, intenta PDFs."""
+    out: list[dict] = []
+    try:
+        from core.procesadores.procesador_dian_xml import extraer_xmls_de_zip_maestro
+        for nom, xb in extraer_xmls_de_zip_maestro(zip_bytes):
+            try:
+                out.append(leer_xml(xb, nom))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if not out:
+        try:
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+                for nom in z.namelist():
+                    low = nom.lower()
+                    if low.endswith(".xml") and not nom.split("/")[-1].startswith("_"):
+                        try:
+                            out.append(leer_xml(z.read(nom), nom))
+                        except Exception:
+                            pass
+                if not out:
+                    for nom in z.namelist():
+                        if nom.lower().endswith(".pdf"):
+                            try:
+                                out.append(leer_pdf(z.read(nom), nom))
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+    return out
+
+
+# ============================================================
 # Dispatcher
 # ============================================================
 
+def _es_zip(nombre: str, cab: bytes) -> bool:
+    return (nombre or "").lower().endswith(".zip") or cab[:2] == b"PK"
+
+
+def leer_facturas(nombre: str, contenido: bytes) -> list[dict]:
+    """Lee una o varias facturas. ZIP → lista con todas; otro → lista de 1."""
+    cab = contenido[:8] if contenido else b""
+    if _es_zip(nombre, cab):
+        return leer_zip(contenido, nombre)
+    return [leer_factura(nombre, contenido)]
+
+
 def leer_factura(nombre: str, contenido: bytes) -> dict:
-    """Detecta el formato por extensión/contenido y lee la factura."""
+    """Detecta el formato por extensión/contenido y lee UNA factura."""
     n = (nombre or "").lower()
     cab = contenido[:200].lstrip() if contenido else b""
+    if _es_zip(nombre, contenido[:8] if contenido else b""):
+        facs = leer_zip(contenido, nombre)
+        if facs:
+            return facs[0]
+        raise RuntimeError("El ZIP no contiene facturas legibles (XML/PDF).")
     es_xml = n.endswith(".xml") or cab[:5].lower() == b"<?xml" or cab[:1] == b"<"
     if es_xml:
         return leer_xml(contenido, nombre)

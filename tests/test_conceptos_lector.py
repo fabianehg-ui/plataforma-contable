@@ -231,3 +231,101 @@ class TestOCRDisponible:
     def test_no_revienta(self):
         # Solo verifica que la función corre y devuelve bool.
         assert isinstance(lf.ocr_disponible(), bool)
+
+
+# ============================================================
+# Régimen del proveedor + sugerencia de retención
+# ============================================================
+
+XML_REG = XML_UBL.replace(
+    "<cbc:RegistrationName>PAPELERIA EL LAPIZ S.A.S</cbc:RegistrationName>",
+    "<cbc:RegistrationName>PAPELERIA EL LAPIZ S.A.S</cbc:RegistrationName>"
+    "<cbc:TaxLevelCode listName=\"O-13;O-15;O-23\">48</cbc:TaxLevelCode>")
+
+XML_NO_RESP = XML_UBL.replace(
+    "<cbc:RegistrationName>PAPELERIA EL LAPIZ S.A.S</cbc:RegistrationName>",
+    "<cbc:RegistrationName>PAPELERIA EL LAPIZ S.A.S</cbc:RegistrationName>"
+    "<cbc:TaxLevelCode listName=\"R-99-PN\">49</cbc:TaxLevelCode>")
+
+
+class TestRegimen:
+    def test_gran_contribuyente_autorretenedor(self):
+        r = lf.leer_xml(XML_REG.encode("utf-8"))
+        reg = r["regimen"]
+        assert reg["iva"] == "responsable"
+        assert reg["gran_contribuyente"] is True
+        assert reg["autorretenedor"] is True
+        assert reg["agente_retencion_iva"] is True
+        assert "Autorretenedor" in reg["texto"]
+
+    def test_no_responsable(self):
+        r = lf.leer_xml(XML_NO_RESP.encode("utf-8"))
+        reg = r["regimen"]
+        assert reg["iva"] == "no_responsable"
+        assert reg["autorretenedor"] is False
+
+    def test_sin_taxlevelcode_no_revienta(self):
+        r = lf.leer_xml(XML_UBL.encode("utf-8"))
+        assert r["regimen"]["iva"] in ("desconocido", "responsable", "no_responsable")
+
+
+IVA19C = {"codigo": "IVA19", "tarifa": 19, "cuenta": "240820", "tipo": "C"}
+RFC = {"codigo": "RFCOMP", "tarifa": 2.5, "base_calculo": "base", "cuenta": "236540", "clase": "fuente"}
+RIVA = {"codigo": "RETEIVA", "tarifa": 15, "base_calculo": "iva", "cuenta": "236701", "clase": "iva"}
+CONC = {"naturaleza": "compra", "cuenta_base": "143501", "cuenta_contrapartida": "220505",
+        "maneja_iva": True, "maneja_retencion": True,
+        "tipo_iva_codigo": "IVA19", "tipo_retencion_codigo": "RFCOMP"}
+
+
+class TestAjustarPorRegimen:
+    def test_autorretenedor_quita_retefuente(self):
+        reg = {"iva": "responsable", "autorretenedor": True, "regimen_simple": False}
+        iva, rets, notas = cp.ajustar_por_regimen(CONC, [RFC, RIVA], [IVA19C], reg)
+        assert iva == "IVA19"           # IVA sí (es responsable)
+        assert "RFCOMP" not in rets     # no retefuente (autorretenedor)
+        assert any("autorretenedor" in n.lower() for n in notas)
+
+    def test_no_responsable_quita_iva_y_reteiva(self):
+        conc = dict(CONC, tipo_retencion_codigo="RETEIVA")
+        reg = {"iva": "no_responsable", "autorretenedor": False, "regimen_simple": False}
+        iva, rets, notas = cp.ajustar_por_regimen(conc, [RFC, RIVA], [IVA19C], reg)
+        assert iva is None
+        assert "RETEIVA" not in rets
+
+    def test_sin_regimen_usa_defaults_del_concepto(self):
+        iva, rets, notas = cp.ajustar_por_regimen(CONC, [RFC, RIVA], [IVA19C], None)
+        assert iva == "IVA19" and rets == ["RFCOMP"] and notas == []
+
+
+# ============================================================
+# Lectura de ZIP
+# ============================================================
+
+class TestLeerZip:
+    def _zip_con(self, archivos):
+        import io as _io, zipfile
+        buf = _io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for nombre, contenido in archivos.items():
+                z.writestr(nombre, contenido)
+        return buf.getvalue()
+
+    def test_zip_con_un_xml(self):
+        zb = self._zip_con({"FE4587.xml": XML_UBL})
+        facs = lf.leer_zip(zb)
+        assert len(facs) == 1
+        assert facs[0]["nit"] == "800197268"
+
+    def test_zip_con_dos_xml(self):
+        zb = self._zip_con({"a.xml": XML_UBL, "b.xml": XML_REG})
+        facs = lf.leer_zip(zb)
+        assert len(facs) == 2
+
+    def test_dispatcher_facturas_zip(self):
+        zb = self._zip_con({"a.xml": XML_UBL, "b.xml": XML_REG})
+        facs = lf.leer_facturas("paquete.zip", zb)
+        assert len(facs) == 2
+
+    def test_dispatcher_facturas_unico(self):
+        facs = lf.leer_facturas("f.xml", XML_UBL.encode("utf-8"))
+        assert len(facs) == 1
