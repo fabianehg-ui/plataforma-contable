@@ -79,10 +79,33 @@ class TestNitUtils:
 class TestClasificador:
     def test_codigo_puc_servicios(self):
         from core.f350 import clasificar_concepto_detallado
-        r = clasificar_concepto_detallado("23-65-25", "SERVICIOS")
+        # Nombre NEUTRO (sin palabra clave) para probar el camino por código PUC.
+        r = clasificar_concepto_detallado("23-65-25", "RETENCION 4%")
         assert r["concepto"] == "Servicios"
         assert r["confianza"] == "alta"
         assert r["origen"] == "codigo_puc"
+
+    def test_nombre_prioritario_regalias_vs_codigo_construccion(self):
+        """Caso real: cuenta 23-65-70 (PUC = Contratos construcción) pero el
+        nombre dice REGALIAS → debe ganar el nombre (casilla de regalías)."""
+        from core.f350 import clasificar_concepto_detallado
+        r = clasificar_concepto_detallado("23-65-70-02", "REGALIAS Y FRANQUICIAS 2.5%")
+        assert r["concepto"] == "Regalías"
+        assert r["origen"] == "nombre_prioritario"
+
+    def test_nombre_prioritario_no_rompe_compras(self):
+        """'RETECION COMPR 2.5%' no tiene palabra clave prioritaria completa →
+        cae por código PUC 23-65-40 = Compras."""
+        from core.f350 import clasificar_concepto_detallado
+        r = clasificar_concepto_detallado("23-65-40-20", "RETECION COMPR 2.5%")
+        assert r["concepto"] == "Compras"
+
+    def test_nombre_prioritario_arrendamientos_y_fletes(self):
+        from core.f350 import clasificar_concepto_detallado
+        assert clasificar_concepto_detallado(
+            "23-65-30-05", "ARRENDAMIENT BIENES INM 3.5%")["concepto"] == "Arrendamientos"
+        assert clasificar_concepto_detallado(
+            "23-65-25-20", "FLETES")["concepto"] == "Servicios"
 
     def test_codigo_puc_honorarios(self):
         from core.f350 import clasificar_concepto_detallado

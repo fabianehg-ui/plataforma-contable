@@ -78,6 +78,38 @@ REGLAS_CODIGO_PUC = {
 
 
 # =============================================================================
+# 0. PALABRAS CLAVE PRIORITARIAS (sobre el NOMBRE de la cuenta)
+# =============================================================================
+# Se revisan ANTES del código PUC. Sirven para ubicar el renglón correcto por
+# el nombre de la cuenta cuando el código PUC apunta a otro concepto.
+#
+#   Caso real: la cuenta 23-65-70 en el PUC es "Contratos construcción", pero
+#   una empresa la usa como "REGALIAS Y FRANQUICIAS 2.5%". El nombre manda.
+#
+# Orden = prioridad (la primera que coincida gana). Edita esta lista para
+# agregar/ordenar palabras clave. Formato: (subcadena_en_MAYÚSCULAS, concepto).
+REGLAS_NOMBRE_PRIORITARIO = [
+    ("REGALIA",       "Regalías"),
+    ("REGALÍA",       "Regalías"),
+    ("FRANQUICIA",    "Regalías"),
+    ("ARRENDAMIENT",  "Arrendamientos"),
+    ("ALQUILER",      "Arrendamientos"),
+    ("HONORARIO",     "Honorarios"),
+    ("COMISION",      "Comisiones"),
+    ("COMISIÓN",      "Comisiones"),
+    ("DIVIDENDO",     "Dividendos"),
+    ("FLETE",         "Servicios"),
+    ("LICENCIAM",     "Servicios"),
+    ("CONSTRUCCION",  "Contratos construcción"),
+    ("CONSTRUCCIÓN",  "Contratos construcción"),
+    ("LOTER",         "Loterías rifas"),
+    ("RIFA",          "Loterías rifas"),
+    ("SERVICIO",      "Servicios"),
+    ("COMPRA",        "Compras"),
+]
+
+
+# =============================================================================
 # 2. PATRONES COMBINADOS
 # =============================================================================
 # (palabra_principal, palabras_secundarias, concepto, confianza)
@@ -234,6 +266,19 @@ def clasificar_concepto_detallado(cuenta_contai, nombre_cuenta):
     """
     nombre_upper = (nombre_cuenta or "").upper()
     codigo_limpio = _normalizar_codigo(cuenta_contai)
+
+    # ---- 0. Palabras clave PRIORITARIAS sobre el nombre ----
+    # Corren antes del código PUC: si el nombre de la cuenta dice claramente el
+    # concepto (REGALIAS, ARRENDAMIENT, SERVICIO…), manda el nombre aunque el
+    # código apunte a otra cosa. Así "23-65-70 REGALIAS…" no cae en construcción.
+    for palabra, concepto in REGLAS_NOMBRE_PRIORITARIO:
+        if palabra in nombre_upper:
+            return {
+                "concepto":  concepto,
+                "confianza": "alta",
+                "origen":    "nombre_prioritario",
+                "regla":     f"Palabra clave prioritaria '{palabra}' en el nombre",
+            }
 
     # ---- 1. Reglas por código PUC (prefijos más largos primero) ----
     if codigo_limpio:
