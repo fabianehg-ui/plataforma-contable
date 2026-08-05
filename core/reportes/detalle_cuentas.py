@@ -290,8 +290,12 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
         sin_ing = abs(sum(vi)) <= 0.5
 
         ws.cell(row=1, column=1, value=titulo_emp).font = Font(name=F, bold=True, size=11)
-        sub2 = ("A.V. = % sobre el RESULTADO FINAL del mes (centro sin ingresos)"
-                if sin_ing else "A.V. = % sobre ingresos del mes")
+        if sin_ing and "ADMINISTRAC" in str(titulo).upper():
+            sub2 = "A.V. = % sobre el TOTAL ingreso operativo de la empresa (administración)"
+        elif sin_ing:
+            sub2 = "A.V. = % sobre el RESULTADO FINAL del mes (centro sin ingresos)"
+        else:
+            sub2 = "A.V. = % sobre ingresos del mes"
         ws.cell(row=2, column=1,
                 value=f"{titulo} · ingresos del informe administrativo · detalle 4 → 6 dígitos · {sub2}"
                 ).font = Font(name=F, italic=True, size=9, color=GRIS)
@@ -610,10 +614,17 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
         # ---- A.V. como fórmulas (pasada final) ----
         fila_base_ing = S["Total ingresos operacionales (informe)"]
         fila_neta = filas_total["UTILIDAD NETA"]
+        # Solo ADMINISTRACIÓN calcula el A.V. sobre el total ingreso operativo de
+        # la EMPRESA (hoja Consolidado). Los demás centros sin ingresos siguen
+        # usando su resultado final como base.
+        es_admin = "ADMINISTRAC" in str(titulo).upper()
         for fr in filas_valor:
             for i, j in enumerate(col_v + [col_ac]):
                 vcell = f"{let(j)}{fr}"
-                if sin_ing:
+                if sin_ing and es_admin:
+                    bcell = f"'Consolidado'!{let(j)}${fila_base_ing}"
+                    formula = f'=IF({bcell}=0,"",{vcell}/{bcell})'
+                elif sin_ing:
                     bcell = f"{let(j)}${fila_neta}"
                     formula = f'=IF(ABS({bcell})=0,"",{vcell}/ABS({bcell}))'
                 else:
