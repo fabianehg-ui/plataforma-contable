@@ -53,7 +53,7 @@ SEC_GASTOS = [
     ("GASTOS DIVERSOS Y EXTRAORDINARIOS (55)", ["55"], 1, "Total gastos diversos (55)"),
 ]
 SEC_FINANCIEROS = [
-    ("INGRESOS FINANCIEROS (4205 + 43)", ["4205", "43"], -1, "Total ingresos financieros (4205+43)"),
+    ("INGRESOS FINANCIEROS (43)", ["43"], -1, "Total ingresos financieros (43)"),
     ("GASTOS FINANCIEROS (53)", ["53"], 1, "Total gastos financieros (53)"),
 ]
 SEC_IMPUESTO = ("IMPUESTO DE RENTA (54)", ["54"], 1, "Total impuesto de renta (54)")
@@ -405,9 +405,10 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
             c.font = Font(name=F, bold=True, size=9, italic=True)
             r += 1
 
-        def seccion(tit, prefs, sg, sub_t, forzar=False, menos=None):
+        def seccion(tit, prefs, sg, sub_t, forzar=False, menos=None, orden_primero=None):
             nonlocal r
             menos = menos or []
+            orden_primero = orden_primero or []
             c6s = sorted(x for x in dM if any(x.startswith(p) for p in prefs)
                          and not any(x.startswith(m) for m in menos)
                          and any(abs(v) > 0.5 for v in dM[x]))
@@ -417,6 +418,17 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
             por4 = collections.OrderedDict()
             for c6 in c6s:
                 por4.setdefault(c6[:4], []).append(c6)
+            # reordenar: los c4 en orden_primero van primero (p.ej. arrendamiento
+            # 7320 al inicio del CIF), el resto conserva el orden por número
+            if orden_primero:
+                reord = collections.OrderedDict()
+                for c4 in orden_primero:
+                    if c4 in por4:
+                        reord[c4] = por4[c4]
+                for c4, hijos in por4.items():
+                    if c4 not in reord:
+                        reord[c4] = hijos
+                por4 = reord
             v4s = {}
             for c4, hijos in por4.items():
                 v4 = [0.0] * nmes
@@ -552,8 +564,10 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
             return out
 
         # 3) Mano de obra y CIF -> utilidad bruta
+        #    En el CIF (73) el arrendamiento (7320) va de primero, debajo de nómina
         for tit, prefs, sg, sub_t in SEC_COSTOS_MO:
-            seccion(tit, prefs, sg, sub_t)
+            seccion(tit, prefs, sg, sub_t,
+                    orden_primero=["7320"] if prefs == ["73"] else None)
         f_bruta = []
         for j in col_v:
             t = f"={let(j)}{S['Total ingresos operacionales (informe)']}-{let(j)}{S['Total costo de materia prima']}"
@@ -563,7 +577,7 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
             f_bruta.append(t)
         total("UTILIDAD BRUTA (MARGEN BRUTO)", bruta, formulas=f_bruta)
         # 4) Otros ingresos (42) + gastos operacionales -> utilidad operacional
-        seccion("OTROS INGRESOS (42)", ["42"], -1, "Total otros ingresos (42)", menos=["4205"])
+        seccion("OTROS INGRESOS (42)", ["42"], -1, "Total otros ingresos (42)")
         for tit, prefs, sg, sub_t in SEC_GASTOS:
             seccion(tit, prefs, sg, sub_t)
         f_oper = []
@@ -582,8 +596,8 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
         f_ant = []
         for j in col_v:
             t = f"={let(j)}{filas_total['UTILIDAD OPERACIONAL']}"
-            if "Total ingresos financieros (4205+43)" in S:
-                t += f"+{let(j)}{S['Total ingresos financieros (4205+43)']}"
+            if "Total ingresos financieros (43)" in S:
+                t += f"+{let(j)}{S['Total ingresos financieros (43)']}"
             if "Total gastos financieros (53)" in S:
                 t += f"-{let(j)}{S['Total gastos financieros (53)']}"
             f_ant.append(t)
@@ -667,7 +681,7 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
              ).font = Font(name=F, italic=True, size=9, color=GRIS)
     heads = ["CC", "Centro de costos", "Ingresos (informe)", "Costo (CMV + cta 7)",
              "Utilidad bruta", "Otros ingresos (42)", "Gastos operac. (51+52+55)",
-             "Utilidad operacional", "Ingresos financieros (4205+43)", "Gastos financieros (53)",
+             "Utilidad operacional", "Ingresos financieros (43)", "Gastos financieros (53)",
              "Impuesto renta (54)", "Utilidad neta", "EBITDA"]
     r = 4
     for j, h in enumerate(heads, start=1):
@@ -710,7 +724,7 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
             suma_refs(["Total gastos de administración", "Total gastos de ventas",
                        "Total gastos diversos (55)"]),
             ref(T["UTILIDAD OPERACIONAL"]),
-            suma_refs(["Total ingresos financieros (4205+43)"]),
+            suma_refs(["Total ingresos financieros (43)"]),
             suma_refs(["Total gastos financieros (53)"]),
             suma_refs(["Total impuesto de renta (54)"]),
             ref(T["UTILIDAD NETA"]),
