@@ -45,8 +45,12 @@ FPCT = '0.0%;(0.0%);"-"'
 
 SEC_COSTOS_MO = [
     ("COSTO MANO DE OBRA (72)", ["72"], 1, "Total mano de obra (72)"),
+    ("COSTO ARRENDAMIENTOS (7320 + 7315 + 7325)", ["7320", "7315", "7325"], 1, "Total arrendamientos"),
     ("COSTO CIF (73)", ["73"], 1, "Total CIF (73)"),
 ]
+# Cuentas del CIF (73) que se llevan al departamento de ARRENDAMIENTOS y por
+# tanto se EXCLUYEN del CIF para no duplicar.
+_CIF_A_ARRIENDO = ["7315", "7320", "7325"]
 SEC_GASTOS = [
     ("GASTOS DE ADMINISTRACIÓN (51)", ["51"], 1, "Total gastos de administración"),
     ("GASTOS DE VENTAS (52)", ["52"], 1, "Total gastos de ventas"),
@@ -563,15 +567,17 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
                 out.append("=" + t)
             return out
 
-        # 3) Mano de obra y CIF -> utilidad bruta
-        #    En el CIF (73) el arrendamiento (7320) va de primero, debajo de nómina
+        # 3) Mano de obra, ARRENDAMIENTOS (dpto aparte) y CIF -> utilidad bruta
+        #    Arrendamientos (7320+7315+7325) es un departamento de costos propio,
+        #    separado de MOD y del CIF; en el CIF (73) se excluyen esas cuentas.
         for tit, prefs, sg, sub_t in SEC_COSTOS_MO:
             seccion(tit, prefs, sg, sub_t,
-                    orden_primero=["7320"] if prefs == ["73"] else None)
+                    menos=_CIF_A_ARRIENDO if prefs == ["73"] else None,
+                    orden_primero=["7320"] if sub_t == "Total arrendamientos" else None)
         f_bruta = []
         for j in col_v:
             t = f"={let(j)}{S['Total ingresos operacionales (informe)']}-{let(j)}{S['Total costo de materia prima']}"
-            for n in ("Total mano de obra (72)", "Total CIF (73)"):
+            for n in ("Total mano de obra (72)", "Total arrendamientos", "Total CIF (73)"):
                 if n in S:
                     t += f"-{let(j)}{S[n]}"
             f_bruta.append(t)
@@ -718,7 +724,7 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
 
         return [
             ref(S["Total ingresos operacionales (informe)"]),
-            suma_refs(["Total costo de materia prima", "Total mano de obra (72)", "Total CIF (73)"]),
+            suma_refs(["Total costo de materia prima", "Total mano de obra (72)", "Total arrendamientos", "Total CIF (73)"]),
             ref(T["UTILIDAD BRUTA (MARGEN BRUTO)"]),
             suma_refs(["Total otros ingresos (42)"]),
             suma_refs(["Total gastos de administración", "Total gastos de ventas",
