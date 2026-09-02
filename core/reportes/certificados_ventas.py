@@ -401,13 +401,12 @@ def generar_certificado_docx(clave: str, mes_texto: str, valor: float,
     # la plantilla trae un parrafo vacio; lo usamos como primer parrafo del cuerpo
     # (borramos su contenido, agregamos parrafos nuevos despues)
 
-    # fecha: solo en membrete JIPER (Milagros trae fecha automatica en el encabezado)
-    if pt["membrete"] == "JIPER":
-        from datetime import date
-        hoy = date.today()
-        fecha = "%s, %02d de %s de %d" % (pt["ciudad"], hoy.day, _MESES[hoy.month], hoy.year)
-        _par(doc, fecha, bold=True)
-        _par(doc)
+    # fecha en el cuerpo, en espanol (texto fijo, sin depender del idioma de Word)
+    from datetime import date
+    hoy = date.today()
+    fecha = "%s, %02d de %s de %d" % (pt["ciudad"], hoy.day, _MESES[hoy.month], hoy.year)
+    _par(doc, fecha, bold=True)
+    _par(doc)
 
     tipo = pt["tipo"]
     if tipo == "BRUTAS":
