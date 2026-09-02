@@ -89,72 +89,128 @@ def _fila_valida(nombre: str) -> bool:
     return True
 
 
+SECCIONES = ["Santa Leña", "Milagros"]
+
+
+def familia_de_seccion(seccion: str) -> str:
+    return "12" if str(seccion).strip().lower().startswith("mila") else "11"
+
+
+def seccion_de_familia(familia: str) -> str:
+    return "Milagros" if str(familia) == "12" else "Santa Leña"
+
+
+def cc_por_nombre_seccion(nombre: str, seccion: str) -> str:
+    """CC a partir del nombre y la seccion elegida por el usuario."""
+    return cc_de_nombre_en_familia(nombre, familia_de_seccion(seccion)) or ""
+
+
 def _cc_familia_por_seccion(nombre_upper: str, familia_actual: str) -> str:
-    """Actualiza la familia segun las filas separadoras."""
-    if "TOTAL SANTA" in nombre_upper or ("SANTA LE" in nombre_upper and "TOTAL" in nombre_upper):
+    """Cambia a la familia Milagros al cruzar el separador de Santa Lena.
+
+    Se aceptan varias formas por si el OCR lee distinto: 'TOTAL SANTA...',
+    'CRECIMIENTO SANTA...', o cualquier linea con SANTA + (TOTAL o LENA/LEÑA).
+    """
+    u = nombre_upper
+    if ("SANTA" in u and ("TOTAL" in u or "CRECIMIENTO" in u)) \
+       or ("TOTAL SANTA" in u) or ("SANTA LE" in u and "TOTAL" in u):
         return "12"   # de aqui en adelante: Milagros
     return familia_actual
 
 
+def _prefijo_marca(nombre: str):
+    """Detecta el prefijo SL (Santa Lena) / ML (Milagros) al inicio del nombre.
+
+    Devuelve (familia | None, nombre_sin_prefijo). Acepta 'SL OVIEDO', 'ML TESORO'
+    y hasta 'MLCANAL' (sin espacio).
+    """
+    s = str(nombre or "").strip()
+    u = s.upper()
+    if u.startswith("SL"):
+        return "11", s[2:].lstrip(" .-\t")
+    if u.startswith("ML"):
+        return "12", s[2:].lstrip(" .-\t")
+    return None, s
+
+
+def _col_valor_acumuladas(ws, defecto: int = 19) -> int:
+    """Indice (1-based) de la columna de VENTAS ACUMULADAS; por defecto S (19)."""
+    for row in ws.iter_rows():
+        for c in row:
+            if isinstance(c.value, str) and "ACUMULAD" in c.value.upper():
+                return c.column
+    return defecto
+
+
+def _arma_fila(nombre_bruto: str, valor, familia_actual: str):
+    """Construye la fila con la familia dada por el prefijo SL/ML (o la seccion)."""
+    pref, nombre = _prefijo_marca(nombre_bruto)
+    familia = pref if pref else familia_actual
+    if not _fila_valida(nombre) or not valor:
+        return None
+    cc4 = cc_de_nombre_en_familia(nombre, familia) or ""
+    return {"nombre": nombre, "familia": familia,
+            "seccion": seccion_de_familia(familia), "cc4": cc4, "valor": int(valor)}
+
+
 # ------------------------------------------------------------------ parseo de texto (OCR)
 def parsear_texto(texto: str) -> List[Dict]:
-    """Devuelve filas [{nombre, familia, cc4, valor}] a partir del texto OCR."""
+    """Filas [{nombre,familia,seccion,cc4,valor}] desde el texto OCR.
+
+    La marca la da el prefijo SL/ML del nombre; si no hay prefijo, se usa la
+    seccion (arriba/abajo de TOTAL SANTA LENA) como respaldo.
+    """
     filas: List[Dict] = []
     familia = "11"
-    detenido = False
     for linea in (texto or "").splitlines():
         up = linea.upper()
-        if "TOTAL MILAGROS" in up or "TOTAL DIA" in up:
-            detenido = True
-        # cambio de seccion
+        if "TOTAL MILAGROS" in up:      # fin de los puntos; lo de abajo es P&G
+            break
         familia = _cc_familia_por_seccion(up, familia)
-        if detenido:
-            continue
         if "TOTAL" in up or "CRECIMIENTO" in up:
             continue
-        # separar nombre y valor por el signo $
         m = re.match(r"^\s*(.*?)\$\s*([\d.,\s]+)", linea)
         if not m:
             continue
         nombre = re.sub(r"\s+", " ", m.group(1)).strip(" .:-|")
         valor = _solo_numero(m.group(2))
-        if not _fila_valida(nombre) or not valor:
-            continue
-        cc4 = cc_de_nombre_en_familia(nombre, familia) or ""
-        filas.append({"nombre": nombre, "familia": familia, "cc4": cc4, "valor": valor})
+        fila = _arma_fila(nombre, valor, familia)
+        if fila:
+            filas.append(fila)
     return filas
 
 
 # ------------------------------------------------------------------ parseo de Excel
 def parsear_excel(xlsx_bytes: bytes) -> List[Dict]:
-    """Lee el resumen desde un Excel de dos columnas (nombre + valor)."""
+    """Lee el resumen desde el Excel de ventas.
+
+    - La marca la da el prefijo SL/ML del nombre (col A).
+    - El valor se toma de la columna 'VENTAS ACUMULADAS' (col S por defecto).
+    """
     wb = load_workbook(io.BytesIO(xlsx_bytes), read_only=True, data_only=True)
     filas: List[Dict] = []
-    familia = "11"
-    detenido = False
     for ws in wb.worksheets:
+        col_val = _col_valor_acumuladas(ws)     # 1-based
+        familia = "11"
         for row in ws.iter_rows(values_only=True):
-            celdas = [c for c in row if c is not None]
-            if not celdas:
+            if not row:
                 continue
-            # nombre = primera celda de texto; valor = primer numero de la fila
-            nombre = ""
-            valor = None
-            for c in celdas:
-                if isinstance(c, str) and not nombre and c.strip():
-                    nombre = c.strip()
-                elif isinstance(c, (int, float)) and valor is None:
-                    valor = int(round(c))
+            nombre = next((c for c in row if isinstance(c, str) and c.strip()), "")
+            valor_celda = row[col_val - 1] if len(row) >= col_val else None
             up = (nombre or "").upper()
-            if "TOTAL MILAGROS" in up or "TOTAL DIA" in up:
-                detenido = True
+            if "TOTAL MILAGROS" in up:      # fin de los puntos; lo de abajo es P&G
+                break
             familia = _cc_familia_por_seccion(up, familia)
-            if detenido:
+            if "TOTAL" in up or "CRECIMIENTO" in up:
                 continue
-            if not _fila_valida(nombre) or not valor:
+            valor = None
+            if isinstance(valor_celda, (int, float)):
+                valor = int(round(valor_celda))
+            if not valor or valor <= 0:
                 continue
-            cc4 = cc_de_nombre_en_familia(nombre, familia) or ""
-            filas.append({"nombre": nombre, "familia": familia, "cc4": cc4, "valor": valor})
+            fila = _arma_fila(nombre, valor, familia)
+            if fila:
+                filas.append(fila)
     return filas
 
 

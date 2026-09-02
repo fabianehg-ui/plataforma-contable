@@ -84,9 +84,11 @@ with st.expander("📊 Opción A — Informe RESULTADOS por CC (.xlsx)", expande
 
 with st.expander("🖼️ Opción B — Resumen por imagen o Excel (con revisión)", expanded=True):
     st.caption(
-        "Sube la **imagen** (pantallazo/foto) o el **Excel** del cuadro de ventas "
-        "por punto. La plataforma lo lee y lo muestra abajo para que **revises y "
-        "corrijas** antes de usarlo — el OCR puede confundir un dígito."
+        "Sube la **imagen** o el **Excel** del reporte de ventas. La marca se "
+        "identifica por el prefijo **SL** (Santa Leña) / **ML** (Milagros) del "
+        "nombre, y el valor se toma de la columna **VENTAS ACUMULADAS** (columna "
+        "S). Se muestra abajo para que **revises y corrijas** antes de usar — en "
+        "imagen el OCR puede confundir un dígito."
     )
     if not resu.ocr_disponible():
         st.info("Para leer imágenes se necesita tesseract en el servidor. "
@@ -103,36 +105,52 @@ with st.expander("🖼️ Opción B — Resumen por imagen o Excel (con revisió
                     st.warning("No pude extraer filas. ¿La imagen está muy pequeña o borrosa?")
                 else:
                     df = pd.DataFrame([
-                        {"Punto (leído)": f["nombre"],
-                         "CC": f["cc4"],
-                         "Centro": _CATALOGO_CC.get(f["cc4"], ""),
+                        {"Sección": f.get("seccion", "Santa Leña"),
+                         "Punto (leído)": f["nombre"],
                          "Valor": f["valor"]}
                         for f in filas
                     ])
                     st.session_state["cert_resumen_df"] = df
-                    st.success(f"Leídas {len(filas)} filas. Revisa los valores abajo.")
+                    st.success(f"Leídas {len(filas)} filas. Revisa la sección y los valores abajo.")
             except Exception as e:  # noqa: BLE001
                 st.error(f"No pude leer el archivo: {e}")
 
     if "cert_resumen_df" in st.session_state:
-        st.caption("✏️ **Revisa y corrige** — sobre todo los valores. "
-                   "Puedes ajustar el CC si algún punto quedó sin mapear.")
+        st.caption(
+            "✏️ **Revisa y corrige.** La **Sección** viene del prefijo SL/ML (o, si "
+            "no hay prefijo, de si la fila está arriba/abajo de *TOTAL SANTA LEÑA*). "
+            "Esa sección decide el centro de costo, así 'TESORO' de Milagros no se "
+            "cruza con 'TESORO' de Santa Leña. Si alguna quedó mal, cámbiala aquí."
+        )
         df_edit = st.data_editor(
             st.session_state["cert_resumen_df"],
             num_rows="dynamic", use_container_width=True, key="cert_resumen_editor",
             column_config={
+                "Sección": st.column_config.SelectboxColumn(
+                    "Sección", options=resu.SECCIONES, required=True),
+                "Punto (leído)": st.column_config.TextColumn("Punto (leído)"),
                 "Valor": st.column_config.NumberColumn("Valor", format="%d"),
-                "Centro": st.column_config.TextColumn("Centro", disabled=True),
             },
         )
         st.session_state["cert_resumen_df"] = df_edit
+
+        # mapeo resuelto (nombre + seccion -> CC) para que se vea claro
+        prev = []
+        for _, r in df_edit.iterrows():
+            cc = resu.cc_por_nombre_seccion(str(r["Punto (leído)"]), str(r["Sección"]))
+            prev.append({"Sección": r["Sección"], "Punto": r["Punto (leído)"],
+                         "CC": cc, "Centro": _CATALOGO_CC.get(cc, "— sin mapear —"),
+                         "Valor": r["Valor"]})
+        with st.expander("Ver a qué centro de costo quedó cada fila", expanded=False):
+            st.dataframe(pd.DataFrame(prev), use_container_width=True, hide_index=True)
 
 # reunir las filas revisadas (se convierten a ventas segun el mes elegido abajo)
 filas_revisadas = []
 if "cert_resumen_df" in st.session_state:
     for _, r in st.session_state["cert_resumen_df"].iterrows():
-        filas_revisadas.append({"cc4": str(r.get("CC", "") or "").strip(),
-                                "valor": r.get("Valor")})
+        cc4 = resu.cc_por_nombre_seccion(str(r.get("Punto (leído)", "")),
+                                         str(r.get("Sección", "Santa Leña")))
+        filas_revisadas.append({"cc4": cc4, "valor": r.get("Valor")})
 
 # ============================================================
 # 2) Datos del certificado
