@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.shared import Pt, Cm
 
 # ------------------------------------------------------------------ plantillas
 _DIR = Path(__file__).resolve().parent / "plantillas_certificados"
@@ -35,6 +35,11 @@ PLANTILLA = {
 CONTADORA = "LUZ AIDA HERNANDEZ GARCIA"
 CC_CONTADORA = "32.297.029"
 TP_CONTADORA = "159803-T"
+FIRMA_IMG = _DIR / "firma_luz_aida.png"
+
+
+def hay_firma() -> bool:
+    return FIRMA_IMG.exists()
 
 _MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
           "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -342,17 +347,41 @@ def _cuerpo_arauco_mil(doc, pt, mes, val):
     _par(doc, "Cordialmente,")
 
 
-def _bloque_firma(doc):
-    _par(doc)
-    _par(doc)
-    _par(doc, "__________________________________")
+def _bloque_firma(doc, firmar=False):
+    firmado = firmar and FIRMA_IMG.exists()
+    if firmado:
+        _par(doc)
+        # Firma (PNG sin fondo) apoyada justo sobre la linea, que a su vez queda
+        # encima del nombre. Espaciado ajustado para que no quede muy arriba.
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_after = Pt(0)
+        try:
+            p.add_run().add_picture(str(FIRMA_IMG), width=Cm(4.2))
+        except Exception:
+            _par(doc)
+        pl = doc.add_paragraph("__________________________________")
+        pl.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        pl.paragraph_format.space_before = Pt(0)
+        pl.paragraph_format.space_after = Pt(0)
+        for r in pl.runs:
+            r.font.name = "Arial"; r.font.size = Pt(12)
+    else:
+        _par(doc)
+        _par(doc)
+        _par(doc, "__________________________________")
     _par(doc, CONTADORA, bold=True)
     _par(doc, "Contadora Pública")
     _par(doc, "T.P. " + TP_CONTADORA, bold=True)
 
 
-def generar_certificado_docx(clave: str, mes_texto: str, valor: float) -> bytes:
-    """Devuelve el certificado en Word (.docx) como bytes."""
+def generar_certificado_docx(clave: str, mes_texto: str, valor: float,
+                             firmar: bool = False) -> bytes:
+    """Devuelve el certificado en Word (.docx) como bytes.
+
+    firmar=True inserta la firma escaneada de la contadora sobre la linea.
+    """
     pt = dict(punto_por_clave(clave) or {})
     if not pt:
         raise ValueError("Punto de venta no encontrado: %s" % clave)
@@ -396,7 +425,7 @@ def generar_certificado_docx(clave: str, mes_texto: str, valor: float) -> bytes:
     else:
         _par(doc, "CERTIFICADO", bold=True, center=True)
 
-    _bloque_firma(doc)
+    _bloque_firma(doc, firmar=firmar)
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -438,5 +467,6 @@ def docx_a_pdf(docx_bytes: bytes) -> bytes:
             return f.read()
 
 
-def generar_certificado_pdf(clave: str, mes_texto: str, valor: float) -> bytes:
-    return docx_a_pdf(generar_certificado_docx(clave, mes_texto, valor))
+def generar_certificado_pdf(clave: str, mes_texto: str, valor: float,
+                            firmar: bool = False) -> bytes:
+    return docx_a_pdf(generar_certificado_docx(clave, mes_texto, valor, firmar=firmar))

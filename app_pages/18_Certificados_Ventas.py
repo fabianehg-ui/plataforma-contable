@@ -199,11 +199,21 @@ if not pdf_ok:
 
 nombre_base = clave.replace(" ", "_").replace("(", "").replace(")", "")
 
+firmar = st.checkbox(
+    "✍️ Incluir firma de Luz Aida (ya revisado)",
+    value=False, disabled=(not cert.hay_firma()),
+    help="Después de revisar el valor, marca esta casilla para que el certificado "
+         "salga firmado. Si la dejas sin marcar, queda con la línea para firma manual.",
+)
+if not cert.hay_firma():
+    st.caption("La imagen de la firma no está en el servidor "
+               "(core/reportes/plantillas_certificados/firma_luz_aida.png).")
+
 cga, cgb = st.columns(2)
 with cga:
     if st.button("📄 Generar PDF", disabled=(not pdf_ok or not valor)):
         try:
-            pdf = cert.generar_certificado_pdf(clave, mes_texto, valor)
+            pdf = cert.generar_certificado_pdf(clave, mes_texto, valor, firmar=firmar)
             st.download_button(
                 "⬇️ Descargar PDF", data=pdf,
                 file_name=f"Certificado_{nombre_base}_{mes_nom}_{int(anio)}.pdf",
@@ -213,7 +223,7 @@ with cga:
             st.error(f"No pude generar el PDF: {e}")
 with cgb:
     if st.button("📝 Generar Word", disabled=(not valor)):
-        docx = cert.generar_certificado_docx(clave, mes_texto, valor)
+        docx = cert.generar_certificado_docx(clave, mes_texto, valor, firmar=firmar)
         st.download_button(
             "⬇️ Descargar Word", data=docx,
             file_name=f"Certificado_{nombre_base}_{mes_nom}_{int(anio)}.docx",
@@ -223,44 +233,79 @@ with cgb:
 # ============================================================
 # 4) Lote: todos los puntos del mes
 # ============================================================
-st.markdown("### 4️⃣ Lote del mes (todos los puntos con venta)")
+st.markdown("### 4️⃣ Revisar todos los puntos y **firmar** el mes")
 st.caption(
-    "Genera un certificado por cada punto que tenga valor (del informe o del "
-    "resumen revisado) para el mes elegido arriba, y los descarga en un ZIP."
+    f"Esta es la lista de certificados que se generarán para **{mes_nom} {int(anio)}** "
+    "con su valor. Revisa cada valor; cuando estén bien, presiona **Firmar** y "
+    "salen todos firmados en un ZIP."
 )
 
-if st.button("📦 Generar lote del mes (ZIP)"):
-    if not ventas:
-        st.warning("Primero carga las ventas (Opción A o B) para el lote automático.")
-    else:
-        buf = io.BytesIO()
-        generados, saltados = 0, []
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            for p in cert.PUNTOS:
-                c4 = p.get("cc4", "")
-                if not c4 or (c4, mes_num) not in ventas:
-                    saltados.append(p["clave"])
-                    continue
-                v = float(ventas[(c4, mes_num)]["ventas"])
-                if v <= 0:
-                    saltados.append(p["clave"])
-                    continue
-                nb = p["clave"].replace(" ", "_").replace("(", "").replace(")", "")
-                try:
-                    if pdf_ok:
-                        data = cert.generar_certificado_pdf(p["clave"], mes_texto_def, v)
-                        z.writestr(f"Certificado_{nb}_{mes_nom}_{int(anio)}.pdf", data)
-                    else:
-                        data = cert.generar_certificado_docx(p["clave"], mes_texto_def, v)
-                        z.writestr(f"Certificado_{nb}_{mes_nom}_{int(anio)}.docx", data)
-                    generados += 1
-                except Exception as e:  # noqa: BLE001
-                    saltados.append(f"{p['clave']} ({e})")
-        st.success(f"Generados {generados} certificados para {mes_nom} {int(anio)}.")
-        if saltados:
-            st.caption("Sin certificado (sin CC o sin venta): " + ", ".join(saltados))
-        st.download_button(
-            "⬇️ Descargar ZIP del mes", data=buf.getvalue(),
-            file_name=f"Certificados_{mes_nom}_{int(anio)}.zip",
-            mime="application/zip",
-        )
+# tabla de revision: un renglon por punto con su valor del mes
+rev_rows = []
+for p in cert.PUNTOS:
+    c4 = p.get("cc4", "")
+    v = 0.0
+    if c4 and (c4, mes_num) in ventas:
+        v = float(ventas[(c4, mes_num)]["ventas"])
+    rev_rows.append({
+        "Certificar": bool(v > 0),
+        "Punto de venta": p["clave"],
+        "Membrete": p["membrete"],
+        "CC": c4,
+        "Valor de la venta": float(v),
+    })
+df_rev = pd.DataFrame(rev_rows)
+
+df_rev = st.data_editor(
+    df_rev, use_container_width=True, hide_index=True, key="cert_lote_editor",
+    column_config={
+        "Certificar": st.column_config.CheckboxColumn("✓", help="Incluir este punto"),
+        "Punto de venta": st.column_config.TextColumn("Punto de venta", disabled=True),
+        "Membrete": st.column_config.TextColumn("Membrete", disabled=True),
+        "CC": st.column_config.TextColumn("CC", disabled=True),
+        "Valor de la venta": st.column_config.NumberColumn("Valor de la venta", format="%d"),
+    },
+)
+
+n_marcados = int((df_rev["Certificar"] & (df_rev["Valor de la venta"] > 0)).sum())
+firmar_lote = st.checkbox(
+    "✍️ Firmar (insertar la firma de Luz Aida)", value=True,
+    disabled=(not cert.hay_firma()),
+    help="Marca esto para que salgan firmados. Sin marcar, quedan con línea para firma manual.",
+)
+
+if st.button(f"✍️ Firmar y generar {n_marcados} certificado(s) (ZIP)",
+             type="primary", disabled=(n_marcados == 0)):
+    buf = io.BytesIO()
+    generados, saltados = 0, []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for _, row in df_rev.iterrows():
+            if not row["Certificar"]:
+                continue
+            v = float(row["Valor de la venta"] or 0)
+            clave_p = row["Punto de venta"]
+            if v <= 0:
+                saltados.append(clave_p)
+                continue
+            nb = clave_p.replace(" ", "_").replace("(", "").replace(")", "")
+            try:
+                if pdf_ok:
+                    data = cert.generar_certificado_pdf(clave_p, mes_texto_def, v,
+                                                        firmar=firmar_lote)
+                    z.writestr(f"Certificado_{nb}_{mes_nom}_{int(anio)}.pdf", data)
+                else:
+                    data = cert.generar_certificado_docx(clave_p, mes_texto_def, v,
+                                                         firmar=firmar_lote)
+                    z.writestr(f"Certificado_{nb}_{mes_nom}_{int(anio)}.docx", data)
+                generados += 1
+            except Exception as e:  # noqa: BLE001
+                saltados.append(f"{clave_p} ({e})")
+    estado = "firmados" if firmar_lote else "generados"
+    st.success(f"{generados} certificados {estado} para {mes_nom} {int(anio)}.")
+    if saltados:
+        st.caption("Sin generar: " + ", ".join(saltados))
+    st.download_button(
+        "⬇️ Descargar ZIP del mes", data=buf.getvalue(),
+        file_name=f"Certificados_{mes_nom}_{int(anio)}.zip",
+        mime="application/zip",
+    )
