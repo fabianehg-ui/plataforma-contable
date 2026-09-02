@@ -1,14 +1,14 @@
 """
 Certificados de Ventas Mensuales (JIPER / Milagros) - Plataforma Web
 
-Flujo:
-    1. (Opcional) Sube el/los informe(s) de ventas por CC (.xlsx, RESULTADOS)
-       para traer el valor automaticamente.
-    2. Elige el punto de venta y el mes.
-    3. El valor llega solo del informe (editable) o se escribe a mano.
-    4. Genera el certificado en PDF (para firma manual) o en Word.
-    5. Boton de lote: genera TODOS los puntos del mes en un ZIP.
+Fuente del valor (cualquiera de estas):
+    A. Informe RESULTADOS por CC (.xlsx)  -> valor exacto por punto/mes.
+    B. Resumen de ventas (imagen o Excel: NOMBRE + VALOR) -> se lee con OCR /
+       Excel y se REVISA en una tabla editable antes de usar (el OCR puede
+       confundir digitos).
+    C. Manual: se escribe el valor a mano.
 
+Genera el certificado en PDF (para firma manual) o Word, uno por uno o en lote.
 Contadora unica: Luz Aida Hernandez Garcia (T.P. 159803-T).
 """
 import sys
@@ -20,13 +20,16 @@ if str(ROOT) not in sys.path:
 
 import io
 import zipfile
+import datetime
 
 import streamlit as st
+import pandas as pd
 
 from auth.login import require_auth, sidebar_user_info
 from auth.empresas import seleccionar_empresa_sidebar, require_rol
-from core.reportes.ventas_informe import cargar_ventas, combinar_ventas
+from core.reportes.ventas_informe import cargar_ventas, combinar_ventas, _CATALOGO_CC
 from core.reportes import certificados_ventas as cert
+from core.reportes import resumen_ventas as resu
 
 st.set_page_config(page_title="Certificados de Ventas", page_icon="📄", layout="wide")
 
@@ -50,35 +53,86 @@ _MESES_NUM = {
 _MESES_LISTA = list(_MESES_NUM.keys())
 
 # ============================================================
-# 1) Informe de ventas (para traer el valor automaticamente)
+# 1) Fuente de las ventas
 # ============================================================
-st.markdown("### 1️⃣ Informe de ventas (opcional, para traer el valor)")
-archivos = st.file_uploader(
-    "Sube el informe administrativo por CC (.xlsx). Puedes subir varios meses.",
-    type=["xlsx"], accept_multiple_files=True, key="cert_informes",
-)
+st.markdown("### 1️⃣ ¿De dónde traigo el valor de las ventas?")
 
-ventas = {}
-if archivos:
-    dicts, errores = [], []
-    for a in archivos:
-        try:
-            d = cargar_ventas(io.BytesIO(a.getvalue()))
-            if d:
-                dicts.append(d)
-            else:
-                errores.append(f"**{a.name}**: no encontré ventas (¿formato distinto?)")
-        except Exception as e:  # noqa: BLE001
-            errores.append(f"**{a.name}**: {e}")
-    ventas = combinar_ventas(*dicts)
-    if ventas:
-        meses_disp = sorted({m for _c, m in ventas})
-        st.success(
-            f"Ventas cargadas: {len(ventas)} registros · "
-            f"meses {', '.join(str(m) for m in meses_disp)}"
+ventas_result = {}
+with st.expander("📊 Opción A — Informe RESULTADOS por CC (.xlsx)", expanded=False):
+    archivos = st.file_uploader(
+        "Sube el informe administrativo por CC (.xlsx). Puedes subir varios meses.",
+        type=["xlsx"], accept_multiple_files=True, key="cert_informes",
+    )
+    if archivos:
+        dicts, errores = [], []
+        for a in archivos:
+            try:
+                d = cargar_ventas(io.BytesIO(a.getvalue()))
+                if d:
+                    dicts.append(d)
+                else:
+                    errores.append(f"**{a.name}**: no encontré ventas (¿formato distinto?)")
+            except Exception as e:  # noqa: BLE001
+                errores.append(f"**{a.name}**: {e}")
+        ventas_result = combinar_ventas(*dicts)
+        if ventas_result:
+            meses_disp = sorted({m for _c, m in ventas_result})
+            st.success(f"Ventas cargadas: {len(ventas_result)} registros · "
+                       f"meses {', '.join(str(m) for m in meses_disp)}")
+        for e in errores:
+            st.warning(e)
+
+with st.expander("🖼️ Opción B — Resumen por imagen o Excel (con revisión)", expanded=True):
+    st.caption(
+        "Sube la **imagen** (pantallazo/foto) o el **Excel** del cuadro de ventas "
+        "por punto. La plataforma lo lee y lo muestra abajo para que **revises y "
+        "corrijas** antes de usarlo — el OCR puede confundir un dígito."
+    )
+    if not resu.ocr_disponible():
+        st.info("Para leer imágenes se necesita tesseract en el servidor. "
+                "El Excel sí funciona sin OCR.")
+    arch_res = st.file_uploader(
+        "Imagen (.png/.jpg) o Excel (.xlsx) del resumen de ventas",
+        type=["png", "jpg", "jpeg", "xlsx"], key="cert_resumen",
+    )
+    if arch_res is not None:
+        if st.button("🔍 Leer archivo", key="btn_leer_resumen"):
+            try:
+                filas = resu.leer_resumen(arch_res.getvalue(), arch_res.name)
+                if not filas:
+                    st.warning("No pude extraer filas. ¿La imagen está muy pequeña o borrosa?")
+                else:
+                    df = pd.DataFrame([
+                        {"Punto (leído)": f["nombre"],
+                         "CC": f["cc4"],
+                         "Centro": _CATALOGO_CC.get(f["cc4"], ""),
+                         "Valor": f["valor"]}
+                        for f in filas
+                    ])
+                    st.session_state["cert_resumen_df"] = df
+                    st.success(f"Leídas {len(filas)} filas. Revisa los valores abajo.")
+            except Exception as e:  # noqa: BLE001
+                st.error(f"No pude leer el archivo: {e}")
+
+    if "cert_resumen_df" in st.session_state:
+        st.caption("✏️ **Revisa y corrige** — sobre todo los valores. "
+                   "Puedes ajustar el CC si algún punto quedó sin mapear.")
+        df_edit = st.data_editor(
+            st.session_state["cert_resumen_df"],
+            num_rows="dynamic", use_container_width=True, key="cert_resumen_editor",
+            column_config={
+                "Valor": st.column_config.NumberColumn("Valor", format="%d"),
+                "Centro": st.column_config.TextColumn("Centro", disabled=True),
+            },
         )
-    for e in errores:
-        st.warning(e)
+        st.session_state["cert_resumen_df"] = df_edit
+
+# reunir las filas revisadas (se convierten a ventas segun el mes elegido abajo)
+filas_revisadas = []
+if "cert_resumen_df" in st.session_state:
+    for _, r in st.session_state["cert_resumen_df"].iterrows():
+        filas_revisadas.append({"cc4": str(r.get("CC", "") or "").strip(),
+                                "valor": r.get("Valor")})
 
 # ============================================================
 # 2) Datos del certificado
@@ -92,7 +146,6 @@ with col1:
 with col2:
     mes_nom = st.selectbox("Mes de la venta", _MESES_LISTA, index=6)
 with col3:
-    import datetime
     anio = st.number_input("Año", min_value=2020, max_value=2100,
                            value=datetime.date.today().year, step=1)
 
@@ -100,10 +153,13 @@ pt = cert.punto_por_clave(clave)
 mes_num = _MESES_NUM[mes_nom]
 mes_texto_def = f"{mes_nom.upper()} DE {int(anio)}"
 
-# valor automatico si hay informe y el punto tiene CC
+# ventas combinadas: informe RESULTADOS + resumen revisado (para el mes elegido)
+ventas = dict(ventas_result)
+ventas.update(resu.filas_a_ventas(filas_revisadas, mes_num))
+
 valor_auto = None
 cc4 = (pt or {}).get("cc4", "")
-if ventas and cc4 and (cc4, mes_num) in ventas:
+if cc4 and (cc4, mes_num) in ventas:
     valor_auto = float(ventas[(cc4, mes_num)]["ventas"])
 
 colv1, colv2 = st.columns([1, 1])
@@ -115,9 +171,9 @@ with colv1:
         format="%.0f",
     )
     if valor_auto is not None:
-        st.caption(f"↑ Traído del informe para el CC {cc4}. Puedes ajustarlo.")
+        st.caption(f"↑ Traído de las ventas para el CC {cc4}. Puedes ajustarlo.")
     elif cc4:
-        st.caption(f"Sin dato en el informe para el CC {cc4} / mes {mes_num}. Escríbelo a mano.")
+        st.caption(f"Sin dato para el CC {cc4} / mes {mes_num}. Escríbelo a mano.")
     else:
         st.caption("Este punto no está enlazado a un CC; escribe el valor a mano.")
 with colv2:
@@ -169,13 +225,13 @@ with cgb:
 # ============================================================
 st.markdown("### 4️⃣ Lote del mes (todos los puntos con venta)")
 st.caption(
-    "Genera un certificado por cada punto que tenga valor en el informe cargado, "
-    "para el mes elegido arriba, y los descarga en un ZIP."
+    "Genera un certificado por cada punto que tenga valor (del informe o del "
+    "resumen revisado) para el mes elegido arriba, y los descarga en un ZIP."
 )
 
 if st.button("📦 Generar lote del mes (ZIP)"):
     if not ventas:
-        st.warning("Primero sube el informe de ventas para el lote automático.")
+        st.warning("Primero carga las ventas (Opción A o B) para el lote automático.")
     else:
         buf = io.BytesIO()
         generados, saltados = 0, []
