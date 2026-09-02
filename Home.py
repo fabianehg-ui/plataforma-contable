@@ -308,6 +308,12 @@ rep_pyg_detallado = st.Page(
     icon="📑",
     url_path="reportes-pyg-detallado-cc",
 )
+rep_certificados = st.Page(
+    "app_pages/18_Certificados_Ventas.py",
+    title="Certificados de Ventas",
+    icon="📄",
+    url_path="reportes-certificados-ventas",
+)
 rep_contabilidad = st.Page(
     "app_pages/20_Contabilidad.py",
     title="Contabilidad (Libros)",
@@ -412,6 +418,7 @@ nav = st.navigation(
             rep_centro_contable,
             rep_centros_costos,
             rep_pyg_detallado,
+            rep_certificados,
         ],
         "⚙️ Sistema": [
             sistema_panel_admin,

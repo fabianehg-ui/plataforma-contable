@@ -4,8 +4,11 @@ FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
 WORKDIR /app
 
 # Tesseract OCR (español + inglés) para la lectura de facturas en imagen.
+# LibreOffice (soffice) para convertir los certificados de ventas a PDF.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-spa \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-spa \
+        libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
