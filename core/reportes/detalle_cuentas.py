@@ -98,6 +98,14 @@ def _preparar(balances: List[BalanceCC], balances_milagros: Optional[List[Balanc
     def acumular(b: BalanceCC, i: int, data, clave: str):
         d = b.detalle.copy()
         d["c6"] = d["cuenta"].str[:6]
+        # Recuperación arriendos (42505020) y administración (42505025) se
+        # reclasifican al DEPARTAMENTO DE ARRENDAMIENTOS como costo neto. Se
+        # sacan del bucket "42" (a la llave "RECARR", que ningún prefijo numérico
+        # captura) para que NO queden también en OTROS INGRESOS (42) y evitar el
+        # doble conteo.
+        _mask_rec = (d["cuenta"].str.startswith("42505020")
+                     | d["cuenta"].str.startswith("42505025"))
+        d.loc[_mask_rec, "c6"] = "RECARR"
         for (cc, c6), g in d.groupby(["cc", "c6"]):
             data[cc][c6][i] += float(g["mov_periodo"].sum())
         for grupo, pref in (("alim", "14050501"), ("aseo", "14050502")):
@@ -409,15 +417,17 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
             c.font = Font(name=F, bold=True, size=9, italic=True)
             r += 1
 
-        def seccion(tit, prefs, sg, sub_t, forzar=False, menos=None, orden_primero=None):
+        def seccion(tit, prefs, sg, sub_t, forzar=False, menos=None, orden_primero=None,
+                    extra_lineas=None):
             nonlocal r
             menos = menos or []
             orden_primero = orden_primero or []
+            extra_lineas = extra_lineas or []
             c6s = sorted(x for x in dM if any(x.startswith(p) for p in prefs)
                          and not any(x.startswith(m) for m in menos)
                          and any(abs(v) > 0.5 for v in dM[x]))
             sub = [0.0] * nmes
-            if not c6s and not forzar:
+            if not c6s and not extra_lineas and not forzar:
                 return sub
             por4 = collections.OrderedDict()
             for c6 in c6s:
@@ -442,6 +452,9 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
                 v4s[c4] = v4
                 for i in range(nmes):
                     sub[i] += v4[i]
+            for _lbl, _cta, _vals in extra_lineas:
+                for i in range(nmes):
+                    sub[i] += _vals[i]
             encabezado(tit)
             fila_total = r
             r += 1                                # se escribe al final con fórmula
@@ -465,6 +478,17 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
                     ws.row_dimensions[r].hidden = True
                     r += 1
                 numf(fila_padre, f_sum_rango(h0, r - 1), bold=True, fill="F2F2F2", sz=9)
+            # líneas extra (p.ej. recuperaciones que netean el costo del dpto):
+            # se rinden a nivel de "padre" (8 díg), se ocultan como el detalle y
+            # entran al subtotal del departamento.
+            for _lbl, _cta, _vals in extra_lineas:
+                ws.cell(row=r, column=1, value=_cta).font = Font(name=F, size=9)
+                ws.cell(row=r, column=2, value=_lbl).font = Font(name=F, size=9)
+                num(r, _vals)
+                ws.row_dimensions[r].outline_level = 1
+                ws.row_dimensions[r].hidden = True
+                filas_padre.append(r)
+                r += 1
             fin_r = r
             r = fila_total
             subtotal(sub_t, sub, salto=1, formulas=f_sum_filas(filas_padre))
@@ -570,10 +594,21 @@ def exportar_detalle_cuentas(balances: List[BalanceCC],
         # 3) Mano de obra, ARRENDAMIENTOS (dpto aparte) y CIF -> utilidad bruta
         #    Arrendamientos (7320+7315+7325) es un departamento de costos propio,
         #    separado de MOD y del CIF; en el CIF (73) se excluyen esas cuentas.
+        # Recuperaciones que netean el COSTO ARRENDAMIENTOS (costo neto):
+        #   42505020 Recuperación arriendos + 42505025 Recuperación administración.
+        # Vienen aisladas en la llave "RECARR" (ver acumular), ya combinadas de
+        # ambas empresas y filtradas por el CC de la hoja. El movimiento de un
+        # ingreso viene en negativo, así que sumarlo reduce el total del dpto.
+        rec_arr = list(dM.get("RECARR", [0.0] * nmes))
+        extra_arr = None
+        if any(abs(x) > 0.5 for x in rec_arr):
+            extra_arr = [("   (−) Recuperación arriendos y administración [42505020 + 42505025]",
+                          "425050", rec_arr)]
         for tit, prefs, sg, sub_t in SEC_COSTOS_MO:
             seccion(tit, prefs, sg, sub_t,
                     menos=_CIF_A_ARRIENDO if prefs == ["73"] else None,
-                    orden_primero=["7320"] if sub_t == "Total arrendamientos" else None)
+                    orden_primero=["7320"] if sub_t == "Total arrendamientos" else None,
+                    extra_lineas=extra_arr if sub_t == "Total arrendamientos" else None)
         f_bruta = []
         for j in col_v:
             t = f"={let(j)}{S['Total ingresos operacionales (informe)']}-{let(j)}{S['Total costo de materia prima']}"
