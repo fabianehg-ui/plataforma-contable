@@ -105,7 +105,7 @@ PUNTOS: List[Dict[str, str]] = [
     {"clave": "Milagros Fabricato (Parque Arauco)", "membrete": "MILAGROS", "tipo": "ARAUCO_MIL",
      "ciudad": "Medellín", "empresa": "GRUPO DE ALIMENTOS DE COLOMBIA S.A.S", "nit": "900.976.364-9",
      "establecimiento": "MILAGROS FABRICATO", "marca": "Milagros", "centro": "Parque Fabricato",
-     "local": "", "destinatario": "PARQUE ARAUCO", "cc4": "1205"},
+     "local": "LC 3119", "destinatario": "PARQUE ARAUCO", "cc4": "1205"},
 ]
 
 
@@ -437,10 +437,14 @@ def generar_certificado_docx(clave: str, mes_texto: str, valor: float,
 
     mes = (mes_texto or "").strip().upper()
     # Para el formato Parque Arauco el cuadro va como MM-AAAA (08-2026).
+    # Si no llegan mes_num/anio, se deducen del texto del mes ("AGOSTO DE 2026").
     if mes_num and anio:
         mes_arauco = "%02d-%d" % (int(mes_num), int(anio))
     else:
-        mes_arauco = mes
+        import re
+        _n = next((i for i, nom in enumerate(_MESES) if nom and nom.upper() in mes), None)
+        _m = re.search(r"(20\d{2})", mes)
+        mes_arauco = ("%02d-%s" % (_n, _m.group(1))) if (_n and _m) else mes
     val = formato_pesos(valor)
     up = entero_en_letras(valor)
     ti = _titulo(up)
