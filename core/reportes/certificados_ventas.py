@@ -22,6 +22,9 @@ from typing import Dict, List, Optional
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt, Cm
 
 # ------------------------------------------------------------------ plantillas
@@ -212,6 +215,44 @@ def _run(p, texto, *, bold=False, size=12):
     return r
 
 
+def _tbl_bordes(tbl):
+    """Bordes negros a toda la cuadricula."""
+    tblPr = tbl._tbl.tblPr
+    b = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        e = OxmlElement("w:" + edge)
+        e.set(qn("w:val"), "single"); e.set(qn("w:sz"), "8")
+        e.set(qn("w:space"), "0"); e.set(qn("w:color"), "000000")
+        b.append(e)
+    tblPr.append(b)
+
+
+def _celda(cell, texto, *, bold=True, size=12):
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(2)
+    p.paragraph_format.space_after = Pt(2)
+    r = p.add_run(texto)
+    r.font.name = "Arial"; r.font.size = Pt(size); r.bold = bold
+
+
+def _tabla_grid(doc, mes, val, encabezado_valor="VENTA ANTES DE IVA"):
+    """Cuadricula 2x2 con bordes:  Mes - Año | <encabezado_valor>."""
+    tbl = doc.add_table(rows=2, cols=2)
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    tbl.autofit = False
+    _tbl_bordes(tbl)
+    _celda(tbl.rows[0].cells[0], "Mes – Año")
+    _celda(tbl.rows[0].cells[1], encabezado_valor)
+    _celda(tbl.rows[1].cells[0], mes)
+    _celda(tbl.rows[1].cells[1], "$ " + val)
+    for row in tbl.rows:
+        row.cells[0].width = Cm(5.0)
+        row.cells[1].width = Cm(7.5)
+    return tbl
+
+
 def _cuerpo_brutas(doc, pt, mes, val, letras_up, peso):
     _par(doc, "CERTIFICADO", bold=True, center=True)
     _par(doc); _par(doc)
@@ -297,7 +338,7 @@ def _cuerpo_arauco(doc, pt, mes, val):
     _par(doc, "CENTRO COMERCIAL: " + pt.get("centro", ""))
     _par(doc, "# LOCAL: " + pt.get("local", ""))
     _par(doc)
-    _tabla_mes_valor(doc, mes, val, "IVA", "Mes – Año\tVENTA ANTES DE IVA")
+    _tabla_grid(doc, mes, val)
     _par(doc)
     _par(doc, "Cualquier inquietud adicional con gusto la atenderemos en los "
               "teléfonos o dirección preimpresos.")
@@ -377,10 +418,14 @@ def _bloque_firma(doc, firmar=False):
 
 
 def generar_certificado_docx(clave: str, mes_texto: str, valor: float,
-                             firmar: bool = False) -> bytes:
+                             firmar: bool = False,
+                             mes_num: Optional[int] = None,
+                             anio: Optional[int] = None) -> bytes:
     """Devuelve el certificado en Word (.docx) como bytes.
 
     firmar=True inserta la firma escaneada de la contadora sobre la linea.
+    mes_num/anio: si se dan, el cuadro del formato Parque Arauco muestra el
+    periodo como MM-AAAA (p.ej. 08-2026).
     """
     pt = dict(punto_por_clave(clave) or {})
     if not pt:
@@ -391,6 +436,11 @@ def generar_certificado_docx(clave: str, mes_texto: str, valor: float,
     pt["tp"] = TP_CONTADORA
 
     mes = (mes_texto or "").strip().upper()
+    # Para el formato Parque Arauco el cuadro va como MM-AAAA (08-2026).
+    if mes_num and anio:
+        mes_arauco = "%02d-%d" % (int(mes_num), int(anio))
+    else:
+        mes_arauco = mes
     val = formato_pesos(valor)
     up = entero_en_letras(valor)
     ti = _titulo(up)
@@ -405,22 +455,31 @@ def generar_certificado_docx(clave: str, mes_texto: str, valor: float,
     from datetime import date
     hoy = date.today()
     fecha = "%s, %02d de %s de %d" % (pt["ciudad"], hoy.day, _MESES[hoy.month], hoy.year)
-    _par(doc, fecha, bold=True)
-    _par(doc)
-
     tipo = pt["tipo"]
+    if tipo in ("ARAUCO", "ARAUCO_MIL"):
+        # modelo Parque Arauco: fecha a la derecha, debajo del membrete
+        _par(doc)
+        pf = doc.add_paragraph()
+        pf.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        pf.paragraph_format.space_before = Pt(0)
+        pf.paragraph_format.space_after = Pt(0)
+        rr = pf.add_run(fecha); rr.font.name = "Arial"; rr.font.size = Pt(12)
+        _par(doc)
+    else:
+        _par(doc, fecha, bold=True)
+        _par(doc)
+
     if tipo == "BRUTAS":
         _cuerpo_brutas(doc, pt, mes, val, up, peso)
     elif tipo == "VENDIO":
         _cuerpo_vendio(doc, pt, mes, val, ti, peso)
     elif tipo == "EXITO":
         _cuerpo_exito(doc, pt, mes, val)
-    elif tipo == "ARAUCO":
-        _cuerpo_arauco(doc, pt, mes, val)
+    elif tipo in ("ARAUCO", "ARAUCO_MIL"):
+        # ambos puntos de Fabricato usan el mismo modelo del centro comercial
+        _cuerpo_arauco(doc, pt, mes_arauco, val)
     elif tipo == "EXITO_MIL":
         _cuerpo_exito_mil(doc, pt, mes, val)
-    elif tipo == "ARAUCO_MIL":
-        _cuerpo_arauco_mil(doc, pt, mes, val)
     else:
         _par(doc, "CERTIFICADO", bold=True, center=True)
 
@@ -467,5 +526,8 @@ def docx_a_pdf(docx_bytes: bytes) -> bytes:
 
 
 def generar_certificado_pdf(clave: str, mes_texto: str, valor: float,
-                            firmar: bool = False) -> bytes:
-    return docx_a_pdf(generar_certificado_docx(clave, mes_texto, valor, firmar=firmar))
+                            firmar: bool = False,
+                            mes_num: Optional[int] = None,
+                            anio: Optional[int] = None) -> bytes:
+    return docx_a_pdf(generar_certificado_docx(clave, mes_texto, valor, firmar=firmar,
+                                               mes_num=mes_num, anio=anio))
