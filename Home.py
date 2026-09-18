@@ -314,6 +314,12 @@ rep_certificados = st.Page(
     icon="📄",
     url_path="reportes-certificados-ventas",
 )
+rep_recurrente = st.Page(
+    "app_pages/29_Reporte_Recurrente.py",
+    title="Reporte Recurrente (Token DIAN)",
+    icon="📊",
+    url_path="reportes-recurrente-token",
+)
 rep_contabilidad = st.Page(
     "app_pages/20_Contabilidad.py",
     title="Contabilidad (Libros)",
@@ -419,6 +425,7 @@ nav = st.navigation(
             rep_centros_costos,
             rep_pyg_detallado,
             rep_certificados,
+            rep_recurrente,
         ],
         "⚙️ Sistema": [
             sistema_panel_admin,
