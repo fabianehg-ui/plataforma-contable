@@ -47,6 +47,53 @@ def _abrir_pdf(fuente):
     raise TypeError(f"Tipo de fuente no soportado: {type(fuente)}")
 
 
+_MONEY_RE = re.compile(r'^-?[\d,]+(?:\.\d+)?$')  # 69,600.00 · 1,740,000 · 4.00
+_NIT_RE = re.compile(r'^\d{6,11}$')
+
+
+def _agrupar_filas(words, tol=2.5):
+    """Agrupa las palabras de una página en filas por su coordenada vertical."""
+    filas = []
+    for w in sorted(words, key=lambda x: (x['top'], x['x0'])):
+        colocada = False
+        for fila in filas:
+            if abs(fila['top'] - w['top']) <= tol:
+                fila['words'].append(w)
+                fila['top'] = (fila['top'] * fila['n'] + w['top']) / (fila['n'] + 1)
+                fila['n'] += 1
+                colocada = True
+                break
+        if not colocada:
+            filas.append({'top': w['top'], 'n': 1, 'words': [w]})
+    for fila in filas:
+        fila['words'].sort(key=lambda x: x['x0'])
+    return filas
+
+
+def _detectar_columnas(filas):
+    """
+    Localiza la fila de encabezado (Débitos | Créditos | Base | Retención | %)
+    y devuelve los límites en X que separan las columnas numéricas.
+
+    Los números de Contai están alineados a la derecha, así que la columna a la
+    que pertenece un número se decide por su borde derecho (x1).
+    """
+    for fila in filas:
+        txt = {w['text']: w for w in fila['words']}
+        if 'Débitos' in txt and 'Créditos' in txt and 'Base' in txt:
+            deb, cred, base = txt['Débitos'], txt['Créditos'], txt['Base']
+            ret = txt.get('Retención')
+            pct = txt.get('%')
+            base_right = ret['x1'] if ret else base['x1'] + 40
+            pct_left = pct['x0'] if pct else base_right + 20
+            return {
+                'deb_cred':  (deb['x1'] + cred['x0']) / 2,
+                'cred_base': (cred['x1'] + base['x0']) / 2,
+                'base_pct':  (base_right + pct_left) / 2,
+            }
+    return None
+
+
 def parsear_auxiliar_contai(fuente):
     """
     Parsea el reporte 'Análisis de % de Retención e IVA - Resumido' de Contai.
@@ -54,190 +101,256 @@ def parsear_auxiliar_contai(fuente):
     Estructura del reporte:
     - Encabezado empresa: "NOMBRE S.A.S - NIT"
     - Encabezado cuenta: "CODIGO NOMBRE_CUENTA" (ej: "23-65-25-05 SERVICIOS DEL 4%")
-    - Líneas movimiento: "[debitos?] creditos base tarifa NIT nombre_tercero"
+    - Columnas: Débitos | Créditos | Base | Retención | % | NIT | Nombre
     - Total Cuenta: cierra cada grupo
 
+    IMPORTANTE — por qué se parsea por POSICIÓN de columna y no contando
+    números:
+
+    Una línea con SOLO débito (una devolución/nota crédito de retención sin
+    ninguna retención nueva del mismo tercero en el período) queda en el texto
+    plano EXACTAMENTE igual que una línea normal con solo crédito:
+
+        Débito 13.852  (Crédito vacío)  Base 554.080  2.50  NIT  ABURRA LTDA
+        (Crédito 52.000)(Débito vacío)  Base 1.300.000 4.00  NIT  FRANK BRAND
+
+    ambas se extraen como "<un número> <base> <tarifa> <nit> <nombre>". Contar
+    los números no permite distinguirlas, así que el parser viejo asumía que el
+    único número era SIEMPRE un crédito y contabilizaba la devolución como
+    retención POSITIVA, inflando el total. Aquí asignamos cada número a su
+    columna real por su coordenada X, de modo que un débito-solo se registra
+    como débito y la retención neta (crédito − débito) sale NEGATIVA, restando
+    del total como debe ser.
+
+    Si en alguna página no se logra ubicar el encabezado de columnas (PDF
+    atípico), se cae de vuelta al parseo por texto de la versión anterior.
+
     Retorna dict con:
-        empresa, nit_empresa, periodo, movimientos[]
+        empresa, nit_empresa, periodo, movimientos[], lineas_sospechosas[]
 
     Cada movimiento tiene:
         cuenta, nombre_cuenta, tarifa_cuenta,
         debitos, creditos, base, tarifa_mov, retencion,
         nit, nombre_tercero
     """
-    movimientos = []
-    lineas_sospechosas = []
-    empresa = None
-    nit_empresa = None
-    periodo = None
+    estado = {
+        'empresa': None,
+        'nit_empresa': None,
+        'periodo': None,
+        'movimientos': [],
+        'lineas_sospechosas': [],
+        'cuenta_actual': None,
+        'nombre_cuenta_actual': None,
+        'tarifa_actual': None,
+        'splits': None,   # se conserva entre páginas
+    }
 
     with _abrir_pdf(fuente) as pdf:
         for page in pdf.pages:
+            words = page.extract_words()
+            if words:
+                filas = _agrupar_filas(words)
+                splits = _detectar_columnas(filas)
+                if splits:
+                    estado['splits'] = splits
+                if estado['splits']:
+                    _procesar_pagina_por_columnas(filas, estado)
+                    continue
+            # Fallback: sin palabras posicionadas o sin encabezado → por texto.
             texto = page.extract_text()
-            if not texto:
-                continue
-            lineas = texto.split('\n')
-
-            cuenta_actual = None
-            nombre_cuenta_actual = None
-            tarifa_actual = None
-
-            for linea in lineas:
-                linea = linea.strip()
-                if not linea:
-                    continue
-
-                # Detectar encabezado de empresa
-                if 'S.A.S' in linea and '-' in linea and not empresa:
-                    m = re.match(r'(.+?)\s*-\s*([\d\.]+-?\d?)', linea)
-                    if m:
-                        empresa = m.group(1).strip()
-                        nit_empresa = m.group(2).strip()
-
-                # Detectar período (ej: "Mar-3-2026")
-                if not periodo:
-                    m = re.search(r'([A-Z][a-z]{2}-\d{1,2}-\d{4})', linea)
-                    if m:
-                        periodo = m.group(1)
-
-                # Saltar encabezados de página / decoración
-                if (linea.startswith('---') or linea.startswith('===')
-                    or 'PAGINA' in linea or 'Contai' in linea
-                    or ('Cuenta' in linea and 'Nombre' in linea and 'NIT' in linea)):
-                    continue
-
-                # Cuando una cuenta se parte entre páginas, Contai repite el
-                # encabezado precedido de "Continua con la cuenta : ". Si no se
-                # normaliza, la línea no matchea el encabezado y se pierden TODOS
-                # los movimientos de esa cuenta en las páginas siguientes.
-                m_continua = re.match(
-                    r'^Continua\s+con\s+la\s+cuenta\s*:?\s*(.+)$',
-                    linea,
-                    re.IGNORECASE,
-                )
-                if m_continua:
-                    linea = m_continua.group(1).strip()
-
-                # Detectar línea de encabezado de cuenta: "23-65-25-05 NOMBRE..."
-                m_cuenta = re.match(r'^(\d{2}-\d{2}-\d{2}-\d{2})\s+(.+)$', linea)
-                if m_cuenta:
-                    cuenta_actual = m_cuenta.group(1)
-                    nombre_completo = m_cuenta.group(2).strip()
-                    # Extraer tarifa al final del nombre si la hay (ej: "...DEL 4%")
-                    m_tarifa = re.search(r'(\d+(?:\.\d+)?)\s*%?\s*$', nombre_completo)
-                    if m_tarifa:
-                        try:
-                            tarifa_actual = float(m_tarifa.group(1))
-                            nombre_cuenta_actual = nombre_completo[:m_tarifa.start()].strip()
-                        except ValueError:
-                            tarifa_actual = None
-                            nombre_cuenta_actual = nombre_completo
-                    else:
-                        tarifa_actual = None
-                        nombre_cuenta_actual = nombre_completo
-                    continue
-
-                # Cerrar grupo de cuenta
-                if linea.startswith('Total Cuenta') or linea.startswith('Total General'):
-                    cuenta_actual = None
-                    continue
-
-                # Línea de movimiento dentro de una cuenta.
-                #
-                # Formato Contai: <montos...> <tarifa> <NIT> <nombre tercero>
-                #   - montos: 2 o 3 números (con comas y decimales)
-                #   - tarifa: porcentaje, SIEMPRE con punto decimal (2.50, 11.00)
-                #   - NIT: entero de 6 a 11 dígitos
-                #   - nombre: el resto (¡puede empezar con dígitos! p.ej.
-                #             "5968 - TWO OF YOU SA")
-                #
-                # Anclar la tarifa a "\d+\.\d+" y el NIT a "\d{6,11}" es lo que
-                # evita que un nombre que empieza con número (5968...) haga que
-                # la regex tome el NIT como tarifa y produzca un valor enorme
-                # (que además reventaba el INSERT por overflow de numeric(7,4)).
-                if cuenta_actual:
-                    m_mov = re.match(
-                        r'^([\d,\.]+(?:\s+[\d,\.]+){1,2})\s+(\d+\.\d+)\s+(\d{6,11})\s+(.+)$',
-                        linea,
-                    )
-                    if m_mov:
-                        try:
-                            numeros_str = m_mov.group(1)
-                            tarifa_mov = float(m_mov.group(2))
-                            nit = m_mov.group(3)
-                            nombre_tercero = m_mov.group(4).strip()
-
-                            nums = [
-                                float(n.replace(',', ''))
-                                for n in re.findall(r'[\d,\.]+', numeros_str)
-                            ]
-
-                            # El encabezado del reporte es:
-                            #   Débitos | Créditos | Base | % | NIT | Nombre
-                            # La columna de RETENCIÓN es la que está
-                            # inmediatamente antes de la base (la "Créditos").
-                            #
-                            #   2 números → "crédito base"          (débito = 0)
-                            #   3 números → "débito crédito base"
-                            #
-                            # En las líneas de 3 números el débito es una
-                            # REVERSIÓN/anulación de retención del mismo período
-                            # (p.ej. una factura anulada). Para el F350 lo que se
-                            # declara es la retención NETA = crédito - débito,
-                            # porque a la DIAN solo se le entrega lo efectivamente
-                            # retenido tras descontar lo reversado.
-                            if len(nums) == 2:
-                                debitos = 0.0
-                                creditos, base = nums
-                            elif len(nums) == 3:
-                                debitos, creditos, base = nums
-                            else:
-                                continue
-
-                            retencion = creditos - debitos
-
-                            # La tarifa es un porcentaje de retención: en la
-                            # práctica está entre 0 y ~35. Un valor >= 100 (y
-                            # desde luego >= 1000) NO es una tarifa real: es
-                            # señal de que la regex emparejó mal la línea (p.ej.
-                            # un NIT sin separador, o un número pegado a otro).
-                            #
-                            # La columna tarifa es numeric(7,4) en la BD, así que
-                            # cualquier valor >= 1000 revienta el INSERT con
-                            # "numeric field overflow". Saneamos aquí: si la
-                            # tarifa es imposible, registramos la línea como
-                            # sospechosa y la saltamos en vez de romper todo el
-                            # guardado con un dato basura.
-                            if tarifa_mov >= 100:
-                                lineas_sospechosas.append({
-                                    'cuenta': cuenta_actual,
-                                    'linea': linea.strip(),
-                                    'tarifa_leida': tarifa_mov,
-                                })
-                                continue
-
-                            movimientos.append({
-                                'cuenta': cuenta_actual,
-                                'nombre_cuenta': nombre_cuenta_actual,
-                                'tarifa_cuenta': tarifa_actual,
-                                'debitos': debitos,
-                                'creditos': creditos,
-                                'base': base,
-                                'tarifa_mov': tarifa_mov,
-                                'retencion': retencion,
-                                'nit': nit,
-                                'nombre_tercero': nombre_tercero,
-                            })
-                        except (ValueError, IndexError):
-                            continue
+            if texto:
+                _procesar_pagina_por_texto(texto, estado)
 
     return {
-        'empresa':     empresa,
-        'nit_empresa': nit_empresa,
-        'periodo':     periodo,
-        'movimientos': movimientos,
-        'lineas_sospechosas': lineas_sospechosas,
+        'empresa':     estado['empresa'],
+        'nit_empresa': estado['nit_empresa'],
+        'periodo':     estado['periodo'],
+        'movimientos': estado['movimientos'],
+        'lineas_sospechosas': estado['lineas_sospechosas'],
     }
+
+
+def _procesar_cabeceras_linea(linea, estado):
+    """
+    Detecta empresa/período/cuenta/total en una línea de texto.
+    Devuelve True si la línea era una cabecera/decoración (ya consumida),
+    False si es una línea de movimiento que el llamador debe procesar.
+    """
+    # Encabezado de empresa. Acepta razones sociales con "S.A.S", "S.A.S.",
+    # "SAS", "S.A." o "SA" (Contai las imprime de formas distintas según la
+    # empresa; ATOCHA aparece como "GRUPO ATOCHA SAS - 900.380.500-5").
+    if (not estado['empresa'] and '-' in linea
+            and re.search(r'\bS\.?A\.?S?\.?\b', linea)):
+        m = re.match(r'(.+?)\s*-\s*(\d[\d\.]+-?\d?)\s*$', linea)
+        if m:
+            estado['empresa'] = m.group(1).strip()
+            estado['nit_empresa'] = m.group(2).strip()
+
+    # Período (ej: "Mar-3-2026")
+    if not estado['periodo']:
+        m = re.search(r'([A-Z][a-z]{2}-\d{1,2}-\d{4})', linea)
+        if m:
+            estado['periodo'] = m.group(1)
+
+    # Decoración / encabezados de página
+    if (linea.startswith('---') or linea.startswith('===')
+            or 'PAGINA' in linea or 'Contai' in linea
+            or ('Cuenta' in linea and 'Nombre' in linea and 'NIT' in linea)
+            or ('Débitos' in linea and 'Créditos' in linea)):
+        return True
+
+    # "Continua con la cuenta : 23-65-40-01 COMPRAS..."
+    m_continua = re.match(r'^Continua\s+con\s+la\s+cuenta\s*:?\s*(.+)$',
+                          linea, re.IGNORECASE)
+    if m_continua:
+        linea = m_continua.group(1).strip()
+
+    # Encabezado de cuenta: "23-65-25-05 NOMBRE..."
+    m_cuenta = re.match(r'^(\d{2}-\d{2}-\d{2}-\d{2})\s+(.+)$', linea)
+    if m_cuenta:
+        estado['cuenta_actual'] = m_cuenta.group(1)
+        nombre_completo = m_cuenta.group(2).strip()
+        m_tarifa = re.search(r'(\d+(?:\.\d+)?)\s*%?\s*$', nombre_completo)
+        if m_tarifa:
+            try:
+                estado['tarifa_actual'] = float(m_tarifa.group(1))
+                estado['nombre_cuenta_actual'] = nombre_completo[:m_tarifa.start()].strip()
+            except ValueError:
+                estado['tarifa_actual'] = None
+                estado['nombre_cuenta_actual'] = nombre_completo
+        else:
+            estado['tarifa_actual'] = None
+            estado['nombre_cuenta_actual'] = nombre_completo
+        return True
+
+    # Cierre de grupo
+    if linea.startswith('Total Cuenta') or linea.startswith('Total General'):
+        estado['cuenta_actual'] = None
+        return True
+
+    return False
+
+
+def _registrar_movimiento(estado, debitos, creditos, base, tarifa_mov,
+                          nit, nombre_tercero, linea_txt):
+    """Valida y agrega un movimiento (o lo marca sospechoso)."""
+    # Retención NETA: crédito (retención practicada) − débito (devolución).
+    retencion = creditos - debitos
+
+    # Una devolución (retención neta negativa) también reduce la BASE: se deja
+    # con signo negativo para que no infle la base declarada del concepto.
+    if retencion < 0:
+        base = -abs(base)
+
+    # Tarifa imposible (>=100%) → línea mal leída; se registra y se salta.
+    if tarifa_mov is not None and tarifa_mov >= 100:
+        estado['lineas_sospechosas'].append({
+            'cuenta': estado['cuenta_actual'],
+            'linea': linea_txt.strip(),
+            'tarifa_leida': tarifa_mov,
+        })
+        return
+
+    estado['movimientos'].append({
+        'cuenta': estado['cuenta_actual'],
+        'nombre_cuenta': estado['nombre_cuenta_actual'],
+        'tarifa_cuenta': estado['tarifa_actual'],
+        'debitos': debitos,
+        'creditos': creditos,
+        'base': base,
+        'tarifa_mov': tarifa_mov if tarifa_mov is not None else estado['tarifa_actual'],
+        'retencion': retencion,
+        'nit': nit,
+        'nombre_tercero': nombre_tercero,
+    })
+
+
+def _procesar_pagina_por_columnas(filas, estado):
+    """Parseo posicional: cada número va a su columna real por coordenada X."""
+    splits = estado['splits']
+    for fila in filas:
+        linea_txt = ' '.join(w['text'] for w in fila['words']).strip()
+        if not linea_txt:
+            continue
+        if _procesar_cabeceras_linea(linea_txt, estado):
+            continue
+        if not estado['cuenta_actual']:
+            continue
+
+        debitos = creditos = base = 0.0
+        tarifa_mov = None
+        nit = None
+        nombre_words = []
+
+        for w in fila['words']:
+            t = w['text']
+            if nit is not None:
+                # Todo lo que sigue al NIT es el nombre del tercero.
+                nombre_words.append(t)
+                continue
+            if _NIT_RE.match(t) and w['x0'] > splits['base_pct']:
+                nit = t
+                continue
+            if _MONEY_RE.match(t):
+                try:
+                    val = float(t.replace(',', ''))
+                except ValueError:
+                    continue
+                xr = w['x1']
+                if xr <= splits['deb_cred']:
+                    debitos += val
+                elif xr <= splits['cred_base']:
+                    creditos += val
+                elif xr <= splits['base_pct']:
+                    base += val
+                else:
+                    tarifa_mov = val   # columna de %
+
+        if nit is None:
+            continue
+        nombre_tercero = ' '.join(nombre_words).strip()
+        _registrar_movimiento(estado, debitos, creditos, base, tarifa_mov,
+                              nit, nombre_tercero, linea_txt)
+
+
+def _procesar_pagina_por_texto(texto, estado):
+    """
+    Fallback histórico (parseo por conteo de números) para PDFs de los que
+    pdfplumber no logra extraer palabras con posición o encabezado de columnas.
+    """
+    for linea in texto.split('\n'):
+        linea = linea.strip()
+        if not linea:
+            continue
+        if _procesar_cabeceras_linea(linea, estado):
+            continue
+        if not estado['cuenta_actual']:
+            continue
+
+        m_mov = re.match(
+            r'^([\d,\.]+(?:\s+[\d,\.]+){1,2})\s+(\d+\.\d+)\s+(\d{6,11})\s+(.+)$',
+            linea,
+        )
+        if not m_mov:
+            continue
+        try:
+            numeros_str = m_mov.group(1)
+            tarifa_mov = float(m_mov.group(2))
+            nit = m_mov.group(3)
+            nombre_tercero = m_mov.group(4).strip()
+            nums = [float(n.replace(',', ''))
+                    for n in re.findall(r'[\d,\.]+', numeros_str)]
+            if len(nums) == 2:
+                debitos = 0.0
+                creditos, base = nums
+            elif len(nums) == 3:
+                debitos, creditos, base = nums
+            else:
+                continue
+            _registrar_movimiento(estado, debitos, creditos, base, tarifa_mov,
+                                  nit, nombre_tercero, linea)
+        except (ValueError, IndexError):
+            continue
 
 
 def parsear_balance_contai(fuente):
