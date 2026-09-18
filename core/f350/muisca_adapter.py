@@ -22,7 +22,8 @@ _PLANTILLA_EXT = Path(__file__).with_name("plantilla_f350_v10.json")
 
 # Totales del F350 (Res. 000031/2024)
 CASILLA_TOTAL_RENTA = 130
-CASILLA_TOTAL_IVA = 134
+CASILLA_RETEIVA_RESPONSABLES = 131   # A responsables del impuesto sobre las ventas (casilla de INPUT)
+CASILLA_TOTAL_IVA = 134              # Total retenciones IVA = 131 + 132 - 133 (la DIAN lo calcula solo)
 CASILLA_TOTAL_RETENCIONES = 136
 CASILLA_SANCIONES = 137
 CASILLA_TOTAL_MAS_SANCIONES = 138
@@ -81,7 +82,28 @@ def casillas_desde_procesado(resultado: dict, incluir_totales: bool = True) -> d
         add(cbase, base)
         add(cret, val)
 
-    # 3) Retenciones de IVA (si el procesado las trae con casilla explicita)
+    # 3) Retenciones de IVA practicadas.
+    #    El reteIVA va en la casilla de INPUT 131 ("A responsables del impuesto
+    #    sobre las ventas"), NO en la 134 (que es el TOTAL y la DIAN lo calcula
+    #    sola). El procesador rutea todo movimiento de concepto "IVA" a la 131,
+    #    así que tomamos esas líneas (o, si no vienen detalladas, el total de
+    #    IVA) y las colocamos en su casilla de destino.
+    iva_por_casilla: dict = {}
+    for m in resultado.get("movimientos", []) or []:
+        concepto = m.get("concepto_asignado") or m.get("concepto")
+        if concepto != "IVA":
+            continue
+        cas = m.get("casilla_destino") or CASILLA_RETEIVA_RESPONSABLES
+        iva_por_casilla[cas] = iva_por_casilla.get(cas, 0) + (m.get("retencion") or 0)
+    if iva_por_casilla:
+        for cas, val in iva_por_casilla.items():
+            add(cas, val)
+    else:
+        # Respaldo: sin detalle por movimiento, usa el total de IVA en la 131.
+        total_iva_practicado = (resultado.get("totales", {}) or {}).get("total_retenciones_iva", 0)
+        add(CASILLA_RETEIVA_RESPONSABLES, total_iva_practicado)
+
+    # Compatibilidad: si algún procesado trae retenciones_iva con casilla explícita.
     for r in resultado.get("retenciones_iva", []) or []:
         cas = r.get("casilla")
         if cas:
