@@ -413,6 +413,10 @@ def _solo_digitos(s) -> str:
 
 
 def _hacer_login(nit: str, email: str, password: str):
+    # Normaliza: el correo se guarda en minúsculas al crear el usuario, y un
+    # espacio invisible (al copiar/pegar) rompe el login. Limpiamos ambos.
+    email = (email or "").strip().lower()
+    password = (password or "").strip()
     if not nit or not email or not password:
         st.error("Ingresa el NIT de la empresa, el correo y la contraseña.")
         return
@@ -421,11 +425,18 @@ def _hacer_login(nit: str, email: str, password: str):
     try:
         resp = sb.auth.sign_in_with_password({"email": email, "password": password})
     except Exception as e:
-        st.error(f"Error al iniciar sesión: {e}")
+        msg = str(e)
+        if "invalid" in msg.lower() and "credential" in msg.lower():
+            st.error("Correo o contraseña incorrectos. Verifica que no haya "
+                     "espacios y que la contraseña sea la actual. Si no la "
+                     "recuerdas, pide a un administrador que la resetee en "
+                     "Configuración → Usuarios.")
+        else:
+            st.error(f"Error al iniciar sesión: {e}")
         return
 
     if resp.user is None or resp.session is None:
-        st.error("Credenciales inválidas")
+        st.error("Correo o contraseña incorrectos.")
         return
 
     _set_session_state(resp.user, resp.session)
