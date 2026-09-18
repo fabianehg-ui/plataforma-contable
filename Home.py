@@ -276,6 +276,12 @@ trib_retencion = st.Page(
     icon="🧾",
     url_path="retencion",
 )
+trib_f350_muisca = st.Page(
+    "app_pages/10a_DIAN_F350_Muisca.py",
+    title="F350 en la DIAN (sin extensión)",
+    icon="🌐",
+    url_path="f350-muisca",
+)
 trib_saludables = st.Page(
     "app_pages/11_Impuestos_Saludables.py",
     title="Impuestos Saludables",
@@ -417,6 +423,7 @@ nav = st.navigation(
             trib_renta,
             trib_iva,
             trib_retencion,
+            trib_f350_muisca,
             trib_saludables,
         ],
         "📈 Reportes": [
