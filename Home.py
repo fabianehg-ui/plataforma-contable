@@ -449,7 +449,7 @@ nav = st.navigation(
             sistema_ayuda,
         ],
     },
-    position="sidebar",
+    position="top",
 )
 
 

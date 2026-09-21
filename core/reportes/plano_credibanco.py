@@ -131,7 +131,8 @@ def _abrir(fuente):
     return wb.worksheets[0]
 
 
-def generar_plano_credibanco(fuente, comprobante=None, documento="1", config=None):
+def generar_plano_credibanco(fuente, comprobante=None, documento="1", config=None,
+                             maestro=None):
     """
     Genera el plano de Contai (texto tab-delimitado) con los gastos y
     retenciones de Credibanco por centro de costo.
@@ -141,6 +142,8 @@ def generar_plano_credibanco(fuente, comprobante=None, documento="1", config=Non
         comprobante: comprobante del asiento (por defecto CONFIG = "10").
         documento:   documento / consecutivo (va en COMPRBNT y Doc ref).
         config:      dict opcional para sobreescribir cuentas/divisores/NIT/etc.
+        maestro:     dict {codigo: (oasis, centro_costo)} de la empresa. Si es
+                     None se usa el MAESTRO embebido (JIPER).
 
     Returns:
         (plano_txt, resumen) donde
@@ -151,6 +154,7 @@ def generar_plano_credibanco(fuente, comprobante=None, documento="1", config=Non
     cfg = dict(CONFIG_DEF)
     if config:
         cfg.update({k: v for k, v in config.items() if v not in (None, "")})
+    maes = maestro if maestro else MAESTRO
     comp = str(comprobante or cfg["comprobante"]).strip()
     doc = str(documento or "1").strip()
 
@@ -187,7 +191,7 @@ def generar_plano_credibanco(fuente, comprobante=None, documento="1", config=Non
         cod = str(r[cCod] or "").strip()
         if not cod:
             continue
-        oasis, cc = MAESTRO.get(cod, (cod, cod))
+        oasis, cc = maes.get(cod, (cod, cod))
         a = agg.setdefault(cc, {"oasis": oasis, "com": 0.0, "ret": 0.0, "riva": 0.0, "rica": 0.0})
         a["com"] += _num(r[cCom]) if cCom is not None and cCom < len(r) else 0
         a["ret"] += _num(r[cRet]) if cRet is not None and cRet < len(r) else 0
@@ -245,3 +249,80 @@ def plano_credibanco_bytes(*args, **kwargs) -> bytes:
     """Igual que generar_plano_credibanco pero devuelve (bytes_latin1, resumen)."""
     txt, resumen = generar_plano_credibanco(*args, **kwargs)
     return txt.encode("latin-1", errors="replace"), resumen
+
+
+# ===========================================================================
+# Configuración por empresa (Supabase) — tablas credibanco_maestro / _config
+# (ver db/migrations/019_credibanco_plano.sql). Cada empresa define su propio
+# maestro (código -> centro de costo) y sus cuentas, sin tocar código.
+# ===========================================================================
+
+def cargar_maestro(sb, empresa_id) -> dict:
+    """Devuelve {codigo: (oasis, centro_costo)} de la empresa desde Supabase.
+    Si la empresa no tiene maestro cargado, devuelve {} (la UI puede sembrarlo)."""
+    try:
+        r = (sb.table("credibanco_maestro")
+             .select("codigo,oasis,centro_costo")
+             .eq("empresa_id", empresa_id).execute())
+        out = {}
+        for row in (r.data or []):
+            cod = str(row.get("codigo") or "").strip()
+            if cod:
+                out[cod] = (str(row.get("oasis") or "").strip(),
+                            str(row.get("centro_costo") or "").strip())
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def guardar_maestro(sb, empresa_id, filas) -> int:
+    """Reemplaza el maestro de la empresa por `filas` (lista de dicts con
+    codigo, oasis, centro_costo). Borra los códigos que ya no estén."""
+    filas = [f for f in filas if str(f.get("codigo") or "").strip()
+             and str(f.get("centro_costo") or "").strip()]
+    codigos = [str(f["codigo"]).strip() for f in filas]
+    # borrar los que ya no estén
+    actuales = cargar_maestro(sb, empresa_id)
+    sobran = [c for c in actuales if c not in codigos]
+    for c in sobran:
+        sb.table("credibanco_maestro").delete().eq("empresa_id", empresa_id).eq("codigo", c).execute()
+    # upsert de los actuales
+    payload = [{"empresa_id": empresa_id, "codigo": str(f["codigo"]).strip(),
+                "oasis": str(f.get("oasis") or "").strip(),
+                "centro_costo": str(f["centro_costo"]).strip()} for f in filas]
+    if payload:
+        sb.table("credibanco_maestro").upsert(payload, on_conflict="empresa_id,codigo").execute()
+    return len(payload)
+
+
+def cargar_config(sb, empresa_id) -> dict:
+    """Devuelve el CONFIG de la empresa mezclado con los valores por defecto."""
+    cfg = dict(CONFIG_DEF)
+    try:
+        r = (sb.table("credibanco_config").select("*")
+             .eq("empresa_id", empresa_id).limit(1).execute())
+        if r.data:
+            row = r.data[0]
+            for k in cfg:
+                if row.get(k) not in (None, ""):
+                    cfg[k] = row[k]
+    except Exception:  # noqa: BLE001
+        pass
+    return cfg
+
+
+def guardar_config(sb, empresa_id, cfg) -> None:
+    """Upsert de la fila de config de la empresa."""
+    campos = ["cuenta_comision", "cuenta_retefuente", "cuenta_rete_iva", "cuenta_rete_ica",
+              "divisor_retefuente", "divisor_rete_iva", "divisor_rete_ica",
+              "nit", "detalle", "tipo", "comprobante"]
+    payload = {"empresa_id": empresa_id}
+    for k in campos:
+        if k in cfg and cfg[k] not in (None, ""):
+            payload[k] = cfg[k]
+    sb.table("credibanco_config").upsert(payload, on_conflict="empresa_id").execute()
+
+
+def maestro_jiper_filas() -> list:
+    """El maestro de JIPER como lista de dicts, para sembrarlo con un botón."""
+    return [{"codigo": c, "oasis": v[0], "centro_costo": v[1]} for c, v in MAESTRO.items()]
