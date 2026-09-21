@@ -326,6 +326,12 @@ rep_recurrente = st.Page(
     icon="📊",
     url_path="reportes-recurrente-token",
 )
+rep_plano_credibanco = st.Page(
+    "app_pages/30_Plano_Credibanco.py",
+    title="Plano Credibanco (gastos y retenciones)",
+    icon="💳",
+    url_path="plano-credibanco",
+)
 rep_contabilidad = st.Page(
     "app_pages/20_Contabilidad.py",
     title="Contabilidad (Libros)",
@@ -433,6 +439,7 @@ nav = st.navigation(
             rep_pyg_detallado,
             rep_certificados,
             rep_recurrente,
+            rep_plano_credibanco,
         ],
         "⚙️ Sistema": [
             sistema_panel_admin,
