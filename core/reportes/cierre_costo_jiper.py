@@ -81,7 +81,10 @@ MAPEO = {
 # Centro de costo que cuadra los traslados de CDP (plug del documento 5).
 CC_PLUG_CDP = "001002"   # CDP LA REGIONAL
 
-# Filas (base-0) de la hoja RESULTADOS
+# Filas (base-0) de la hoja RESULTADOS — solo como RESPALDO. Normalmente se
+# DETECTAN por su etiqueta en la columna A (ver _detectar_filas), porque el
+# bloque de aseo/cafetería se corre de un mes a otro (p.ej. junio fila 25,
+# julio fila 29) y amarrarlas a un número fijo calcula mal el costo.
 FILA_INV_FIN_ALIM = 13          # INV, FINAL ALIMENTOS
 FILA_INV_FIN_CAFASEO = 25       # INV, FINAL ASEO Y CAFETERIA
 FILA_TRAS_ALIM = (11, 12)       # TRASLADOS ALIMENTOS (CDP REGIONAL, CDP MEDELLIN)
@@ -89,6 +92,50 @@ FILA_TRAS_CAFASEO = (23, 24)    # TRASLADOS ASEO Y CAFETERIA (REGIONAL, MEDELLIN
 
 HDR = ["CUENTA", "COMPROBANTE", "FECHA", "DOCUMENTO", "DOCREF", "NIT",
        "DETALLE", "TR", "VALOR", "BASE", "CC"]
+
+
+def _norm_lbl(s) -> str:
+    """Normaliza la etiqueta de la columna A: mayúsculas, sin tildes ni comas."""
+    s = str(s or "").upper().strip()
+    for a, b in (("Á", "A"), ("É", "E"), ("Í", "I"), ("Ó", "O"), ("Ú", "U"), ("Ñ", "N")):
+        s = s.replace(a, b)
+    return " ".join(s.replace(",", " ").split())
+
+
+def _detectar_filas(rows):
+    """Encuentra por ETIQUETA (columna A) las filas de inventario final y de
+    traslados de CDP, tanto para alimentos como para aseo/cafetería. Devuelve
+    (fila_inv_alim, fila_inv_cafaseo, filas_tras_alim, filas_tras_cafaseo).
+
+    Robusto ante corrimientos de filas entre meses. Si no encuentra alguna,
+    cae a las constantes FILA_* de respaldo.
+    """
+    inv_a = inv_c = None
+    tras_a, tras_c = [], []
+    for i, r in enumerate(rows):
+        lbl = _norm_lbl(r[0] if r else "")
+        if not lbl or "TOTAL" in lbl:
+            continue
+        es_aseocaf = ("ASEO" in lbl) or ("CAFETER" in lbl)
+        if lbl.startswith("INV") and "FINAL" in lbl:
+            if es_aseocaf and inv_c is None:
+                inv_c = i
+            elif ("ALIMENTOS" in lbl) and inv_a is None:
+                inv_a = i
+        elif lbl.startswith("TRASLADOS"):
+            if es_aseocaf:
+                tras_c.append(i)
+            elif "ALIMENTOS" in lbl:
+                tras_a.append(i)
+    if inv_a is None:
+        inv_a = FILA_INV_FIN_ALIM
+    if inv_c is None:
+        inv_c = FILA_INV_FIN_CAFASEO
+    if not tras_a:
+        tras_a = list(FILA_TRAS_ALIM)
+    if not tras_c:
+        tras_c = list(FILA_TRAS_CAFASEO)
+    return inv_a, inv_c, tuple(tras_a), tuple(tras_c)
 
 
 def _num(v) -> float:
@@ -122,14 +169,18 @@ def _abrir(fuente, hoja=None):
 
 def _leer_bp(bp_fuente):
     """Del BP: compras del mes (710501/02 alim, 710503 caf, 710504 aseo) e
-    inventario inicial (saldo anterior 14050501 alim, 14050502 caf/aseo) por CC."""
+    inventario inicial (saldo anterior 14050501 alim, 14050502 caf/aseo) por CC.
+    Devuelve también el nombre de cada CC (columna 'Nombre CC' del BP)."""
     ws = _abrir(bp_fuente)
-    ca, cf, cs, ia, ic = {}, {}, {}, {}, {}
+    ca, cf, cs, ia, ic, nombres = {}, {}, {}, {}, {}, {}
     for r in ws.iter_rows(values_only=True):
         cta = str(r[0] or "").strip()
         cc = str(r[3] or "").strip() if len(r) > 3 else ""
         if not cc or not cta:
             continue
+        nom = str(r[4] or "").strip() if len(r) > 4 else ""
+        if nom:
+            nombres[cc] = nom
         mov = _num(r[6]) - _num(r[7]) if len(r) > 7 else 0.0
         sa = _num(r[5]) if len(r) > 5 else 0.0
         if cta.startswith("710501") or cta.startswith("710502"):
@@ -142,13 +193,18 @@ def _leer_bp(bp_fuente):
             ia[cc] = ia.get(cc, 0.0) + sa
         elif cta.startswith("14050502"):
             ic[cc] = ic.get(cc, 0.0) + sa
-    return ca, cf, cs, ia, ic
+    return ca, cf, cs, ia, ic, nombres
 
 
 def _leer_resultados(res_fuente):
-    """Del RESULTADOS: inventario final y traslados de CDP por CC."""
+    """Del RESULTADOS: inventario final y traslados de CDP por CC.
+
+    Las filas se DETECTAN por su etiqueta (no por número fijo), porque el
+    bloque de aseo/cafetería se corre entre meses.
+    """
     ws = _abrir(res_fuente, hoja="RESULTADOS")
     rows = list(ws.iter_rows(values_only=True))
+    f_inv_a, f_inv_c, f_tras_a, f_tras_c = _detectar_filas(rows)
 
     def cell(ri, col):
         if ri < len(rows) and col < len(rows[ri]):
@@ -157,11 +213,13 @@ def _leer_resultados(res_fuente):
 
     fin_a, fin_c, tras_a, tras_c = {}, {}, {}, {}
     for cc, (col, _nom) in MAPEO.items():
-        fin_a[cc] = cell(FILA_INV_FIN_ALIM, col)
-        fin_c[cc] = cell(FILA_INV_FIN_CAFASEO, col)
-        tras_a[cc] = sum(cell(ri, col) for ri in FILA_TRAS_ALIM)
-        tras_c[cc] = sum(cell(ri, col) for ri in FILA_TRAS_CAFASEO)
-    return fin_a, fin_c, tras_a, tras_c
+        fin_a[cc] = cell(f_inv_a, col)
+        fin_c[cc] = cell(f_inv_c, col)
+        tras_a[cc] = sum(cell(ri, col) for ri in f_tras_a)
+        tras_c[cc] = sum(cell(ri, col) for ri in f_tras_c)
+    filas = {"inv_alim": f_inv_a, "inv_cafaseo": f_inv_c,
+             "tras_alim": f_tras_a, "tras_cafaseo": f_tras_c}
+    return fin_a, fin_c, tras_a, tras_c, filas
 
 
 def _fila(cta, det, val, cc, tr, comp, fecha, doc):
@@ -186,17 +244,30 @@ def generar_cierre_costo(bp_fuente, res_fuente, comprobante="10",
         # último día del mes actual por defecto; el usuario normalmente lo fija
         fecha_str = datetime.today().strftime("%m/%d/%Y")
 
-    ca, cf, cs, ia, ic = _leer_bp(bp_fuente)
-    fin_a, fin_c, tras_a, tras_c = _leer_resultados(res_fuente)
+    ca, cf, cs, ia, ic, nombres_bp = _leer_bp(bp_fuente)
+    fin_a, fin_c, tras_a, tras_c, filas = _leer_resultados(res_fuente)
 
-    ccs = sorted(MAPEO.keys())
+    def nombre(cc):
+        if cc in MAPEO:
+            return MAPEO[cc][1]
+        return nombres_bp.get(cc, cc)
+
+    # Todos los CC con compras (aunque no tengan columna en RESULTADOS, p.ej.
+    # ADMINISTRACIÓN 001001): así la cuenta 71 SIEMPRE cierra a cero. Los CC sin
+    # inventario cierran sus compras enteras a costo.
+    con_compras = {cc for cc in set(ca) | set(cf) | set(cs)
+                   if round(ca.get(cc, 0), 2) or round(cf.get(cc, 0), 2) or round(cs.get(cc, 0), 2)}
+    ccs = sorted(set(MAPEO.keys()) | con_compras)
+    ccs_sin_inv = sorted(con_compras - set(MAPEO.keys()))
 
     # ---------------- Documento 4: cierre de costo ----------------
     l4 = ["\t".join(HDR)]
     l4.append(_fila("71059501", "REGISTRO DE CONTROL NO ELIMINAR", 0.0, "001001", 1, comp, fecha_str, d4))
     tot = {"compras": 0.0, "costo": 0.0}
     for cc in ccs:
-        nom = MAPEO[cc][1]
+        if cc == "001001" and cc not in con_compras:
+            continue  # solo la línea de control (no tiene compras)
+        nom = nombre(cc)
         c_a = ca.get(cc, 0.0)
         c_f = cf.get(cc, 0.0)
         c_s = cs.get(cc, 0.0)
@@ -240,7 +311,7 @@ def generar_cierre_costo(bp_fuente, res_fuente, comprobante="10",
     l5.append(_fila("71059501", "REGISTRO DE CONTROL NO ELIMINAR", 0.0, "001001", 1, comp, fecha_str, d5))
     tot_tras = 0.0
     for cc in ccs:
-        nom = MAPEO[cc][1]
+        nom = nombre(cc)
         va = ta[cc]
         vc = tc[cc]
         if round(va, 2) != 0:
@@ -257,7 +328,10 @@ def generar_cierre_costo(bp_fuente, res_fuente, comprobante="10",
             if not ln.strip():
                 continue
             f = ln.split("\t")
-            (d := d + float(f[8])) if f[7] == "1" else (c := c + float(f[8]))
+            if f[7] == "1":
+                d += float(f[8])
+            else:
+                c += float(f[8])
         return round(d, 2), round(c, 2)
 
     d4d, d4c = cuadre(doc4_txt)
@@ -271,5 +345,14 @@ def generar_cierre_costo(bp_fuente, res_fuente, comprobante="10",
         "total_compras": round(tot["compras"], 2),
         "total_costo": round(tot["costo"], 2),
         "total_traslados": round(tot_tras, 2),
+        "filas_detectadas": {
+            "inv_final_alimentos": filas["inv_alim"] + 1,
+            "inv_final_aseo_cafeteria": filas["inv_cafaseo"] + 1,
+            "traslados_alimentos": [f + 1 for f in filas["tras_alim"]],
+            "traslados_aseo_cafeteria": [f + 1 for f in filas["tras_cafaseo"]],
+        },
+        # CC con compras pero SIN inventario (se cierran enteros a costo);
+        # incluirlos es lo que hace que la cuenta 71 cierre a cero.
+        "ccs_sin_inventario": [f"{cc} ({nombre(cc)})" for cc in ccs_sin_inv],
     }
     return doc4_txt, doc5_txt, resumen
