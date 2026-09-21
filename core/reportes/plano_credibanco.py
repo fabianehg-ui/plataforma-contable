@@ -217,18 +217,20 @@ def generar_plano_credibanco(fuente, comprobante=None, documento="1", config=Non
 
     ccs = sorted(agg.keys())
     tot = {"com": 0.0, "ret": 0.0, "riva": 0.0, "rica": 0.0}
-    # Igual que la macro: primero todas las comisiones, luego retefuente, reteIVA, reteICA.
+    # Valor y base SIEMPRE en POSITIVO: en el plano de Contai el signo lo da el
+    # Tipo (1=débito), así que el valor debe ir positivo o el sistema lo rechaza.
+    # Orden igual que la macro: comisiones, retefuente, reteIVA, reteICA.
     for cc in ccs:
-        v = -agg[cc]["com"]
+        v = abs(agg[cc]["com"])
         escribe(cfg["cuenta_comision"], v, 0.0, cc); tot["com"] += v
     for cc in ccs:
-        v = -agg[cc]["ret"]
+        v = abs(agg[cc]["ret"])
         escribe(cfg["cuenta_retefuente"], v, v / cfg["divisor_retefuente"] if cfg["divisor_retefuente"] else 0, cc); tot["ret"] += v
     for cc in ccs:
-        v = -agg[cc]["riva"]
+        v = abs(agg[cc]["riva"])
         escribe(cfg["cuenta_rete_iva"], v, v / cfg["divisor_rete_iva"] if cfg["divisor_rete_iva"] else 0, cc); tot["riva"] += v
     for cc in ccs:
-        v = -agg[cc]["rica"]
+        v = abs(agg[cc]["rica"])
         escribe(cfg["cuenta_rete_ica"], v, v / cfg["divisor_rete_ica"] if cfg["divisor_rete_ica"] else 0, cc); tot["rica"] += v
 
     plano_txt = "\r\n".join(lineas) + "\r\n"

@@ -78,10 +78,10 @@ with tab_gen:
 
         st.success(f"Plano generado: {res['lineas']} líneas · {res['centros']} centros de costo · fecha {res['fecha']}.")
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Comisión", f"${-res['total_comision']:,.0f}")
-        m2.metric("Retefuente", f"${-res['total_retefuente']:,.0f}")
-        m3.metric("ReteIVA", f"${-res['total_rete_iva']:,.0f}")
-        m4.metric("ReteICA", f"${-res['total_rete_ica']:,.0f}")
+        m1.metric("Comisión", f"${res['total_comision']:,.0f}")
+        m2.metric("Retefuente", f"${res['total_retefuente']:,.0f}")
+        m3.metric("ReteIVA", f"${res['total_rete_iva']:,.0f}")
+        m4.metric("ReteICA", f"${res['total_rete_ica']:,.0f}")
         st.download_button(
             "⬇️ Descargar plano (.txt)",
             data=txt.encode("latin-1", errors="replace"),
