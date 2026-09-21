@@ -139,18 +139,24 @@ hr{ border-color:rgba(14,165,233,.18); }
    (el * de arriba aclaraba el texto del botón; aquí lo devolvemos a
     oscuro sobre el degradado teal y damos contraste al selector)
    ============================================================ */
-/* Selector de empresa activa: campo translúcido, texto blanco */
+/* Selector de empresa activa: campo BLANCO sólido con texto oscuro nítido.
+   (baseweb usa -webkit-text-fill-color; por eso hay que forzarlo, si no el
+    nombre de la empresa se ve casi invisible sobre el fondo oscuro.) */
 section[data-testid="stSidebar"] [data-baseweb="select"] > div{
-  background:rgba(255,255,255,.10) !important;
-  border:1px solid rgba(125,211,252,.40) !important;
+  background:#ffffff !important;
+  border:1px solid var(--ig-sky) !important;
 }
-section[data-testid="stSidebar"] [data-baseweb="select"] *{
-  color:#ffffff !important; font-weight:600 !important;
+section[data-testid="stSidebar"] [data-baseweb="select"] div,
+section[data-testid="stSidebar"] [data-baseweb="select"] span,
+section[data-testid="stSidebar"] [data-baseweb="select"] input{
+  color:#12324a !important;
+  -webkit-text-fill-color:#12324a !important;
+  font-weight:700 !important;
 }
 /* Nombre de la empresa y textos (markdown/caption) bien claros */
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] *{
-  color:#eef5fc !important;
+  color:#eef5fc !important; -webkit-text-fill-color:#eef5fc !important;
 }
 /* Botón "Cerrar sesión": relleno de marca + TEXTO OSCURO nítido */
 section[data-testid="stSidebar"] .stButton>button,
@@ -172,12 +178,19 @@ section[data-testid="stSidebar"] .stButton>button{
   border-bottom:2px solid rgba(45,212,191,.40);
   box-shadow:0 4px 18px rgba(6,20,34,.30);
 }
-/* Texto de pestañas y encabezados de sección: claro y con peso */
+/* Texto de pestañas y encabezados de sección: claro y con peso.
+   (baseweb pinta con -webkit-text-fill-color; hay que forzarlo o los
+    nombres del menú superior quedan invisibles sobre la barra oscura.) */
 [data-testid="stHeader"] a,
 [data-testid="stHeader"] a *,
+[data-testid="stHeader"] button,
+[data-testid="stHeader"] button *,
+[data-testid="stHeader"] span,
+[data-testid="stHeader"] p,
 [data-testid="stHeader"] [data-testid="stNavSectionHeader"],
 [data-testid="stHeader"] [data-testid="stNavSectionHeader"] *{
-  color:#eef5fc !important; font-weight:700 !important;
+  color:#eef5fc !important; -webkit-text-fill-color:#eef5fc !important;
+  font-weight:700 !important;
 }
 /* Cada pestaña / sección como "chip" con hover teal */
 [data-testid="stHeader"] a,
@@ -189,14 +202,14 @@ section[data-testid="stSidebar"] .stButton>button{
 [data-testid="stHeader"] [data-testid="stNavSectionHeader"]:hover{
   background:rgba(45,212,191,.22) !important; transform:translateY(-1px);
 }
-/* Pestaña ACTIVA: degradado + subrayado teal, texto blanco */
+/* Pestaña ACTIVA (ej. "Inicio"): píldora teal con TEXTO OSCURO nítido */
 [data-testid="stHeader"] a[aria-current="page"],
 [data-testid="stHeader"] a[aria-current="page"] *{
-  color:#ffffff !important;
+  color:#04202a !important; -webkit-text-fill-color:#04202a !important;
 }
 [data-testid="stHeader"] a[aria-current="page"]{
-  background:linear-gradient(90deg, rgba(45,212,191,.32), rgba(14,165,233,.24)) !important;
-  box-shadow:inset 0 -3px 0 var(--ig-teal);
+  background:linear-gradient(135deg, var(--ig-teal), var(--ig-sky)) !important;
+  box-shadow:0 4px 14px rgba(14,165,233,.35);
 }
 /* Menús desplegables de cada sección (popover): ítems resaltables */
 [data-baseweb="popover"] a,
