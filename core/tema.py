@@ -139,20 +139,27 @@ hr{ border-color:rgba(14,165,233,.18); }
    (el * de arriba aclaraba el texto del botón; aquí lo devolvemos a
     oscuro sobre el degradado teal y damos contraste al selector)
    ============================================================ */
-/* Selector de empresa activa: campo BLANCO sólido con LETRA NEGRA EN NEGRILLA.
-   (baseweb usa -webkit-text-fill-color; por eso hay que forzarlo, si no el
-    nombre de la empresa se ve casi invisible sobre el fondo oscuro.) */
+/* Selector de empresa activa: campo OSCURO con LETRA BLANCA EN NEGRILLA.
+   (El texto claro de la barra lateral sí se aplica; poniendo el campo oscuro
+    el nombre de la empresa queda blanco sobre oscuro = se lee seguro. Antes
+    el campo salía blanco con letra blanca y no se veía.) */
 section[data-testid="stSidebar"] div[data-baseweb="select"],
 section[data-testid="stSidebar"] div[data-baseweb="select"] > div,
 section[data-testid="stSidebar"] div[data-baseweb="select"] > div > div,
 section[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] > div{
-  background:#ffffff !important;
-  border-color:var(--ig-sky) !important;
+  background:#0e2536 !important;
+  border:1px solid var(--ig-sky) !important;
 }
-section[data-testid="stSidebar"] div[data-baseweb="select"] *{
-  color:#000000 !important;
-  -webkit-text-fill-color:#000000 !important;
+section[data-testid="stSidebar"] div[data-baseweb="select"] div,
+section[data-testid="stSidebar"] div[data-baseweb="select"] span,
+section[data-testid="stSidebar"] div[data-baseweb="select"] input{
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
   font-weight:800 !important;
+}
+/* La flechita del desplegable también en claro */
+section[data-testid="stSidebar"] div[data-baseweb="select"] svg{
+  fill:#eef5fc !important; color:#eef5fc !important;
 }
 /* Nombre de la empresa y textos (markdown/caption) bien claros */
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
