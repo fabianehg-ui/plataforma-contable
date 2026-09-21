@@ -414,13 +414,13 @@ nav = st.navigation(
             asistente_nomina,
             asistente_ventas_c13,
             asistente_pos,
+            asistente_bancos,
             rep_plano_credibanco,
         ],
         "🔌 Integraciones": [
             integ_plano_contai,
             asistente_bittal,
             asistente_siigo,
-            asistente_bancos,
         ],
         "📊 Herramientas Tributarias": [
             trib_radian,
