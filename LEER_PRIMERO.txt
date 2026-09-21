@@ -1,37 +1,46 @@
-ACTUALIZACIÓN INTEGRAL — Menú superior + contraste + Credibanco
-================================================================
+CIERRE Y TRASLADO DE COSTO (JIPER) — módulo para la repo
+=========================================================
 
-Copia estos archivos SOBRE tu repo (respetando las carpetas):
+Copia estos archivos SOBRE tu repo (respetando carpetas):
 
   Home.py                                  -> raíz
-  requirements.txt                         -> raíz   (streamlit>=1.46.0)
-  core/tema.py                             -> core/
-  core/reportes/plano_credibanco.py        -> core/reportes/
-  app_pages/30_Plano_Credibanco.py         -> app_pages/
-  db/migrations/019_credibanco_plano.sql   -> db/migrations/
+  core/reportes/cierre_costo_jiper.py      -> core/reportes/
+  app_pages/31_Cierre_Costo_CDP.py         -> app_pages/
 
-QUÉ CAMBIA
+QUÉ HACE
+--------
+En 🤖 Asistente Contable aparece "Cierre y traslado de costo (JIPER)".
+Subes dos archivos del mes:
+  1) BP para costo (.xlsx)  — de aquí salen las compras del mes
+     (movimiento de 710501/02/03/04) y el inventario inicial
+     (saldo anterior de 14050501 y 14050502) por centro de costo.
+  2) RESULTADOS del mes (.xlsx) — de aquí salen los inventarios finales
+     (fila INV FINAL ALIMENTOS y ASEO Y CAFETERIA) y los traslados de CDP.
+
+Genera y deja descargar DOS planos de Contai (comprobante 10):
+  · Documento 4 — CIERRE DE COSTO
+      71059501/502/503 (cierre compras), 61400501 (costo alimentos),
+      61401001 (costo cafetería y aseo), 14050501/14050502 (neto inventario).
+      costo = inv_inicial + compras − inv_final.
+  · Documento 5 — TRASLADOS DE CDP
+      61409501 (alimentos), 61409502 (cafetería y aseo). Netea a cero
+      (los CDP acreditan, los puntos debitan). El CDP LA REGIONAL cuadra
+      el documento al centavo.
+
+La página verifica en pantalla que débitos = créditos en ambos documentos.
+
+VALIDACIÓN
 ----------
-1. Menú horizontal arriba (pestañas desplegables), ya no a la izquierda.
-   - Barra superior con el degradado de la marca.
-   - Pestañas más VISIBLES: texto claro, hover teal y la pestaña activa
-     resaltada con subrayado.
-2. Barra lateral con mejor contraste:
-   - El nombre de la empresa se lee claro sobre el fondo oscuro.
-   - El botón "Cerrar sesión" queda con letra OSCURA nítida sobre el
-     degradado teal (antes se veía muy clarito).
-3. "Plano Credibanco (gastos y retenciones)" ahora vive en
-   🤖 Asistente Contable (ya no en Reportes).
+Reproduce EXACTO (0 diferencias) los planos de junio 2026 que ya cuadramos
+y subiste a Contai. Se incluyen de muestra:
+  plano_cierre_costo_junio_doc4.txt   (187 líneas, cierre 71 = 553.282.656)
+  plano_traslado_cdp_junio_doc5.txt   (55 líneas, netea a 0.00)
 
-BASE DE DATOS (una sola vez)
-----------------------------
-En Supabase -> SQL Editor -> pega y ejecuta:
-  db/migrations/019_credibanco_plano.sql
-Crea credibanco_maestro y credibanco_config (vacías, por empresa, con RLS).
-Cada empresa carga su maestro/cuentas desde la propia página
-(o usa el botón "Sembrar maestro de JIPER").
+OJO — ESPECÍFICO DE JIPER
+-------------------------
+El mapeo centro de costo <-> columna del RESULTADOS y las filas de inventario
+están calibrados al formato de JIPER (MAPEO y FILA_* en el módulo). Si otra
+empresa lo usa, la página avisa. Si cambia el layout del RESULTADOS, se ajusta
+en core/reportes/cierre_costo_jiper.py.
 
-REQUISITO
----------
-El menú superior necesita streamlit >= 1.46.0 (ya está en requirements.txt).
-Si corres en la nube: reinicia la app tras subir requirements.txt.
+REQUISITO: openpyxl (ya está en tu requirements).

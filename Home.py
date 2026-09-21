@@ -332,6 +332,12 @@ rep_plano_credibanco = st.Page(
     icon="💳",
     url_path="plano-credibanco",
 )
+asistente_cierre_costo = st.Page(
+    "app_pages/31_Cierre_Costo_CDP.py",
+    title="Cierre y traslado de costo (JIPER)",
+    icon="🧮",
+    url_path="cierre-costo-cdp",
+)
 rep_contabilidad = st.Page(
     "app_pages/20_Contabilidad.py",
     title="Contabilidad (Libros)",
@@ -416,6 +422,7 @@ nav = st.navigation(
             asistente_pos,
             asistente_bancos,
             rep_plano_credibanco,
+            asistente_cierre_costo,
         ],
         "🔌 Integraciones": [
             integ_plano_contai,
