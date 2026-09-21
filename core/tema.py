@@ -139,27 +139,33 @@ hr{ border-color:rgba(14,165,233,.18); }
    (el * de arriba aclaraba el texto del botón; aquí lo devolvemos a
     oscuro sobre el degradado teal y damos contraste al selector)
    ============================================================ */
-/* Selector de empresa activa: campo OSCURO con LETRA BLANCA EN NEGRILLA.
-   (El texto claro de la barra lateral sí se aplica; poniendo el campo oscuro
-    el nombre de la empresa queda blanco sobre oscuro = se lee seguro. Antes
-    el campo salía blanco con letra blanca y no se veía.) */
-section[data-testid="stSidebar"] div[data-baseweb="select"],
-section[data-testid="stSidebar"] div[data-baseweb="select"] > div,
-section[data-testid="stSidebar"] div[data-baseweb="select"] > div > div,
-section[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] > div{
-  background:#0e2536 !important;
+/* Selector de empresa activa: campo CLARO con LETRA OSCURA EN NEGRILLA.
+   Ancla en el contenedor del widget (stSelectbox), que SÍ envuelve el valor
+   —el DOM interno de baseweb no se dejaba pisar—. El * gana en especificidad
+   a la regla general que aclaraba todo el texto de la barra. */
+section[data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+section[data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div > div,
+section[data-testid="stSidebar"] [data-testid="stSelectbox"] div[role="combobox"]{
+  background:#ffffff !important;
   border:1px solid var(--ig-sky) !important;
 }
-section[data-testid="stSidebar"] div[data-baseweb="select"] div,
-section[data-testid="stSidebar"] div[data-baseweb="select"] span,
-section[data-testid="stSidebar"] div[data-baseweb="select"] input{
-  color:#ffffff !important;
-  -webkit-text-fill-color:#ffffff !important;
+section[data-testid="stSidebar"] [data-testid="stSelectbox"] *{
+  color:#0b1622 !important;
+  -webkit-text-fill-color:#0b1622 !important;
   font-weight:800 !important;
 }
-/* La flechita del desplegable también en claro */
-section[data-testid="stSidebar"] div[data-baseweb="select"] svg{
-  fill:#eef5fc !important; color:#eef5fc !important;
+/* Flechita del desplegable, oscura sobre el campo claro */
+section[data-testid="stSidebar"] [data-testid="stSelectbox"] svg{
+  fill:#0b1622 !important;
+}
+
+/* Rol: chip claro con letra oscura (va sobre la barra oscura, así se lee) */
+section[data-testid="stSidebar"] code{
+  background:#e8eef5 !important;
+  color:#0b1622 !important;
+  -webkit-text-fill-color:#0b1622 !important;
+  font-weight:800 !important;
+  border-radius:6px; padding:.05rem .35rem;
 }
 /* Nombre de la empresa y textos (markdown/caption) bien claros */
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
