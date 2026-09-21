@@ -53,7 +53,7 @@ section[data-testid="stSidebar"]{
   background:linear-gradient(180deg, var(--ig-dark) 0%, var(--ig-dark2) 100%);
   border-right:1px solid rgba(125,211,252,.12);
 }
-section[data-testid="stSidebar"] *{ color:#dfeaf5 !important; }
+section[data-testid="stSidebar"] *{ color:#eef5fc !important; }
 section[data-testid="stSidebar"] a{ color:var(--ig-sky2) !important; }
 /* Ítems de navegación */
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a:hover,
@@ -133,6 +133,78 @@ hr{ border-color:rgba(14,165,233,.18); }
 [data-testid="stMain"] small, [data-testid="stMain"] .stCaption{ color:#46586b !important; }
 /* Editor de datos / tablas: texto oscuro sobre celdas claras */
 [data-testid="stDataFrame"] *, [data-testid="stDataEditor"] *{ color:#1f2b38; }
+
+/* ============================================================
+   BARRA LATERAL — nombre de empresa y botón "Cerrar sesión" nítidos
+   (el * de arriba aclaraba el texto del botón; aquí lo devolvemos a
+    oscuro sobre el degradado teal y damos contraste al selector)
+   ============================================================ */
+/* Selector de empresa activa: campo translúcido, texto blanco */
+section[data-testid="stSidebar"] [data-baseweb="select"] > div{
+  background:rgba(255,255,255,.10) !important;
+  border:1px solid rgba(125,211,252,.40) !important;
+}
+section[data-testid="stSidebar"] [data-baseweb="select"] *{
+  color:#ffffff !important; font-weight:600 !important;
+}
+/* Nombre de la empresa y textos (markdown/caption) bien claros */
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] *{
+  color:#eef5fc !important;
+}
+/* Botón "Cerrar sesión": relleno de marca + TEXTO OSCURO nítido */
+section[data-testid="stSidebar"] .stButton>button,
+section[data-testid="stSidebar"] .stButton>button *{
+  color:#04202a !important;
+}
+section[data-testid="stSidebar"] .stButton>button{
+  background:linear-gradient(135deg, var(--ig-teal), var(--ig-sky)) !important;
+  font-weight:800 !important; border:0 !important;
+  box-shadow:0 6px 16px rgba(14,165,233,.38) !important;
+}
+
+/* ============================================================
+   NAVEGACIÓN SUPERIOR (position="top") — pestañas visibles y con marca
+   ============================================================ */
+/* La barra superior toma el degradado de marca (como la lateral) */
+[data-testid="stHeader"]{
+  background:linear-gradient(90deg, var(--ig-dark) 0%, var(--ig-dark2) 55%, var(--ig-ink) 100%) !important;
+  border-bottom:2px solid rgba(45,212,191,.40);
+  box-shadow:0 4px 18px rgba(6,20,34,.30);
+}
+/* Texto de pestañas y encabezados de sección: claro y con peso */
+[data-testid="stHeader"] a,
+[data-testid="stHeader"] a *,
+[data-testid="stHeader"] [data-testid="stNavSectionHeader"],
+[data-testid="stHeader"] [data-testid="stNavSectionHeader"] *{
+  color:#eef5fc !important; font-weight:700 !important;
+}
+/* Cada pestaña / sección como "chip" con hover teal */
+[data-testid="stHeader"] a,
+[data-testid="stHeader"] [data-testid="stNavSectionHeader"]{
+  border-radius:10px; padding:.30rem .75rem !important;
+  transition:background .12s ease, transform .12s ease;
+}
+[data-testid="stHeader"] a:hover,
+[data-testid="stHeader"] [data-testid="stNavSectionHeader"]:hover{
+  background:rgba(45,212,191,.22) !important; transform:translateY(-1px);
+}
+/* Pestaña ACTIVA: degradado + subrayado teal, texto blanco */
+[data-testid="stHeader"] a[aria-current="page"],
+[data-testid="stHeader"] a[aria-current="page"] *{
+  color:#ffffff !important;
+}
+[data-testid="stHeader"] a[aria-current="page"]{
+  background:linear-gradient(90deg, rgba(45,212,191,.32), rgba(14,165,233,.24)) !important;
+  box-shadow:inset 0 -3px 0 var(--ig-teal);
+}
+/* Menús desplegables de cada sección (popover): ítems resaltables */
+[data-baseweb="popover"] a,
+[data-baseweb="popover"] [role="option"]{ font-weight:600; border-radius:8px; }
+[data-baseweb="popover"] a:hover,
+[data-baseweb="popover"] [role="option"]:hover{
+  background:rgba(45,212,191,.16) !important;
+}
 </style>
 """
 

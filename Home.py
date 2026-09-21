@@ -414,6 +414,7 @@ nav = st.navigation(
             asistente_nomina,
             asistente_ventas_c13,
             asistente_pos,
+            rep_plano_credibanco,
         ],
         "🔌 Integraciones": [
             integ_plano_contai,
@@ -439,7 +440,6 @@ nav = st.navigation(
             rep_pyg_detallado,
             rep_certificados,
             rep_recurrente,
-            rep_plano_credibanco,
         ],
         "⚙️ Sistema": [
             sistema_panel_admin,

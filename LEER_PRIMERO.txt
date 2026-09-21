@@ -1,0 +1,37 @@
+ACTUALIZACIÓN INTEGRAL — Menú superior + contraste + Credibanco
+================================================================
+
+Copia estos archivos SOBRE tu repo (respetando las carpetas):
+
+  Home.py                                  -> raíz
+  requirements.txt                         -> raíz   (streamlit>=1.46.0)
+  core/tema.py                             -> core/
+  core/reportes/plano_credibanco.py        -> core/reportes/
+  app_pages/30_Plano_Credibanco.py         -> app_pages/
+  db/migrations/019_credibanco_plano.sql   -> db/migrations/
+
+QUÉ CAMBIA
+----------
+1. Menú horizontal arriba (pestañas desplegables), ya no a la izquierda.
+   - Barra superior con el degradado de la marca.
+   - Pestañas más VISIBLES: texto claro, hover teal y la pestaña activa
+     resaltada con subrayado.
+2. Barra lateral con mejor contraste:
+   - El nombre de la empresa se lee claro sobre el fondo oscuro.
+   - El botón "Cerrar sesión" queda con letra OSCURA nítida sobre el
+     degradado teal (antes se veía muy clarito).
+3. "Plano Credibanco (gastos y retenciones)" ahora vive en
+   🤖 Asistente Contable (ya no en Reportes).
+
+BASE DE DATOS (una sola vez)
+----------------------------
+En Supabase -> SQL Editor -> pega y ejecuta:
+  db/migrations/019_credibanco_plano.sql
+Crea credibanco_maestro y credibanco_config (vacías, por empresa, con RLS).
+Cada empresa carga su maestro/cuentas desde la propia página
+(o usa el botón "Sembrar maestro de JIPER").
+
+REQUISITO
+---------
+El menú superior necesita streamlit >= 1.46.0 (ya está en requirements.txt).
+Si corres en la nube: reinicia la app tras subir requirements.txt.
