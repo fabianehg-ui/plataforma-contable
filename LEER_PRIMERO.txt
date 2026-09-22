@@ -47,6 +47,14 @@ CONCILIAR TODO (todos los bancos de una vez)
  - Cada banco lee de SU propia cuenta del auxiliar y SU propia hoja del reporte
    (el lector reconoce el formato de cada banco: 4451, Occidente, Davivienda,
    Bogotá, ahorros, con «N COMPROBANTE»/«COMPROBANTE»/«#COMPROBANTE», etc.).
+ - En el auxiliar se toman AMBOS lados: DÉBITOS = consignaciones/abonos,
+   CRÉDITOS = pagos.
+ - SALDO DEL EXTRACTO AUTOMÁTICO: se detecta del PIE de cada hoja del reporte
+   (bloque INICIAL/DÉBITOS/CRÉDITOS/FINAL → el FINAL es el saldo del extracto),
+   tanto en «Conciliar todo» como en «Conciliar (uno)». Igual puedes ajustarlo.
+   Si una hoja no trae ese bloque (o está vacía), el saldo queda en 0 para que
+   lo digites (p.ej. si el saldo de un banco está en otra hoja, ajusta el
+   «nombre de la hoja» de ese banco en Configuración).
  - PLANO DE GASTOS CONSOLIDADO: un solo plano con los gastos bancarios de TODOS
    los bancos, repartidos en partes iguales entre los centros; el datáfono por
    centro de costo solo donde aplica. Cada banco se acredita contra SU cuenta

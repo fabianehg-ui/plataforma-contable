@@ -122,12 +122,29 @@ with tab_todo:
 
     periodo_t = st.text_input("Periodo (encabezado de los documentos)", "", key="ct_per")
 
+    # índice hoja -> archivo y saldo del extracto (FINAL) detectado al pie de cada hoja
+    hoja_idx, saldo_map = {}, {}
+    if f_rep_t:
+        for f in f_rep_t:
+            data = f.getvalue()
+            for h in C.hojas_de(data):
+                hoja_idx.setdefault(h.strip().upper(), data)
     # tabla editable con saldo y tránsito por banco
     st.markdown("#### 2. Saldo del extracto y tránsito por banco")
-    base = [{"banco": b["nombre"], "cuenta_auxiliar": b.get("cuenta_auxiliar", ""),
-             "hoja_reporte": b.get("hoja_reporte", ""),
-             "usa_datafono": C.usa_datafono(b),
-             "saldo_extracto": 0.0, "transito_real": 0.0} for b in bancos]
+    st.caption("El **saldo del extracto** se detecta automáticamente del pie de "
+               "cada hoja (bloque INICIAL/DÉBITOS/CRÉDITOS/FINAL); puedes ajustarlo.")
+    base = []
+    for b in bancos:
+        hoja = b.get("hoja_reporte", "").strip()
+        fbytes = hoja_idx.get(hoja.upper())
+        sal = 0.0
+        if fbytes is not None:
+            det = C.saldo_extracto_de(fbytes, hoja)
+            if det.get("final") is not None:
+                sal = round(det["final"], 2)
+        base.append({"banco": b["nombre"], "cuenta_auxiliar": b.get("cuenta_auxiliar", ""),
+                     "hoja_reporte": hoja, "usa_datafono": C.usa_datafono(b),
+                     "saldo_extracto": sal, "transito_real": 0.0})
     dft = pd.DataFrame(base)
     edt = st.data_editor(
         dft, use_container_width=True, key="ct_tabla", hide_index=True,
@@ -145,12 +162,6 @@ with tab_todo:
     if st.button("🧮 Conciliar todo", type="primary",
                  disabled=(f_aux_t is None or not f_rep_t)):
         aux_bytes = f_aux_t.getvalue()
-        rep_files = [(f.name, f.getvalue()) for f in f_rep_t]
-        # índice hoja -> archivo
-        hoja_idx = {}
-        for name, data in rep_files:
-            for h in C.hojas_de(data):
-                hoja_idx.setdefault(h.strip().upper(), data)
         maestro = C.cargar_maestro(sb, emp["id"])
         data_df = f_data_t.getvalue() if f_data_t else None
         resultados, avisos = [], []
@@ -186,7 +197,9 @@ with tab_todo:
                 r = res["r"]
                 dif = round((r["saldo_cierre"] - r["consignaciones_transito"]) - r["saldo_banco"], 2)
                 resumen.append({"Banco": res["banco"], "Saldo libros": r["saldo_ant"],
-                                "Notas débito": -r["notas_debito"], "Saldo a cierre": r["saldo_cierre"],
+                                "Consignaciones (abonos)": r["consignaciones"],
+                                "Pagos": -r["pagos"], "Notas débito": -r["notas_debito"],
+                                "Saldo a cierre": r["saldo_cierre"],
                                 "Tránsito": -r["consignaciones_transito"], "Saldo extracto": r["saldo_banco"],
                                 "Diferencia": dif, "Cuadra": "SÍ" if r["cuadra"] else "NO"})
             dfr = pd.DataFrame(resumen)
@@ -315,9 +328,22 @@ with tab_c:
         banco_cfg = next(b for b in bancos if b["nombre"] == nom)
         st.caption(f"Cuenta auxiliar: `{banco_cfg['cuenta_auxiliar']}` · "
                    f"Hoja del reporte: `{banco_cfg['hoja_reporte']}`")
+    # saldo del extracto detectado del pie de la hoja (FINAL)
+    saldo_auto = 0.0
+    if f_banco is not None:
+        try:
+            det = C.saldo_extracto_de(f_banco.getvalue(), banco_cfg["hoja_reporte"])
+            if det.get("final") is not None:
+                saldo_auto = round(det["final"], 2)
+        except Exception:  # noqa: BLE001
+            pass
     with d2:
-        saldo_banco = st.number_input("Saldo según extracto del banco", value=0.0,
-                                      step=1000.0, format="%.2f")
+        saldo_banco = st.number_input("Saldo según extracto del banco",
+                                      value=float(saldo_auto), step=1000.0, format="%.2f",
+                                      help="Se detecta del pie de la hoja del reporte "
+                                           "(FINAL). Puedes ajustarlo.")
+        if saldo_auto:
+            st.caption(f"Detectado del pie de la hoja: {saldo_auto:,.2f}")
         periodo = st.text_input("Periodo (para el encabezado del Excel)", "")
 
     st.markdown("#### 3. Partidas en tránsito y ajuste al peso (opcional)")

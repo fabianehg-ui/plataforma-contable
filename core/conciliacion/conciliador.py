@@ -448,6 +448,37 @@ def _leer_raw_credibanco(wb, maestro=None):
     return None
 
 
+def saldo_extracto_de(fuente, hoja):
+    """Lee, del PIE de la hoja del banco, el bloque INICIAL / DÉBITOS / CRÉDITOS /
+    FINAL y devuelve {'final','inicial'}. El FINAL es el saldo del extracto (así
+    no hay que digitarlo a mano). Devuelve None si la hoja no trae ese bloque."""
+    try:
+        ws, _ = _abrir(fuente, hoja)
+    except Exception:  # noqa: BLE001
+        return {"final": None, "inicial": None}
+    final = inicial = None
+    ETIQ_F = ("SALDO FINAL EXTRACTO", "SALDO FINAL", "SALDO EN EXTRACTO",
+              "SALDO EXTRACTO", "FINAL", "SALDO NUEVO", "SALDO ACTUAL")
+    ETIQ_I = ("SALDO INICIAL", "SALDO ANTERIOR", "INICIAL")
+    for r in ws.iter_rows(values_only=True):
+        etq = None
+        val = None
+        for c in r:
+            if isinstance(c, str):
+                u = c.strip().upper()
+                if u in ETIQ_F:
+                    etq = "F"
+                elif u in ETIQ_I:
+                    etq = etq or "I"
+            elif isinstance(c, (int, float)) and val is None:
+                val = float(c)
+        if etq == "F" and val is not None:
+            final = val
+        elif etq == "I" and val is not None and inicial is None:
+            inicial = val
+    return {"final": final, "inicial": inicial}
+
+
 def leer_datafono(fuente, hoja="RESUMEN MENSUAL", maestro=None):
     """Comisión y retenciones del datáfono Credibanco por centro de costo.
 
