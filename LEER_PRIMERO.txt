@@ -1,32 +1,43 @@
-INTEGRAL — Importar maestros TAL CUAL bajan de Contai
-=====================================================
-Reemplaza en tu repo:
-  app_pages/22_Maestros.py
-  core/contable/servicio_contable.py
+BANCOS A CONTAI — configuración por empresa (gastos e ingresos)
+================================================================
+Ahora "Bancos a Contai" es configurable por empresa: defines tus bancos, las
+reglas de clasificación y los centros de costo, y el módulo extrae GASTOS e
+INGRESOS bancarios, los reparte en partes iguales entre los centros que elijas,
+y pone la contrapartida contra la cuenta PUC del banco.
 
-QUÉ CAMBIA
-Ahora la página de Maestros procesa los archivos como los descargas de Contai,
-sin tener que limpiarlos:
+ARCHIVOS (reemplaza/agrega en tu repo)
+  core/procesadores/extractos_bancarios_multi.py   (NUEVO procesador config-driven)
+  app_pages/19_Bancos_a_Contai.py                  (página con pestaña Configuración)
+  db/migrations/020_bancos_config.sql              (tablas de config)
 
-1. TERCEROS (.txt de Contai, ancho fijo con bytes nulos):
-   - Antes tronaba (ValueError por los bytes nulos \x00).
-   - Ahora se limpian los nulos y se parsea por posiciones fijas
-     (NIT, RAZÓN SOCIAL, y nombres+apellidos). Extrae NIT y NOMBRE.
-   - Sube el archivo NITS...TXT tal cual en la pestaña Terceros.
+BASE DE DATOS (una sola vez)
+  Supabase -> SQL Editor -> pega y ejecuta 020_bancos_config.sql
+  (crea bancos_config, bancos_reglas, bancos_cc, con RLS por empresa)
 
-2. PLAN DE CUENTAS (.xlsx de Contai con columnas "... - NIIF"):
-   - Se reconocen los encabezados "Código Cuenta - NIIF",
-     "Nombre Cuenta - NIIF", "Tipo de Cuenta - NIIF",
-     "Id. Centro Costo - NIIF" (maneja CC).
-   - Sube el PUC ... .xlsx tal cual en Plan de cuentas.
+CÓMO USARLO (para GRUPO DE LOLITA)
+  1) En la página Bancos a Contai -> pestaña "Configuración de la empresa":
+     a) BANCOS: agrega una fila por banco. Sugerido para GRUPO DE LOLITA:
 
-3. CENTROS DE COSTO (.xlsx de Contai):
-   - "Centro de Costos - NIIF" / "Nombre - NIIF" se leen por posición.
-   - Sube el archivo de centros tal cual.
+        NOMBRE                    | DETECTAR (texto del extracto) | FORMATO            | NIT
+        DAVIVIENDA 7872           | 03986999 7872                 | davivienda         | 860034313
+        BANCOLOMBIA AHORRO 8271   | 255438271                     | bancolombia_ahorro | 890903938
+        OCCIDENTE 9426            | 405-08942-6                   | occidente          | 890300279
+        FIDU DAVIVIENDA 3122      | 0607039800123122              | fidu_davivienda    | (fiduciaria)
+        FIDU BANCOLOMBIA 4655     | 15000304655                   | fidu_bancolombia   | 800180687
+        BANCOLOMBIA CTE 4451      | (texto único del extracto)    | bancolombia_cta    | 890903938
 
-En los tres casos, INTEGRAL guarda la info en la configuración de la empresa
-activa (cn_terceros, cn_plan_cuentas / cuentas, cn_centros_costo).
+        La CUENTA PUC de cada banco la pones tú (la cuenta del banco en TU PUC).
+     b) REGLAS: dale "Cargar reglas por defecto" y ajústalas (cuentas de gasto/
+        ingreso a tu PUC). Lado: D=gasto, C=ingreso, R=retención. Base=IVA.
+     c) CENTROS DE COSTO: elige entre qué centros se reparte (partes iguales).
+  2) Pestaña "Procesar extractos": sube los PDF, revisa el resumen y genera el
+     plano. Db = Cr (cuadra al peso).
 
-NOTA: el export de terceros de Contai trae unas pocas filas mal alineadas;
-esas se descartan automáticamente (se quedan solo los registros con NIT y
-nombre válidos).
+NOTA: solo se contabilizan los movimientos que casan con una regla (lista
+blanca). Nómina, pagos a proveedores, cuotas de crédito, consignaciones y
+traslados quedan FUERA del plano a propósito. Ajusta las reglas si algún cargo
+no te lo está tomando o si te toma algo que no debe.
+
+Empresas sin bancos configurados siguen con el modo clásico (Bancolombia,
+Banco de Bogotá, BBVA), así JIPER no se ve afectada.
+Requisito: pdfplumber (ya está en tu requirements).
