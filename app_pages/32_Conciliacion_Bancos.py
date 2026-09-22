@@ -142,6 +142,8 @@ with tab_c:
                  "acumulación de redondeos, se carga a GASTO BANCARIO como "
                  "«ajuste al peso» siempre que no supere esta tolerancia.")
 
+    # El resultado se guarda en session_state para que NO se pierda al accionar
+    # otros botones (Streamlit re-ejecuta el script en cada clic).
     if st.button("🔁 Conciliar", type="primary", disabled=(f_aux is None or f_banco is None)):
         try:
             transito_real = None
@@ -155,23 +157,37 @@ with tab_c:
             r = C.conciliar(aux, banco, data, saldo_banco,
                             transito_real=transito_real, tolerancia=tolerancia)
         except Exception as e:  # noqa: BLE001
+            st.session_state.pop("cc_r", None)
             st.error(f"No pude conciliar: {e}")
             st.stop()
-
-        # aviso si se subió el datáfono pero no se leyó nada
+        nota_df = ""
         if f_data is not None and not data.get("por_cc"):
-            st.warning("Subiste el archivo del datáfono pero no pude calcular el "
-                       "resumen. Debe ser el **archivo original de Credibanco** "
-                       "(hoja «Reporte Conciliar» con CODIGO ESTABLECIMIENTO y "
-                       "VALOR COMISION / RETEFUENTE / RETE IVA / RTE ICA) o la macro "
-                       "con la hoja «RESUMEN MENSUAL». Revisa también el MAESTRO en "
-                       "«Configuración» para mapear los establecimientos a centros de costo.")
+            nota_df = ("⚠️ Subiste el datáfono pero no pude calcular el resumen. "
+                       "Debe ser el archivo original de Credibanco (hoja «Reporte "
+                       "Conciliar») o la macro con «RESUMEN MENSUAL»; revisa el MAESTRO "
+                       "en «Configuración».")
         elif f_data is not None and data.get("hoja"):
-            st.caption(f"Datáfono leído de la hoja «{data['hoja']}»: "
-                       f"{data['n_filas']} centros · comisión {data['comision']:,.2f} · "
-                       f"retenciones {data['retefuente']+data['reteiva']+data['reteica']:,.2f}.")
+            nota_df = (f"Datáfono leído de «{data['hoja']}»: {data['n_filas']} centros · "
+                       f"comisión {data['comision']:,.2f} · retenciones "
+                       f"{data['retefuente']+data['reteiva']+data['reteica']:,.2f}.")
+        # guardar todo el contexto necesario para dibujar y exportar
+        st.session_state["cc_r"] = r
+        st.session_state["cc_ctx"] = {
+            "nom": nom, "cuenta": banco_cfg.get("cuenta_auxiliar", ""),
+            "periodo": periodo, "empresa": emp.get("razon_social", ""),
+            "tolerancia": tolerancia, "nota_df": nota_df}
+        st.session_state.pop("cc_plano", None)   # limpiar plano anterior
 
-        # ---- cuadro de conciliación ----
+    # ---------------------------------------------------------------
+    # RENDER desde session_state (persiste entre clics de botones)
+    # ---------------------------------------------------------------
+    r = st.session_state.get("cc_r")
+    if r:
+        ctx = st.session_state.get("cc_ctx", {})
+        nom = ctx.get("nom", nom if 'nom' in dir() else "")
+        if ctx.get("nota_df"):
+            st.caption(ctx["nota_df"])
+
         st.subheader(f"Conciliación — {nom}")
         cuadro = [
             ("SALDO EN LIBROS", r["saldo_ant"]),
@@ -195,9 +211,9 @@ with tab_c:
                      .style.format({"Valor": "{:,.2f}"}),
                      use_container_width=True, hide_index=True)
         if abs(r["ajuste_al_peso"]) > 0:
-            st.info(f"Ajuste al peso cargado a gasto bancario: "
-                    f"{r['ajuste_al_peso']:,.2f} (por acumulación de redondeos, "
-                    f"dentro de la tolerancia de ±{tolerancia:,.0f}).")
+            st.info(f"Ajuste al peso cargado a gasto bancario: {r['ajuste_al_peso']:,.2f} "
+                    f"(por acumulación de redondeos, dentro de la tolerancia de "
+                    f"±{ctx.get('tolerancia', 10000):,.0f}).")
         if r["cuadra"]:
             st.success(f"Cuadra: saldo a cierre − tránsito = saldo del banco. "
                        f"Documentos que cruzan: {r['n_cruzan']}.")
@@ -236,9 +252,8 @@ with tab_c:
         st.markdown("#### Descargas")
         dcol = st.columns(2)
         try:
-            xlsx = C.exportar_excel(
-                r, nombre_banco=nom, cuenta=banco_cfg.get("cuenta_auxiliar", ""),
-                periodo=periodo, empresa=emp.get("razon_social", ""))
+            xlsx = C.exportar_excel(r, nombre_banco=nom, cuenta=ctx.get("cuenta", ""),
+                                    periodo=ctx.get("periodo", ""), empresa=ctx.get("empresa", ""))
             dcol[0].download_button("⬇ Conciliación (Excel con formato y fórmulas)",
                                data=xlsx, type="primary", use_container_width=True,
                                file_name=f"conciliacion_{nom.replace(' ','_')}.xlsx",
@@ -246,10 +261,9 @@ with tab_c:
         except Exception as e:  # noqa: BLE001
             dcol[0].error(f"Excel: {e}")
         try:
-            pdfb = C.exportar_pdf(
-                r, nombre_banco=nom, cuenta=banco_cfg.get("cuenta_auxiliar", ""),
-                periodo=periodo, empresa=emp.get("razon_social", ""),
-                usuario=(emp.get("razon_social") and st.session_state.get("user_email", "")) or "")
+            pdfb = C.exportar_pdf(r, nombre_banco=nom, cuenta=ctx.get("cuenta", ""),
+                                  periodo=ctx.get("periodo", ""), empresa=ctx.get("empresa", ""),
+                                  usuario=st.session_state.get("user_email", ""))
             dcol[1].download_button("⬇ Conciliación (PDF con firma del software)",
                                data=pdfb, use_container_width=True,
                                file_name=f"conciliacion_{nom.replace(' ','_')}.pdf",
@@ -263,7 +277,6 @@ with tab_c:
                    "de costo; los gastos de **Credibanco** por centro de costo según la "
                    "tabla de establecimientos. Reutiliza la configuración de «Bancos a "
                    "Contai» (centros del reparto, cuentas y cuenta puente del banco).")
-        # centros y cuentas desde la config de Bancos a Contai
         centros_rep, cuentas_g, cuenta_puc = [], dict(C.CUENTAS_GASTO_DEF), ""
         if ebm is not None:
             try:
@@ -284,7 +297,8 @@ with tab_c:
         cc_txt = st.text_area(
             "Centros de costo del reparto igualitario (uno por línea)",
             "\n".join(centros_rep) if centros_rep else
-            "100401\n100501\n100601\n100901\n101201\n101301\n101801\n103001", height=110)
+            "100401\n100501\n100601\n100901\n101201\n101301\n101801\n103001",
+            height=110, key="pl_cc")
         cc_rep = [x.strip() for x in cc_txt.splitlines() if x.strip()]
         st.caption(f"Cuentas de gasto (de Bancos a Contai): gasto bancario "
                    f"`{cuentas_g['gasto_bancario']}` · comisiones `{cuentas_g['comisiones']}` · "
@@ -295,17 +309,24 @@ with tab_c:
             p = C.generar_plano_gastos(
                 r, cc_rep, cuenta_puc=cuenta_puc, cuentas_gasto=cuentas_g,
                 comprobante=comprob, documento=docpl, fecha=f_pl.strftime("%m/%d/%Y"))
-            if abs(p["debitos"] - r["notas_debito"]) < 0.5:
+            st.session_state["cc_plano"] = {
+                "p": p, "txt": C.plano_a_texto(p["filas"]),
+                "fname": f"plano_gastos_{nom.replace(' ','_')}_{f_pl:%Y_%m}.txt",
+                "notas_debito": r["notas_debito"]}
+
+        plano = st.session_state.get("cc_plano")
+        if plano:
+            p = plano["p"]
+            if abs(p["debitos"] - plano["notas_debito"]) < 0.5:
                 st.success(f"Plano generado: {p['n']} líneas · Débitos = Créditos = "
                            f"{p['debitos']:,.2f} (= notas débito de la conciliación).")
             else:
                 st.warning(f"Plano generado ({p['n']} líneas), pero los débitos "
                            f"{p['debitos']:,.2f} no igualan las notas débito "
-                           f"{r['notas_debito']:,.2f}; revisa.")
+                           f"{plano['notas_debito']:,.2f}; revisa.")
             st.dataframe(pd.DataFrame(p["filas"][1:], columns=p["filas"][0]).head(30),
                          use_container_width=True, hide_index=True)
             st.download_button(
                 "⬇ Descargar plano de gastos (.txt)",
-                data=C.plano_a_texto(p["filas"]).encode("latin-1", errors="replace"),
-                file_name=f"plano_gastos_{nom.replace(' ','_')}_{f_pl:%Y_%m}.txt",
-                mime="text/plain")
+                data=plano["txt"].encode("latin-1", errors="replace"),
+                file_name=plano["fname"], mime="text/plain")
