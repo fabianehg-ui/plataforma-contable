@@ -49,6 +49,26 @@ def _nk(x) -> str:
     return re.sub(r"\D", "", str(x or "")).lstrip("0")
 
 
+def _fmt_fecha(v) -> str:
+    """Normaliza una fecha a DD/MM/AAAA. Acepta datetime, o el entero DDMMAAAA
+    que usa el reporte del banco (p.ej. 1072026 -> 01/07/2026)."""
+    if v is None or v == "":
+        return ""
+    try:
+        import datetime as _dt
+        if isinstance(v, (_dt.datetime, _dt.date)):
+            return v.strftime("%d/%m/%Y")
+    except Exception:  # noqa: BLE001
+        pass
+    s = re.sub(r"\D", "", str(v))
+    if 7 <= len(s) <= 8:
+        s = s.zfill(8)
+        d, m, a = s[:2], s[2:4], s[4:]
+        if 1 <= int(m) <= 12 and 1 <= int(d) <= 31:
+            return f"{d}/{m}/{a}"
+    return str(v)
+
+
 def _expandir_docs(x) -> set:
     """Un renglón del banco (o del auxiliar) puede AGRUPAR varios documentos en la
     misma celda de N COMPROBANTE / Documento. Devuelve el CONJUNTO de documentos
@@ -78,6 +98,43 @@ def _expandir_docs(x) -> set:
         docs |= {str(int(n)) for n in nums}             # + cualquier suelto
         return {d for d in docs if d and d != "0"}
     return {str(int(n)) for n in nums if int(n) != 0}   # lista de documentos
+
+
+_OASIS_STOP = {"PLAZA", "DE", "LA", "DEL", "PISO", "CLINICA", "CLÍNICA", "CENTRO",
+               "COSTO", "CL", "SEDE", "LOCAL", "SL", "ML", "EL", "LOS", "LAS", "P4"}
+
+
+def _oasis_tokens(s) -> set:
+    """Palabras significativas de un nombre de punto/OASIS, para poder emparejar
+    'CL PRADO' con 'CLINICA DEL PRADO' o 'MAYORCA P4' con 'MAYORCA PISO 4'."""
+    s = re.sub(r"[^A-Za-zÁÉÍÓÚÑ0-9 ]", " ", str(s or "")).upper()
+    toks = set()
+    for w in s.split():
+        if len(w) <= 2 or w in _OASIS_STOP or w.isdigit():
+            continue
+        toks.add(w)
+    return toks
+
+
+def _mapa_cc_oasis(por_cc):
+    """Construye un buscador oasis -> (cc, nombre) desde el desglose del datáfono."""
+    tabla = []
+    for d in por_cc or []:
+        toks = _oasis_tokens(d.get("oasis", ""))
+        if toks and str(d.get("cc") or "").strip():
+            tabla.append((toks, str(d["cc"]).strip(), d.get("oasis", "")))
+
+    def buscar(oasis):
+        t = _oasis_tokens(oasis)
+        if not t:
+            return "", ""
+        mejor, score = ("", ""), 0
+        for toks, cc, nom in tabla:
+            s = len(t & toks)
+            if s > score:
+                score, mejor = s, (cc, nom)
+        return mejor
+    return buscar
 
 
 def _abrir(fuente, hoja=None):
@@ -150,15 +207,45 @@ def leer_auxiliar(fuente, cuenta_prefijo: str):
         doc_raw = str(r[cDoc] or "")
         detalle.append({"doc": _nk(doc_raw), "doc_raw": doc_raw,
                         "docs": sorted(_expandir_docs(doc_raw)),
-                        "fecha": str(r[cFec] or ""),
+                        "fecha": _fmt_fecha(r[cFec]),
                         "detalle": str(r[cDet] or "")[:60], "deb": deb, "cred": cred})
     return {"saldo_ant": saldo_ant or 0.0, "consignaciones": round(consig, 2),
             "pagos": round(pagos, 2), "detalle": detalle}
 
 
+# ---- clasificación del TIPO DE ABONO (para el detalle de partidas) ----
+TIPO_REGLAS_DEF = [
+    (r"ABONO\s*NETO|DATAFONO|DATÁFONO", "DATAFONO"),
+    (r"\bQR\b|PAGO\s*QR", "QR"),
+    (r"CONSIGNAC", "CONSIGNACION"),
+    (r"INTERBANC", "TRANSFERENCIA INTERBANCARIA"),
+    (r"TRANSFEREN", "TRANSFERENCIA"),
+    (r"\bPSE\b", "PSE"),
+    (r"DINERS", "DINERS"),
+    (r"EFECTIVO", "EFECTIVO"),
+    (r"RAPPI", "RAPPI"),
+    (r"NEQUI|DAVIPLATA|LLAVE", "BILLETERA"),
+    (r"CORRESPONSAL", "CORRESPONSAL"),
+]
+
+
+def tipo_abono(detalle, concepto=""):
+    """Deduce el tipo de abono/egreso (DATAFONO, CONSIGNACION, TRANSFERENCIA, QR,
+    PSE, etc.) a partir del detalle y el concepto del movimiento del banco."""
+    txt = f"{detalle} {concepto}".upper()
+    for pat, nombre in TIPO_REGLAS_DEF:
+        if re.search(pat, txt):
+            return nombre
+    con = str(concepto or "").strip().upper()
+    if con and con not in ("CUADRE DE CAJA", "CUADRE DE CAJA MES ANTERIOR"):
+        return con
+    return "OTRO"
+
+
 def leer_banco(fuente, hoja: str, gasto_reglas=None):
-    """De la HOJA del banco: movimientos con N COMPROBANTE, débito, crédito y
-    concepto; desglose de GTO FINANCIERO en gasto/comisiones/IVA/GMF."""
+    """De la HOJA del banco: movimientos con N COMPROBANTE, débito, crédito,
+    concepto, OASIS (centro de costo) y tipo de abono; desglose de GTO
+    FINANCIERO en gasto/comisiones/IVA/GMF."""
     reglas = gasto_reglas or GASTO_REGLAS_DEF
     ws, _ = _abrir(fuente, hoja)
     rows = list(ws.iter_rows(values_only=True))
@@ -169,13 +256,19 @@ def leer_banco(fuente, hoja: str, gasto_reglas=None):
         if "N COMPROBANTE" in up or "DEBITO" in up or "DÉBITO" in up:
             hdr_i = i
             break
-    H = {str(c or "").strip().upper(): j for j, c in enumerate(rows[hdr_i])}
+    # el encabezado puede repetir 'OASIS'; tomamos la 1ª aparición de cada nombre
+    H = {}
+    for j, c in enumerate(rows[hdr_i]):
+        k = str(c or "").strip().upper()
+        if k and k not in H:
+            H[k] = j
     cNC = H.get("N COMPROBANTE")
     cDeb = H.get("DEBITO", H.get("DÉBITO", H.get("DEBITOS", H.get("DÉBITOS"))))
     cCred = H.get("CREDITO", H.get("CRÉDITO", H.get("CREDITOS", H.get("CRÉDITOS"))))
     cCon = H.get("CONCEPTO")
     cDet = H.get("DETALLE", H.get("TRANSACCIÓN", H.get("DESCRIPCIÓN")))
     cFec = H.get("FECHA")
+    cOa = H.get("OASIS", H.get("CENTRO DE COSTO", H.get("PUNTO")))
 
     movs = []
     g = defaultdict(float)
@@ -187,10 +280,12 @@ def leer_banco(fuente, hoja: str, gasto_reglas=None):
         det = str(r[cDet] or "") if cDet is not None else ""
         con = str(r[cCon] or "").strip() if cCon is not None else ""
         nc_raw = str(r[cNC] or "") if cNC is not None else ""
+        oasis = str(r[cOa] or "").strip() if cOa is not None and cOa < len(r) else ""
         movs.append({"nc": _nk(nc_raw), "nc_raw": nc_raw,
                      "docs": sorted(_expandir_docs(nc_raw)),
-                     "fecha": str(r[cFec] or "") if cFec is not None else "",
-                     "detalle": det[:60], "deb": deb, "cred": cred, "concepto": con})
+                     "fecha": _fmt_fecha(r[cFec]) if cFec is not None else "",
+                     "detalle": det[:60], "deb": deb, "cred": cred, "concepto": con,
+                     "oasis": oasis, "tipo": tipo_abono(det, con)})
         if con.upper() == "GTO FINANCIERO":
             v = deb + cred
             cat = "GASTO BANCARIO"
@@ -473,6 +568,29 @@ def conciliar(aux, banco, datafono, saldo_banco: float,
     solo_libros = [x for x in aux["detalle"] if _docs_de(x, "doc") and not (_docs_de(x, "doc") & banco_docs)]
     solo_banco = [x for x in banco["movimientos"] if _docs_de(x, "nc") and not (_docs_de(x, "nc") & libros_docs)]
 
+    # ---- enriquecer las partidas pendientes con tipo de abono y centro de costo ----
+    _cc_de = _mapa_cc_oasis(datafono.get("por_cc"))
+
+    def _fila_pendiente(x, lado):
+        deb, cred = x.get("deb", 0.0), x.get("cred", 0.0)
+        valor = cred if lado == "banco" else deb  # en banco: consignaciones=crédito
+        valor = valor or deb or cred
+        oasis = x.get("oasis", "")
+        cc_cod, cc_nom = _cc_de(oasis) if oasis else ("", "")
+        docs = x.get("docs") or ([x.get("nc")] if x.get("nc") else [x.get("doc")])
+        return {
+            "documento": ", ".join(d for d in docs if d),
+            "tipo": x.get("tipo", ""),
+            "centro_costo": cc_cod,
+            "punto": oasis or cc_nom,
+            "fecha": x.get("fecha", ""),
+            "detalle": x.get("detalle", ""),
+            "valor": round(valor, 2),
+        }
+
+    pend_banco = [_fila_pendiente(x, "banco") for x in solo_banco]
+    pend_libros = [_fila_pendiente(x, "libros") for x in solo_libros]
+
     return {
         "saldo_ant": round(aux["saldo_ant"], 2),
         "consignaciones": aux["consignaciones"],
@@ -489,8 +607,181 @@ def conciliar(aux, banco, datafono, saldo_banco: float,
         "n_cruzan": len(cruzan),
         "solo_libros": solo_libros,
         "solo_banco": solo_banco,
+        "pend_banco": pend_banco,
+        "pend_libros": pend_libros,
         "datafono_cc": datafono["por_cc"],
     }
+
+
+# ===========================================================================
+# Exportación a Excel con el ESTILO y las FÓRMULAS de la plantilla de la empresa
+# ===========================================================================
+_FMT_PESO = '_([$$-240A]\\ * #,##0.00_);_([$$-240A]\\ * \\(#,##0.00\\);_([$$-240A]\\ * "-"??_);_(@_)'
+_FMT_NUM = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)'
+
+
+def exportar_excel(r, nombre_banco="", cuenta="", periodo="", empresa="",
+                   elaborado_por="") -> bytes:
+    """Arma el archivo de conciliación con el mismo estilo y fórmulas de la
+    plantilla de la empresa:
+      · Cabecera (empresa / banco / cuenta / periodo).
+      · Cuadro: SALDO EN LIBROS + CONSIGNACIONES − PAGOS − NOTAS DÉBITO (con su
+        desglose) = SALDO A CIERRE − CONSIGNACIONES EN TRÁNSITO = SALDO EXTRACTO,
+        con las sumas puestas como FÓRMULAS.
+      · Secciones de partidas pendientes DETALLADAS por documento, tipo de abono
+        (datáfono / consignación / transferencia / …), centro de costo y valor.
+      · Hoja aparte con el datáfono por centro de costo.
+    Devuelve los bytes del .xlsx."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Conciliacion"
+
+    azul = PatternFill("solid", fgColor="1F4E78")
+    gris = PatternFill("solid", fgColor="D9E1F2")
+    gris2 = PatternFill("solid", fgColor="F2F2F2")
+    amar = PatternFill("solid", fgColor="FFF2CC")
+    verde = PatternFill("solid", fgColor="E2EFDA")
+    b_tit = Font(bold=True, color="FFFFFF", size=11)
+    b_bold = Font(bold=True, size=10)
+    b_norm = Font(size=10)
+    thin = Side(style="thin", color="BFBFBF")
+    borde = Border(left=thin, right=thin, top=thin, bottom=thin)
+    right = Alignment(horizontal="right")
+    center = Alignment(horizontal="center")
+
+    for col, w in zip("ABCDEF", (3, 34, 16, 20, 18, 15)):
+        ws.column_dimensions[col].width = w
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    from openpyxl.worksheet.properties import PageSetupProperties
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+
+    def celda(coord, val, font=None, fill=None, fmt=None, align=None, bordear=False):
+        c = ws[coord]
+        c.value = val
+        if font: c.font = font
+        if fill: c.fill = fill
+        if fmt: c.number_format = fmt
+        if align: c.alignment = align
+        if bordear: c.border = borde
+        return c
+
+    # ---------- cabecera ----------
+    ws.merge_cells("B2:F2"); celda("B2", (empresa or "").upper(), b_tit, azul, align=center)
+    ws.merge_cells("B3:F3"); celda("B3", "CONCILIACIÓN BANCARIA", b_bold, gris, align=center)
+    ws.merge_cells("B4:F4"); celda("B4", nombre_banco.upper(), b_bold, gris, align=center)
+    ws.merge_cells("B5:F5"); celda("B5", f"CUENTA {cuenta}".strip(), b_norm, align=center)
+    ws.merge_cells("B6:F6"); celda("B6", (periodo or "").upper(), b_bold, gris, align=center)
+
+    # ---------- cuadro ----------
+    fila = 8
+    celda(f"B{fila}", "SALDO EN LIBROS", b_bold); celda(f"E{fila}", r["saldo_ant"], b_bold, fmt=_FMT_PESO); f_sl = fila; fila += 1
+    celda(f"B{fila}", "(+) CONSIGNACIONES", b_norm); celda(f"E{fila}", r["consignaciones"], b_norm, fmt=_FMT_PESO); f_con = fila; fila += 1
+    celda(f"B{fila}", "(−) PAGOS", b_norm); celda(f"E{fila}", -r["pagos"], b_norm, fmt=_FMT_PESO); f_pag = fila; fila += 1
+    # notas débito con desglose
+    celda(f"B{fila}", "(−) NOTAS DÉBITO", b_bold)
+    f_nd = fila; fila += 1
+    desglose = [
+        ("Gasto bancario", r["gasto_bancario"]),
+        ("Comisiones", r["comisiones"]),
+        ("Comisión datáfono", r["comision_datafono"]),
+        ("IVA", r["iva"]),
+        ("G.M.F.", r["gmf"]),
+        ("ReteIVA", r["reteiva"]),
+        ("Retefuente", r["retefuente"]),
+        ("ReteICA", r["reteica"]),
+    ]
+    f_desg0 = fila
+    for et, v in desglose:
+        celda(f"B{fila}", "        " + et, b_norm)
+        celda(f"D{fila}", v, b_norm, fmt=_FMT_NUM)
+        fila += 1
+    f_desg1 = fila - 1
+    # E de notas débito = -SUM(desglose)
+    ws[f"E{f_nd}"] = f"=-SUM(D{f_desg0}:D{f_desg1})"
+    ws[f"E{f_nd}"].font = b_bold; ws[f"E{f_nd}"].number_format = _FMT_PESO
+    fila += 1
+    celda(f"B{fila}", "(=) SALDO EN LIBROS A FECHA DE CIERRE", b_bold, verde)
+    ws[f"E{fila}"] = f"=E{f_sl}+E{f_con}+E{f_pag}+E{f_nd}"
+    ws[f"E{fila}"].font = b_bold; ws[f"E{fila}"].number_format = _FMT_PESO; ws[f"E{fila}"].fill = verde
+    f_cierre = fila; fila += 1
+
+    celda(f"B{fila}", "(−) CONSIGNACIONES EN TRÁNSITO", b_bold, amar)
+    celda(f"E{fila}", -r["consignaciones_transito"], b_bold, amar, fmt=_FMT_PESO)
+    f_tr = fila; fila += 1
+
+    celda(f"B{fila}", "(=) SALDO SEGÚN EXTRACTO DEL BANCO", b_bold, verde)
+    ws[f"E{fila}"] = f"=E{f_cierre}+E{f_tr}"
+    ws[f"E{fila}"].font = b_bold; ws[f"E{fila}"].number_format = _FMT_PESO; ws[f"E{fila}"].fill = verde
+    f_ext = fila; fila += 1
+    celda(f"B{fila}", "SALDO REAL DEL EXTRACTO", b_norm)
+    celda(f"E{fila}", r["saldo_banco"], b_norm, fmt=_FMT_PESO); f_real = fila; fila += 1
+    celda(f"B{fila}", "DIFERENCIA", b_bold)
+    ws[f"E{fila}"] = f"=E{f_ext}-E{f_real}"
+    ws[f"E{fila}"].font = b_bold; ws[f"E{fila}"].number_format = _FMT_PESO
+    fila += 1
+    if abs(r.get("ajuste_al_peso", 0)) > 0:
+        celda(f"B{fila}", f"* Ajuste al peso incluido en gasto bancario: {r['ajuste_al_peso']:,.2f}",
+              Font(italic=True, size=9)); fila += 1
+    fila += 1
+
+    # ---------- detalle de partidas pendientes ----------
+    def _seccion(titulo, filas, tipo_def=""):
+        nonlocal fila
+        celda(f"B{fila}", titulo, b_bold, gris); fila += 1
+        celda(f"B{fila}", "DOCUMENTO", b_bold, gris2, bordear=True)
+        celda(f"C{fila}", "TIPO DE ABONO", b_bold, gris2, bordear=True)
+        celda(f"D{fila}", "CENTRO DE COSTO", b_bold, gris2, bordear=True)
+        celda(f"E{fila}", "FECHA", b_bold, gris2, bordear=True, align=center)
+        celda(f"F{fila}", "VALOR", b_bold, gris2, bordear=True, align=center)
+        fila += 1
+        ini = fila
+        for p in filas:
+            celda(f"B{fila}", p["documento"], b_norm, bordear=True)
+            celda(f"C{fila}", p["tipo"] or tipo_def, b_norm, bordear=True)
+            cc_txt = (f'{p["centro_costo"]} — ' if p.get("centro_costo") else "") + (p.get("punto") or "")
+            celda(f"D{fila}", cc_txt.strip(" —"), b_norm, bordear=True)
+            celda(f"E{fila}", p["fecha"], b_norm, bordear=True, align=center)
+            celda(f"F{fila}", p["valor"], b_norm, fmt=_FMT_NUM, bordear=True)
+            fila += 1
+        celda(f"B{fila}", "TOTAL", b_bold, gris2, bordear=True)
+        c = ws[f"F{fila}"]
+        c.value = f"=SUM(F{ini}:F{fila-1})" if filas else 0
+        c.font = b_bold; c.number_format = _FMT_NUM; c.fill = gris2; c.border = borde
+        fila += 2
+
+    _seccion("PARTIDAS EN BANCO SIN LIBROS — abonos por identificar / en tránsito "
+             "(datáfono, consignación, transferencia, etc.)", r.get("pend_banco", []))
+    _seccion("PAGOS EN LIBROS QUE NO SALIERON DEL BANCO", r.get("pend_libros", []), "PAGO")
+
+    # ---------- pie ----------
+    if elaborado_por:
+        celda(f"B{fila}", "ELABORADO POR:", b_bold); fila += 1
+        celda(f"B{fila}", elaborado_por, b_norm); fila += 1
+
+    # ---------- hoja: datáfono por centro de costo ----------
+    if r.get("datafono_cc"):
+        ws2 = wb.create_sheet("Datafono por CC")
+        enc = ["Centro de costo", "Punto / OASIS", "Comisión", "Retefuente", "ReteIVA", "ReteICA"]
+        for j, e in enumerate(enc, start=1):
+            c = ws2.cell(row=1, column=j, value=e); c.font = b_tit; c.fill = azul; c.alignment = center
+        for i, d in enumerate(r["datafono_cc"], start=2):
+            ws2.cell(row=i, column=1, value=d.get("cc", ""))
+            ws2.cell(row=i, column=2, value=d.get("oasis", ""))
+            for j, k in enumerate(["comision", "retefuente", "reteiva", "reteica"], start=3):
+                cc = ws2.cell(row=i, column=j, value=d.get(k, 0)); cc.number_format = _FMT_NUM
+        for col, w in zip("ABCDEF", (16, 26, 16, 16, 16, 16)):
+            ws2.column_dimensions[col].width = w
+
+    ws.sheet_view.showGridLines = False
+    bio = io.BytesIO()
+    wb.save(bio)
+    return bio.getvalue()
 
 
 # ===========================================================================

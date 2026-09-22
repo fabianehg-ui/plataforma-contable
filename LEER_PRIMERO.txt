@@ -31,8 +31,16 @@ USO (Asistente Contable -> Conciliación de bancos):
         por defecto). Si lo dejas vacío, el tránsito se calcula como cuadre exacto.
      4) genera: sale el cuadro de conciliación (saldo libros + consignaciones −
         pagos − notas débito = saldo a cierre − consignaciones en tránsito =
-        saldo del banco) y las partidas (en banco sin libros / en libros sin
-        banco), con descarga en Excel.
+        saldo del banco) y las partidas pendientes DETALLADAS por documento, tipo
+        de abono (datáfono, consignación, transferencia, …) y centro de costo.
+
+EXCEL CON FORMATO Y FÓRMULAS
+ - El botón «Descargar conciliación (Excel con formato y fórmulas)» genera un
+   archivo con el mismo estilo de la plantilla de la empresa: encabezado, cuadro
+   con SUMAS COMO FÓRMULAS (notas débito, saldo a cierre, saldo según extracto y
+   DIFERENCIA), y las secciones de partidas pendientes con columnas DOCUMENTO ·
+   TIPO DE ABONO · CENTRO DE COSTO · FECHA · VALOR (con su total). Además una
+   hoja «Datafono por CC». La DIFERENCIA cierra en 0 (probado recalculando).
 
 AJUSTE AL PESO
  - Cuando das el tránsito real, la diferencia mínima que sobra por acumulación

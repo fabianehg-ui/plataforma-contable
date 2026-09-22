@@ -120,6 +120,7 @@ with tab_c:
     with d2:
         saldo_banco = st.number_input("Saldo según extracto del banco", value=0.0,
                                       step=1000.0, format="%.2f")
+        periodo = st.text_input("Periodo (para el encabezado del Excel)", "")
 
     st.markdown("#### 3. Partidas en tránsito y ajuste al peso (opcional)")
     e1, e2 = st.columns(2)
@@ -201,38 +202,40 @@ with tab_c:
                        "del extracto o las partidas en tránsito. Si diste el tránsito "
                        "real, la diferencia superó la tolerancia del ajuste al peso.")
 
-        def _tabla(regs):
-            """Aplana la columna 'docs' (lista) a texto para poder mostrarla."""
-            df = pd.DataFrame(regs)
-            if "docs" in df.columns:
-                df["docs"] = df["docs"].apply(
-                    lambda v: ", ".join(v) if isinstance(v, (list, tuple)) else v)
-            return df
-
         st.caption(f"Cruce por documento: **{r['n_cruzan']}** documentos cruzan "
                    "(los renglones del banco que agrupan varios comprobantes, "
                    "p.ej. «28637-28638-5664-5665», se expanden y cruzan cada uno).")
-        m1, m2 = st.columns(2)
-        with m1:
-            st.markdown("**En banco sin libros (no están en contabilidad)**")
-            st.dataframe(_tabla(r["solo_banco"]), use_container_width=True,
-                         hide_index=True, height=220)
-        with m2:
-            st.markdown("**En libros sin banco (pagos no salidos)**")
-            st.dataframe(_tabla(r["solo_libros"]), use_container_width=True,
-                         hide_index=True, height=220)
 
-        # ---- descargar Excel ----
+        cols_pend = ["documento", "tipo", "centro_costo", "punto", "fecha", "valor"]
+        renom = {"documento": "Documento", "tipo": "Tipo de abono",
+                 "centro_costo": "Centro de costo", "punto": "Punto / OASIS",
+                 "fecha": "Fecha", "valor": "Valor"}
+
+        def _tabla_pend(regs):
+            df = pd.DataFrame(regs)
+            if df.empty:
+                return df
+            df = df[[c for c in cols_pend if c in df.columns]].rename(columns=renom)
+            return df.style.format({"Valor": "{:,.2f}"})
+
+        st.markdown("**Partidas en banco sin libros — abonos por identificar / en tránsito**")
+        st.caption("Detalladas por documento, tipo de abono (datáfono, consignación, "
+                   "transferencia, …) y centro de costo.")
+        st.dataframe(_tabla_pend(r["pend_banco"]), use_container_width=True,
+                     hide_index=True, height=240)
+        if r["pend_libros"]:
+            st.markdown("**Pagos en libros que no salieron del banco**")
+            st.dataframe(_tabla_pend(r["pend_libros"]), use_container_width=True,
+                         hide_index=True, height=180)
+
+        # ---- descargar Excel con estilo y fórmulas (como la plantilla) ----
         try:
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as xw:
-                pd.DataFrame(cuadro, columns=["Concepto", "Valor"]).to_excel(xw, index=False, sheet_name="Conciliacion")
-                _tabla(r["solo_banco"]).to_excel(xw, index=False, sheet_name="No en contabilidad")
-                _tabla(r["solo_libros"]).to_excel(xw, index=False, sheet_name="Pagos no salidos")
-                if r["datafono_cc"]:
-                    pd.DataFrame(r["datafono_cc"]).to_excel(xw, index=False, sheet_name="Datafono por CC")
-            st.download_button("⬇ Descargar conciliación (Excel)", data=buf.getvalue(),
+            xlsx = C.exportar_excel(
+                r, nombre_banco=nom, cuenta=banco_cfg.get("cuenta_auxiliar", ""),
+                periodo=periodo, empresa=emp.get("razon_social", ""))
+            st.download_button("⬇ Descargar conciliación (Excel con formato y fórmulas)",
+                               data=xlsx, type="primary",
                                file_name=f"conciliacion_{nom.replace(' ','_')}.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            st.error(f"No pude generar el Excel con formato: {e}")
