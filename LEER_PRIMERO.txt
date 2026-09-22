@@ -1,24 +1,38 @@
-BANCOS A CONTAI — configuración + RESUMEN por concepto y banco
-==============================================================
-NOVEDAD: la pestaña "Procesar extractos" ahora muestra un RESUMEN de gastos e
-ingresos por CONCEPTO (total gasto, comisión, gravamen 4x1000, IVA, intereses,
-retención...) y por CADA cuenta bancaria, con TOTAL por concepto y por banco.
-Se puede descargar en Excel (hoja Resumen + hoja Detalle).
+CONCILIACIÓN DE BANCOS — módulo para la repo
+=============================================
+PASO 1 — Supabase -> SQL Editor -> ejecuta db/migrations/021_conciliacion_config.sql
+PASO 2 — Copia en tu repo:
+   Home.py                                  (agrega la página al menú Asistente Contable)
+   core/conciliacion/__init__.py            (vacío, para que sea paquete)
+   core/conciliacion/conciliador.py         (motor)
+   app_pages/32_Conciliacion_Bancos.py      (página)
 
-Para actualizar solo reemplaza estos dos archivos (NO hay que correr SQL de
-nuevo, ni volver a sembrar bancos):
-   core/procesadores/extractos_bancarios_multi.py
-   app_pages/19_Bancos_a_Contai.py
+USO (Asistente Contable -> Conciliación de bancos):
+  Pestaña Configuración -> botón "Sembrar GRUPO DE LOLITA" (o agrega bancos):
+     por cada banco defines el prefijo de la CUENTA DEL AUXILIAR (cuenta puente,
+     ej. 11-10-05-99) y el NOMBRE DE LA HOJA del reporte del banco.
+  Pestaña Conciliar:
+     1) sube el AUXILIAR general del mes, el REPORTE del banco (con N COMPROBANTE)
+        y, opcional, el DATÁFONO Credibanco (para comisión y retenciones).
+     2) elige el banco y escribe el SALDO según el extracto.
+     3) genera: sale el cuadro de conciliación (saldo libros + consignaciones −
+        pagos − notas débito = saldo a cierre − consignaciones en tránsito =
+        saldo del banco) y las partidas (en banco sin libros / en libros sin
+        banco), con descarga en Excel.
 
-(Si es la primera vez que instalas el módulo, sí corre una vez
- db/migrations/020_bancos_config.sql en Supabase y usa el botón
- "🌱 Sembrar GRUPO DE LOLITA".)
+QUÉ HACE POR DENTRO
+ - Consignaciones = total débitos del auxiliar de esa cuenta (ignora la fila
+   de subtotal que trae el auxiliar).
+ - Pagos = total créditos del auxiliar.
+ - Notas débito = gasto bancario + comisiones + IVA + GMF (del reporte, concepto
+   GTO FINANCIERO) + comisión y retenciones del datáfono (Credibanco).
+ - Cruce banco <-> libros por número (N COMPROBANTE <-> Documento).
+ - Consignaciones en tránsito = saldo a cierre − saldo del banco (la partida
+   que queda en puente para el mes siguiente).
 
-Ejemplo del resumen con tus 6 extractos de julio:
-   INGRESOS FINANCIEROS   42100501   Ingreso    500,126.71
-   COMISIONES             53051501   Gasto      170,199.15
-   GASTOS BANCARIOS       53050501   Gasto      389,104.90
-   GRAVAMEN 4X1000        53050601   Gasto    2,808,091.53
-   IVA DESCONTABLE GASTOS 24081009   Gasto      125,611.78
-   RETEFUENTE RENDIMIENTOS 13551509  Retención   55,640.91
-   (con una columna por banco y su TOTAL)
+Probado con julio 2026 de la 4451: cuadra (saldo libros 30.721.082,92 →
+saldo banco 26.030.633,32), 328 documentos cruzan.
+
+PENDIENTE (siguiente iteración): desglose automático del DETALLE de las
+consignaciones en tránsito (los consecutivos de los últimos días en puente) y
+afinar el "gasto bancario" (diferencia de 5.448,99 en julio por clasificación).
