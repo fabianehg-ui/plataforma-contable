@@ -1,6 +1,8 @@
 CONCILIACIÓN DE BANCOS — módulo para la repo
 =============================================
-PASO 1 — Supabase -> SQL Editor -> ejecuta db/migrations/021_conciliacion_config.sql
+PASO 1 — Supabase -> SQL Editor -> ejecuta:
+   db/migrations/021_conciliacion_config.sql    (bancos a conciliar; si ya lo corriste, no pasa nada)
+   db/migrations/022_conciliacion_datafono.sql  (MAESTRO del datáfono: establecimiento -> centro de costo)
 PASO 2 — Copia en tu repo:
    Home.py                                  (agrega la página al menú Asistente Contable)
    core/conciliacion/__init__.py            (vacío, para que sea paquete)
@@ -11,9 +13,18 @@ USO (Asistente Contable -> Conciliación de bancos):
   Pestaña Configuración -> botón "Sembrar GRUPO DE LOLITA" (o agrega bancos):
      por cada banco defines el prefijo de la CUENTA DEL AUXILIAR (cuenta puente,
      ej. 11-10-05-99) y el NOMBRE DE LA HOJA del reporte del banco.
+  Pestaña Configuración -> «Datáfono Credibanco — MAESTRO»:
+     define la relación CÓDIGO DE ESTABLECIMIENTO -> CENTRO DE COSTO (la misma
+     hoja MAESTRO de la macro). Puedes «Sembrar GRUPO DE LOLITA», editarla a mano
+     o «Importar desde la macro (.xlsm)». Con esto INTEGRAL calcula la comisión y
+     las retenciones DIRECTAMENTE desde el archivo original de Credibanco.
+
   Pestaña Conciliar:
      1) sube el AUXILIAR general del mes, el REPORTE del banco (con N COMPROBANTE)
-        y, opcional, el DATÁFONO Credibanco (para comisión y retenciones).
+        y, opcional, el DATÁFONO Credibanco. Aquí puedes subir el ARCHIVO ORIGINAL
+        de Credibanco (hoja «Reporte Conciliar»): INTEGRAL agrupa por centro de
+        costo con el MAESTRO y suma comisión y retenciones. También sigue aceptando
+        la macro con «RESUMEN MENSUAL».
      2) elige el banco y escribe el SALDO según el extracto.
      3) (opcional) escribe las CONSIGNACIONES EN TRÁNSITO REALES (lo que quedó en
         puente para el mes siguiente) y la TOLERANCIA del ajuste al peso (±10.000
@@ -41,10 +52,19 @@ QUÉ HACE POR DENTRO
    tránsito real), o el valor que tú escribas (la partida que queda en puente
    para el mes siguiente).
 
+DATÁFONO DESDE EL ARCHIVO ORIGINAL
+ - Calcula la comisión y las retenciones desde el crudo de Credibanco (hoja
+   «Reporte Conciliar»): agrupa CODIGO ESTABLECIMIENTO -> centro de costo con el
+   MAESTRO, y suma VALOR COMISION / RETEFUENTE / RETE IVA / RTE ICA (en magnitud).
+ - Reproduce EXACTO el RESUMEN MENSUAL de la macro (probado con GRUPO DE LOLITA:
+   comisión 4.511.020,92 · retef 3.958.113,95 · reteIVA 7.521.209,55 ·
+   reteICA 695.871,49) sin tener que correr la macro.
+ - Si el crudo ya trae el centro de costo en «NO TERMINAL», funciona aunque el
+   MAESTRO esté vacío.
+
 Probado con julio 2026 de la 4451: con tránsito real 18.049.006 la diferencia
 de 5.448,99 se carga como ajuste al peso a gasto bancario (428.549,12 →
-433.998,11), el cuadro cierra exacto contra el extracto (26.030.633,32) y
-328 documentos cruzan.
+433.998,11), el cuadro cierra exacto contra el extracto (26.030.633,32).
 
 PENDIENTE (siguiente iteración): desglose automático del DETALLE de las
 consignaciones en tránsito (los consecutivos de los últimos días en puente).

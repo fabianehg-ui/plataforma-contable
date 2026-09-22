@@ -191,13 +191,129 @@ def _es_encab_datafono(fila):
     return mp if "comision" in mp else None
 
 
-def leer_datafono(fuente, hoja="RESUMEN MENSUAL"):
-    """Del macro Credibanco: comisión y retenciones por centro de costo.
+def _col_por_nombre(hdr_up, *fragmentos):
+    """Índice de la 1ª columna cuyo encabezado contiene alguno de los fragmentos."""
+    for frag in fragmentos:
+        for j, h in enumerate(hdr_up):
+            if frag in h:
+                return j
+    return None
 
-    Robusto: busca la hoja del resumen y detecta las columnas por su encabezado
-    (CENTRO DE COSTO / GASTO COMISION / RETEFUENTE / RETE IVA / RTE ICA), sin
-    depender de que la hoja se llame exactamente 'RESUMEN MENSUAL' ni de que las
-    columnas estén en posiciones fijas. Ignora la fila de totales."""
+
+def maestro_desde_workbook(wb):
+    """Si el libro tiene una hoja MAESTRO (CODIGO ESTABLECIMIENTO / OASIS /
+    CENTRO DE COSTO), devuelve {establecimiento: (cc, oasis)}; si no, None."""
+    for ws in wb.worksheets:
+        primera = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        if not primera:
+            continue
+        up = [str(c or "").strip().upper() for c in primera]
+        iE = _col_por_nombre(up, "CODIGO ESTABLECIMIENTO", "ESTABLECIMIENTO")
+        iC = _col_por_nombre(up, "CENTRO DE COSTO", "CENTRO", "COSTO")
+        if iE is None or iC is None:
+            continue
+        iO = _col_por_nombre(up, "OASIS", "NOMBRE", "PUNTO")
+        m = {}
+        for r in ws.iter_rows(min_row=2, values_only=True):
+            est = str(r[iE] or "").strip() if iE < len(r) else ""
+            if not est:
+                continue
+            cc = str(r[iC] or "").strip() if iC < len(r) else ""
+            oa = str(r[iO] or "") if iO is not None and iO < len(r) else ""
+            m[est] = (cc, oa)
+        if m:
+            return m
+    return None
+
+
+def maestro_desde_bytes(fuente):
+    """Lee el MAESTRO (establecimiento -> cc) de un archivo de macro (.xlsm/.xlsx)."""
+    if fuente is None:
+        return {}
+    import openpyxl
+    data = fuente if isinstance(fuente, (bytes, bytearray)) else (
+        fuente.read() if hasattr(fuente, "read") else open(fuente, "rb").read())
+    wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+    return maestro_desde_workbook(wb) or {}
+
+
+def _leer_raw_credibanco(wb, maestro=None):
+    """Del archivo ORIGINAL de Credibanco (hoja 'Reporte Conciliar' u otra con
+    CODIGO ESTABLECIMIENTO y VALOR COMISION): agrupa por centro de costo y suma
+    comisión y retenciones. El CC sale del MAESTRO (establecimiento -> cc); si no
+    hay MAESTRO, del propio archivo (columna NO TERMINAL / CENTRO DE COSTO, que
+    Credibanco ya trae con el código del centro)."""
+    maestro = maestro or {}
+    for ws in wb.worksheets:
+        cabecera = list(ws.iter_rows(min_row=1, max_row=5, values_only=True))
+        hdr_up = hdr_i = None
+        for i, r in enumerate(cabecera):
+            up = [str(c or "").strip().upper() for c in r]
+            if _col_por_nombre(up, "CODIGO ESTABLECIMIENTO") is not None and \
+               _col_por_nombre(up, "VALOR COMISION", "VALOR COMIS") is not None:
+                hdr_up, hdr_i = up, i
+                break
+        if hdr_up is None:
+            continue
+
+        cEst = _col_por_nombre(hdr_up, "CODIGO ESTABLECIMIENTO", "ESTABLECIMIENTO")
+        cCom = _col_por_nombre(hdr_up, "VALOR COMISION", "VALOR COMIS")
+        cRF = _col_por_nombre(hdr_up, "VALOR RETEFUENTE", "RETEFUENTE")
+        cRI = _col_por_nombre(hdr_up, "VALOR RETE IVA", "RETE IVA", "RETEIVA")
+        cRA = _col_por_nombre(hdr_up, "VALOR RTE ICA", "RTE ICA", "RETE ICA", "RETEICA")
+        cTerm = _col_por_nombre(hdr_up, "NO TERMINAL", "TERMINAL", "CENTRO DE COSTO")
+
+        agg = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])
+        oasis_of, n = {}, 0
+        for r in ws.iter_rows(min_row=hdr_i + 2, values_only=True):
+            est = str(r[cEst] or "").strip() if cEst is not None and cEst < len(r) else ""
+            if not est:
+                continue
+            com = abs(_num(r[cCom])) if cCom is not None and cCom < len(r) else 0.0
+            rf = abs(_num(r[cRF])) if cRF is not None and cRF < len(r) else 0.0
+            ri = abs(_num(r[cRI])) if cRI is not None and cRI < len(r) else 0.0
+            ria = abs(_num(r[cRA])) if cRA is not None and cRA < len(r) else 0.0
+            if com == 0 and rf == 0 and ri == 0 and ria == 0:
+                continue
+            cc, oa = "", ""
+            if est in maestro:
+                cc, oa = maestro[est]
+            if not cc and cTerm is not None and cTerm < len(r):
+                cc = str(r[cTerm] or "").strip()
+            if not cc:
+                cc = est
+            v = agg[cc]
+            v[0] += com; v[1] += rf; v[2] += ri; v[3] += ria
+            if oa and cc not in oasis_of:
+                oasis_of[cc] = oa
+            n += 1
+        if n:
+            por_cc = [{"cc": cc, "oasis": oasis_of.get(cc, ""),
+                       "comision": round(v[0], 2), "retefuente": round(v[1], 2),
+                       "reteiva": round(v[2], 2), "reteica": round(v[3], 2)}
+                      for cc, v in sorted(agg.items())]
+            tot = [sum(v[i] for v in agg.values()) for i in range(4)]
+            return {"por_cc": por_cc, "comision": round(tot[0], 2),
+                    "retefuente": round(tot[1], 2), "reteiva": round(tot[2], 2),
+                    "reteica": round(tot[3], 2), "n_filas": len(por_cc),
+                    "hoja": ws.title + " (crudo Credibanco)"}
+    return None
+
+
+def leer_datafono(fuente, hoja="RESUMEN MENSUAL", maestro=None):
+    """Comisión y retenciones del datáfono Credibanco por centro de costo.
+
+    Acepta DOS tipos de archivo:
+      1) El ARCHIVO ORIGINAL de Credibanco (hoja 'Reporte Conciliar', con CODIGO
+         ESTABLECIMIENTO y VALOR COMISION/RETEFUENTE/RETE IVA/RTE ICA): calcula el
+         resumen directamente desde el crudo, agrupando por centro de costo con el
+         MAESTRO (establecimiento -> cc) que le pases, o con la columna del propio
+         archivo. ES EL MODO PREFERIDO (no exige correr la macro).
+      2) El archivo de la MACRO ya con la hoja 'RESUMEN MENSUAL' (comisión y
+         retenciones por centro de costo): se lee tal cual.
+
+    Robusto: detecta hoja y columnas por su encabezado; toma los valores en
+    magnitud (por si vienen en negativo)."""
     vacio = {"por_cc": [], "comision": 0.0, "retefuente": 0.0,
              "reteiva": 0.0, "reteica": 0.0, "n_filas": 0, "hoja": None}
     if fuente is None:
@@ -211,6 +327,13 @@ def leer_datafono(fuente, hoja="RESUMEN MENSUAL"):
     else:
         wb = openpyxl.load_workbook(fuente, data_only=True, read_only=True)
 
+    # 1) modo preferido: calcular desde el crudo de Credibanco
+    maes = maestro or maestro_desde_workbook(wb)
+    crudo = _leer_raw_credibanco(wb, maes)
+    if crudo:
+        return crudo
+
+    # 2) respaldo: leer la hoja RESUMEN MENSUAL de la macro
     # candidatas: primero la hoja pedida, luego el resto
     orden = ([ws for ws in wb.worksheets if ws.title.strip().upper() == str(hoja).strip().upper()]
              + [ws for ws in wb.worksheets if ws.title.strip().upper() != str(hoja).strip().upper()])
@@ -365,3 +488,69 @@ BANCOS_LOLITA = [
 
 def sembrar_lolita(sb, empresa_id) -> int:
     return guardar_bancos(sb, empresa_id, BANCOS_LOLITA)
+
+
+# ===========================================================================
+# MAESTRO del datáfono por empresa (establecimiento -> centro de costo)
+# tabla conciliacion_datafono (migración 022)
+# ===========================================================================
+def cargar_maestro(sb, empresa_id) -> dict:
+    """Devuelve {establecimiento: (cc, oasis)} configurado para la empresa."""
+    try:
+        r = (sb.table("conciliacion_datafono").select("*")
+             .eq("empresa_id", empresa_id).execute())
+        return {str(x["establecimiento"]).strip():
+                (str(x.get("cc") or "").strip(), str(x.get("oasis") or ""))
+                for x in (r.data or []) if str(x.get("establecimiento") or "").strip()}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def cargar_maestro_filas(sb, empresa_id) -> list:
+    """El maestro como lista de filas para editar en la tabla de configuración."""
+    m = cargar_maestro(sb, empresa_id)
+    return [{"establecimiento": est, "cc": cc, "oasis": oa}
+            for est, (cc, oa) in sorted(m.items())]
+
+
+def guardar_maestro(sb, empresa_id, filas) -> int:
+    """filas: [{establecimiento, cc, oasis}]. Reemplaza el maestro de la empresa."""
+    filas = [f for f in filas if str(f.get("establecimiento") or "").strip()]
+    try:
+        sb.table("conciliacion_datafono").delete().eq("empresa_id", empresa_id).execute()
+    except Exception:  # noqa: BLE001
+        pass
+    payload = [{"empresa_id": empresa_id,
+                "establecimiento": str(f["establecimiento"]).strip(),
+                "cc": str(f.get("cc") or "").strip(),
+                "oasis": str(f.get("oasis") or "").strip()} for f in filas]
+    if payload:
+        sb.table("conciliacion_datafono").upsert(
+            payload, on_conflict="empresa_id,establecimiento").execute()
+    return len(payload)
+
+
+def guardar_maestro_dict(sb, empresa_id, maestro: dict) -> int:
+    """Guarda un {establecimiento: (cc, oasis)} (p.ej. importado de la macro)."""
+    filas = [{"establecimiento": est, "cc": v[0] if isinstance(v, (list, tuple)) else v,
+              "oasis": v[1] if isinstance(v, (list, tuple)) and len(v) > 1 else ""}
+             for est, v in maestro.items()]
+    return guardar_maestro(sb, empresa_id, filas)
+
+
+# MAESTRO de GRUPO DE LOLITA (de la macro Credibanco): establecimiento -> (cc, oasis)
+MAESTRO_LOLITA = {
+    "22554349": ("100401", "MONTERREY"),
+    "22554331": ("100501", "TORRE MEDICA"),
+    "22554323": ("100601", "PUNTO CLAVE"),
+    "13382460": ("100901", "MAYORCA PISO 4"),
+    "12680385": ("101201", "MEGA PLAZA"),
+    "22554307": ("101301", "CLINICA DEL PRADO"),
+    "22554273": ("101801", "PLAZA DE LA LIBERTAD"),
+    "22554281": ("102001", "PLAZA FABRICATO"),
+    "22792659": ("103001", "UNICENTRO"),
+}
+
+
+def sembrar_maestro_lolita(sb, empresa_id) -> int:
+    return guardar_maestro_dict(sb, empresa_id, MAESTRO_LOLITA)
