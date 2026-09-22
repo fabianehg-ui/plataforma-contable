@@ -154,9 +154,15 @@ with tab_cfg:
             "cuenta_puc": st.column_config.TextColumn("Cuenta PUC del banco", required=True),
         },
     )
-    if st.button("💾 Guardar bancos", type="primary"):
+    cbb = st.columns(2)
+    if cbb[0].button("💾 Guardar bancos", type="primary"):
         n = ebm.guardar_bancos(sb, emp["id"], edb.to_dict("records"))
         st.success(f"{n} bancos guardados."); st.rerun()
+    if cbb[1].button("🌱 Sembrar GRUPO DE LOLITA (bancos + reglas)"):
+        nb, nr = ebm.sembrar_lolita(sb, emp["id"])
+        st.success(f"Sembrados {nb} bancos y {nr} reglas de GRUPO DE LOLITA. "
+                   "Revisa la cuenta PUC de cada banco y las cuentas de las reglas.")
+        st.rerun()
 
     st.divider()
     st.markdown("#### 📋 Reglas de clasificación (lista blanca)")

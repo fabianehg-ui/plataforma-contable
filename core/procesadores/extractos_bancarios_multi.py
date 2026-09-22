@@ -439,3 +439,31 @@ def guardar_centros(sb, empresa_id, centros) -> int:
 
 def sembrar_reglas_defecto(sb, empresa_id) -> int:
     return guardar_reglas(sb, empresa_id, REGLAS_DEFECTO)
+
+
+# ===========================================================================
+# Semilla para GRUPO DE LOLITA (bancos + reglas con sus cuentas del PUC)
+# ===========================================================================
+BANCOS_LOLITA = [
+    {"nombre": "DAVIVIENDA 7872",         "detectar": "03986999 7872",     "formato": "davivienda",         "nit": "860034313", "cuenta_puc": "11200513"},
+    {"nombre": "OCCIDENTE 9426",          "detectar": "405-08942-6",       "formato": "occidente",          "nit": "890300279", "cuenta_puc": "11100505"},
+    {"nombre": "BANCOLOMBIA AHORRO 8271", "detectar": "255438271",         "formato": "bancolombia_ahorro", "nit": "890903938", "cuenta_puc": "11100501"},
+    {"nombre": "FIDU DAVIVIENDA 3122",    "detectar": "0607039800123122",  "formato": "fidu_davivienda",    "nit": "800182281", "cuenta_puc": "11304001"},
+    {"nombre": "FIDU BANCOLOMBIA 4655",   "detectar": "15000304655",       "formato": "fidu_bancolombia",   "nit": "800180687", "cuenta_puc": "11304002"},
+]
+
+REGLAS_LOLITA = [
+    {"patron": r"4X1\.?000|4 ?POR ?MIL|IMPTO GOBIERNO|\bGMF\b|GRAVAMEN", "cuenta": "53050601", "lado": "D", "base": False, "etiqueta": "GRAVAMEN 4X1000"},
+    {"patron": r"\bIVA\b",                                               "cuenta": "24081009", "lado": "D", "base": True,  "etiqueta": "IVA DESCONTABLE GASTOS"},
+    {"patron": r"RETEFUENTE|RETEFTE|RETENCION",                          "cuenta": "13551509", "lado": "R", "base": False, "etiqueta": "RETEFUENTE RENDIMIENTOS"},
+    {"patron": r"COMISION|COMIS\b",                                      "cuenta": "53051501", "lado": "D", "base": False, "etiqueta": "COMISIONES"},
+    {"patron": r"CUOTA ADMIN|CUOTA ?MANEJO|C ?MANEJO|CobroServicio|MANEJO ?PORTAL|CobroTransf|CobroTransferencia|NdCobro|SERVICIO ?RECAUDO|SERV ?TRANS|CobroServicioEmpresarial", "cuenta": "53050501", "lado": "D", "base": False, "etiqueta": "GASTOS BANCARIOS"},
+    {"patron": r"RENDIMIEN|ABONO INTERES|INTERESES AHORR|INTERES\b",     "cuenta": "42100501", "lado": "C", "base": False, "etiqueta": "INGRESOS FINANCIEROS"},
+]
+
+
+def sembrar_lolita(sb, empresa_id) -> tuple:
+    """Carga los bancos y reglas de GRUPO DE LOLITA. Devuelve (n_bancos, n_reglas)."""
+    nb = guardar_bancos(sb, empresa_id, BANCOS_LOLITA)
+    nr = guardar_reglas(sb, empresa_id, REGLAS_LOLITA)
+    return nb, nr
