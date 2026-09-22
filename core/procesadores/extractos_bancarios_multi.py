@@ -450,6 +450,7 @@ BANCOS_LOLITA = [
     {"nombre": "BANCOLOMBIA AHORRO 8271", "detectar": "255438271",         "formato": "bancolombia_ahorro", "nit": "890903938", "cuenta_puc": "11100501"},
     {"nombre": "FIDU DAVIVIENDA 3122",    "detectar": "0607039800123122",  "formato": "fidu_davivienda",    "nit": "800182281", "cuenta_puc": "11304001"},
     {"nombre": "FIDU BANCOLOMBIA 4655",   "detectar": "15000304655",       "formato": "fidu_bancolombia",   "nit": "800180687", "cuenta_puc": "11304002"},
+    {"nombre": "BANCOLOMBIA CTE 4451",    "detectar": "864314451",         "formato": "bancolombia_cta",    "nit": "890903938", "cuenta_puc": "11100599"},
 ]
 
 REGLAS_LOLITA = [

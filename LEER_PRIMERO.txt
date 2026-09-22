@@ -1,43 +1,30 @@
 BANCOS A CONTAI — configuración por empresa (gastos e ingresos)
 ================================================================
-POR QUÉ TE SALÍA "modo clásico / NO reconocido":
-La empresa todavía no tenía bancos configurados. Hay que hacer 2 cosas UNA VEZ:
+PASO 1 — Supabase -> SQL Editor -> ejecuta db/migrations/020_bancos_config.sql
+PASO 2 — Reemplaza en el repo:
+           core/procesadores/extractos_bancarios_multi.py
+           app_pages/19_Bancos_a_Contai.py
+         Entra a Bancos a Contai (empresa GRUPO DE LOLITA) -> pestaña
+         "Configuración de la empresa" -> botón:
+             🌱 Sembrar GRUPO DE LOLITA (bancos + reglas)
+         Elige los centros de costo para el reparto y guarda.
+PASO 3 — Pestaña "Procesar extractos": sube los PDF y genera el plano.
 
-PASO 1 — BASE DE DATOS (una sola vez)
-  Supabase -> SQL Editor -> pega y ejecuta db/migrations/020_bancos_config.sql
-  (crea bancos_config, bancos_reglas, bancos_cc)
+BANCOS QUE QUEDAN SEMBRADOS (6) con su cuenta del PUC:
+   DAVIVIENDA 7872         -> 11200513
+   OCCIDENTE 9426          -> 11100505
+   BANCOLOMBIA AHORRO 8271 -> 11100501   (en tu PUC dice CANCELADA: verifica)
+   FIDU DAVIVIENDA 3122    -> 11304001
+   FIDU BANCOLOMBIA 4655   -> 11304002
+   BANCOLOMBIA CTE 4451    -> 11100599   (CUENTA PUENTE 4451 BBIA)
 
-PASO 2 — CONFIGURAR (en la app, con GRUPO DE LOLITA como empresa activa)
-  Reemplaza en tu repo:
-     core/procesadores/extractos_bancarios_multi.py
-     app_pages/19_Bancos_a_Contai.py
-  Entra a Bancos a Contai -> pestaña "Configuración de la empresa"
-  y dale al botón:  🌱 Sembrar GRUPO DE LOLITA (bancos + reglas)
-  Eso deja cargados los 5 bancos con su cuenta del PUC y las reglas:
+REGLAS (cuentas de tu PUC):
+   GMF/4x1000 53050601 | IVA descontable gastos 24081009 (base) |
+   Retefuente rendimientos 13551509 | Comisiones 53051501 |
+   Gastos bancarios 53050501 | Ingresos financieros 42100501
 
-     DAVIVIENDA 7872        -> 11200513
-     OCCIDENTE 9426         -> 11100505
-     BANCOLOMBIA AHORRO 8271-> 11100501   (verifica: en tu PUC dice "CANCELADA")
-     FIDU DAVIVIENDA 3122   -> 11304001
-     FIDU BANCOLOMBIA 4655  -> 11304002
-
-     Reglas (cuentas de tu PUC):
-       GMF/4x1000  53050601 | IVA descontable gastos 24081009 (base) |
-       Retefuente rendimientos 13551509 | Comisiones 53051501 |
-       Gastos bancarios 53050501 | Ingresos financieros 42100501
-
-  Luego, en "Centros de costo para el reparto", ELIGE los centros de LOLITA.
-
-  El BANCOLOMBIA CORRIENTE 4451 NO quedó sembrado (no ubiqué su cuenta en tu
-  PUC): agrégalo a mano en la tabla de bancos con formato "bancolombia_cta" y
-  su cuenta. (En "modo clásico" igual lo reconoce como BANCOLOMBIA.)
-
-PASO 3 — PROCESAR
-  Pestaña "Procesar extractos": sube los PDF, revisa el resumen y genera el
-  plano (Db = Cr).
-
-NOTA: solo se contabilizan los movimientos que casan con una regla (lista
-blanca). Nómina, proveedores, cuotas de crédito, consignaciones y traslados
-quedan FUERA a propósito. Si un cargo no te lo toma (o toma algo que no debe),
-ajusta las reglas en la pestaña Configuración.
-Requisito: pdfplumber (ya está en tu requirements).
+Probado con tus 6 extractos: los detecta todos y el plano cuadra.
+Solo se contabilizan los cargos/ingresos bancarios (GMF, IVA, comisión, cuota
+manejo, rendimientos, intereses). Los PAGO QR, pagos a proveedores, nómina,
+consignaciones y traslados quedan FUERA a propósito. Ajusta las reglas si algo
+no te cuadra.
