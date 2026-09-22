@@ -238,11 +238,14 @@ with tab_c:
             df = df[[c for c in cols_pend if c in df.columns]].rename(columns=renom)
             return df.style.format({"Valor": "{:,.2f}"})
 
-        st.markdown("**Partidas en banco sin libros — abonos por identificar / en tránsito**")
-        st.caption("Detalladas por documento, tipo de abono (datáfono, consignación, "
-                   "transferencia, …) y centro de costo.")
-        st.dataframe(_tabla_pend(r["pend_banco"]), use_container_width=True,
-                     hide_index=True, height=240)
+        st.markdown("**Consignaciones en tránsito — lo que quedó en libros y entra el mes siguiente**")
+        st.caption("Consignaciones/datáfonos de los últimos días registrados en LIBROS, "
+                   "acumulados de la fecha más reciente hacia atrás hasta cubrir el "
+                   "tránsito, detallados por documento, tipo de abono y centro de costo. "
+                   f"Suman {r.get('transito_detalle_total', 0):,.2f} · tránsito del cuadro "
+                   f"{r['consignaciones_transito']:,.2f}.")
+        st.dataframe(_tabla_pend(r["pend_transito"]), use_container_width=True,
+                     hide_index=True, height=260)
         if r["pend_libros"]:
             st.markdown("**Pagos en libros que no salieron del banco**")
             st.dataframe(_tabla_pend(r["pend_libros"]), use_container_width=True,

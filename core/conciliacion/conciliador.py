@@ -591,6 +591,46 @@ def conciliar(aux, banco, datafono, saldo_banco: float,
     pend_banco = [_fila_pendiente(x, "banco") for x in solo_banco]
     pend_libros = [_fila_pendiente(x, "libros") for x in solo_libros]
 
+    # ---- CONSIGNACIONES EN TRÁNSITO: lo que quedó en LIBROS y entra el mes
+    # siguiente (consignaciones/datáfonos de los últimos días), acumulando de la
+    # fecha más reciente hacia atrás hasta cubrir el monto del tránsito. Cada
+    # documento se enriquece con tipo y centro de costo cruzando con el reporte. ----
+    def _dkey(f):
+        m = re.match(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", str(f or ""))
+        if m:  # DD/MM/AAAA
+            return (m.group(3), m.group(2).zfill(2), m.group(1).zfill(2))
+        return (str(f or ""),)
+
+    bidx = {}
+    for m in banco["movimientos"]:
+        for d in (m.get("docs") or ([m.get("nc")] if m.get("nc") else [])):
+            if d and d not in bidx:
+                bidx[d] = m
+    consig_libros = [x for x in aux["detalle"] if x.get("deb", 0) > 0]
+    consig_libros.sort(key=lambda x: (_dkey(x.get("fecha", "")), x.get("deb", 0)),
+                       reverse=True)
+    pend_transito, acc_tr = [], 0.0
+    meta_tr = round(float(transito), 2)
+    for x in consig_libros:
+        docs = x.get("docs") or ([x.get("doc")] if x.get("doc") else [])
+        mb = None
+        for d in docs:
+            if d in bidx:
+                mb = bidx[d]
+                break
+        oasis = (mb or {}).get("oasis", "")
+        cc_cod, cc_nom = _cc_de(oasis) if oasis else ("", "")
+        val = round(x.get("deb", 0.0), 2)
+        pend_transito.append({
+            "documento": ", ".join(d for d in docs if d),
+            "tipo": (mb or {}).get("tipo", "CONSIGNACION"),
+            "centro_costo": cc_cod, "punto": oasis or cc_nom,
+            "fecha": x.get("fecha", ""), "detalle": x.get("detalle", ""),
+            "valor": val})
+        acc_tr += val
+        if meta_tr and acc_tr >= meta_tr:
+            break
+
     return {
         "saldo_ant": round(aux["saldo_ant"], 2),
         "consignaciones": aux["consignaciones"],
@@ -609,6 +649,8 @@ def conciliar(aux, banco, datafono, saldo_banco: float,
         "solo_banco": solo_banco,
         "pend_banco": pend_banco,
         "pend_libros": pend_libros,
+        "pend_transito": pend_transito,
+        "transito_detalle_total": round(acc_tr, 2),
         "datafono_cc": datafono["por_cc"],
     }
 
@@ -755,9 +797,10 @@ def exportar_excel(r, nombre_banco="", cuenta="", periodo="", empresa="",
         c.font = b_bold; c.number_format = _FMT_NUM; c.fill = gris2; c.border = borde
         fila += 2
 
-    _seccion("PARTIDAS EN BANCO SIN LIBROS — abonos por identificar / en tránsito "
-             "(datáfono, consignación, transferencia, etc.)", r.get("pend_banco", []))
-    _seccion("PAGOS EN LIBROS QUE NO SALIERON DEL BANCO", r.get("pend_libros", []), "PAGO")
+    _seccion("CONSIGNACIONES EN TRÁNSITO — detalle (lo que quedó en libros y entra "
+             "el mes siguiente: consignación / datáfono / etc.)", r.get("pend_transito", []))
+    if r.get("pend_libros"):
+        _seccion("PAGOS EN LIBROS QUE NO SALIERON DEL BANCO", r.get("pend_libros", []), "PAGO")
 
     # ---------- pie ----------
     if elaborado_por:
@@ -998,8 +1041,8 @@ def exportar_pdf(r, nombre_banco="", cuenta="", periodo="", empresa="",
         ]))
         el.append(tt)
 
-    tabla_pend("PARTIDAS EN BANCO SIN LIBROS — abonos por identificar / en tránsito "
-               "(datáfono, consignación, transferencia, etc.)", r.get("pend_banco", []))
+    tabla_pend("CONSIGNACIONES EN TRÁNSITO — detalle (lo que quedó en libros y entra "
+               "el mes siguiente: consignación / datáfono / etc.)", r.get("pend_transito", []))
     tabla_pend("PAGOS EN LIBROS QUE NO SALIERON DEL BANCO", r.get("pend_libros", []))
 
     ahora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
