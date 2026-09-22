@@ -166,25 +166,92 @@ def leer_banco(fuente, hoja: str, gasto_reglas=None):
     return {"movimientos": movs, "gastos": {k: round(v, 2) for k, v in g.items()}}
 
 
+def _es_encab_datafono(fila):
+    """¿Esta fila es el encabezado del resumen del datáfono? Devuelve el mapeo
+    de columnas {clave: indice} si lo es, o None."""
+    up = [str(c or "").strip().upper() for c in fila]
+    joined = " | ".join(up)
+    if not (("COMIS" in joined) and ("CENTRO" in joined or "COSTO" in joined)):
+        return None
+    mp = {}
+    for j, v in enumerate(up):
+        if ("CENTRO" in v or "COSTO" in v) and "cc" not in mp:
+            mp["cc"] = j
+        elif "OASIS" in v or "ESTABLEC" in v or "NOMBRE" in v or "PUNTO" in v:
+            mp.setdefault("oasis", j)
+        elif "COMIS" in v:
+            mp.setdefault("comision", j)
+        elif "RETEFUENTE" in v or ("RTE" in v and "FUENTE" in v) or "RETE FUENTE" in v \
+                or ("RETE" in v and "FUENTE" in v):
+            mp.setdefault("retefuente", j)
+        elif "IVA" in v and ("RETE" in v or "RTE" in v):
+            mp.setdefault("reteiva", j)
+        elif "ICA" in v and ("RETE" in v or "RTE" in v):
+            mp.setdefault("reteica", j)
+    return mp if "comision" in mp else None
+
+
 def leer_datafono(fuente, hoja="RESUMEN MENSUAL"):
-    """Del macro Credibanco (RESUMEN MENSUAL): comisión y retenciones por CC."""
+    """Del macro Credibanco: comisión y retenciones por centro de costo.
+
+    Robusto: busca la hoja del resumen y detecta las columnas por su encabezado
+    (CENTRO DE COSTO / GASTO COMISION / RETEFUENTE / RETE IVA / RTE ICA), sin
+    depender de que la hoja se llame exactamente 'RESUMEN MENSUAL' ni de que las
+    columnas estén en posiciones fijas. Ignora la fila de totales."""
+    vacio = {"por_cc": [], "comision": 0.0, "retefuente": 0.0,
+             "reteiva": 0.0, "reteica": 0.0, "n_filas": 0, "hoja": None}
     if fuente is None:
-        return {"por_cc": [], "comision": 0.0, "retefuente": 0.0,
-                "reteiva": 0.0, "reteica": 0.0}
-    ws, _ = _abrir(fuente, hoja)
-    rows = list(ws.iter_rows(values_only=True))
-    por_cc = []
-    com = ret = riva = rica = 0.0
-    for r in rows[1:]:
-        cc = str(r[0] or "").strip()
-        if not cc:
+        return vacio
+
+    import openpyxl
+    if isinstance(fuente, (bytes, bytearray)):
+        wb = openpyxl.load_workbook(io.BytesIO(fuente), data_only=True, read_only=True)
+    elif hasattr(fuente, "read"):
+        wb = openpyxl.load_workbook(io.BytesIO(fuente.read()), data_only=True, read_only=True)
+    else:
+        wb = openpyxl.load_workbook(fuente, data_only=True, read_only=True)
+
+    # candidatas: primero la hoja pedida, luego el resto
+    orden = ([ws for ws in wb.worksheets if ws.title.strip().upper() == str(hoja).strip().upper()]
+             + [ws for ws in wb.worksheets if ws.title.strip().upper() != str(hoja).strip().upper()])
+
+    for ws in orden:
+        rows = list(ws.iter_rows(values_only=True))
+        mp = hdr_i = None
+        for i, r in enumerate(rows[:15]):
+            m = _es_encab_datafono(r)
+            if m:
+                mp, hdr_i = m, i
+                break
+        if not mp:
             continue
-        c, rf, ri, ria = _num(r[2]), _num(r[3]), _num(r[4]), _num(r[5])
-        por_cc.append({"cc": cc, "oasis": str(r[1] or ""), "comision": c,
-                       "retefuente": rf, "reteiva": ri, "reteica": ria})
-        com += c; ret += rf; riva += ri; rica += ria
-    return {"por_cc": por_cc, "comision": round(com, 2), "retefuente": round(ret, 2),
-            "reteiva": round(riva, 2), "reteica": round(rica, 2)}
+
+        cCC, cCom = mp.get("cc", 0), mp["comision"]
+        cOa = mp.get("oasis", cCC + 1)
+        cRF, cRI, cRA = mp.get("retefuente"), mp.get("reteiva"), mp.get("reteica")
+        por_cc = []
+        com = ret = riva = rica = 0.0
+        for r in rows[hdr_i + 1:]:
+            cc = str(r[cCC] or "").strip() if cCC < len(r) else ""
+            if not cc or cc.upper().startswith(("TOTAL", "SUMA")):
+                continue
+            # son NOTAS DÉBITO (cargos): se toman en magnitud, por si el export
+            # de Credibanco los trae con signo negativo (p.ej. JIPER).
+            c = abs(_num(r[cCom])) if cCom < len(r) else 0.0
+            rf = abs(_num(r[cRF])) if cRF is not None and cRF < len(r) else 0.0
+            ri = abs(_num(r[cRI])) if cRI is not None and cRI < len(r) else 0.0
+            ria = abs(_num(r[cRA])) if cRA is not None and cRA < len(r) else 0.0
+            if c == 0 and rf == 0 and ri == 0 and ria == 0:
+                continue
+            oa = str(r[cOa] or "") if cOa < len(r) else ""
+            por_cc.append({"cc": cc, "oasis": oa, "comision": c,
+                           "retefuente": rf, "reteiva": ri, "reteica": ria})
+            com += c; ret += rf; riva += ri; rica += ria
+        if por_cc:
+            return {"por_cc": por_cc, "comision": round(com, 2),
+                    "retefuente": round(ret, 2), "reteiva": round(riva, 2),
+                    "reteica": round(rica, 2), "n_filas": len(por_cc), "hoja": ws.title}
+    return vacio
 
 
 def conciliar(aux, banco, datafono, saldo_banco: float,

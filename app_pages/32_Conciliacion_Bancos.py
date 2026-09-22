@@ -109,6 +109,19 @@ with tab_c:
             st.error(f"No pude conciliar: {e}")
             st.stop()
 
+        # aviso si se subió el datáfono pero no se leyó nada
+        if f_data is not None and not data.get("por_cc"):
+            st.warning("Subiste el archivo del datáfono pero no pude leer el "
+                       "resumen (comisión / retenciones por centro de costo). "
+                       "Verifica que el archivo tenga la hoja del **RESUMEN MENSUAL** "
+                       "con las columnas CENTRO DE COSTO · GASTO COMISION · "
+                       "RETEFUENTE · RETE IVA · RTE ICA (corre la macro que genera "
+                       "esa hoja antes de subirlo).")
+        elif f_data is not None and data.get("hoja"):
+            st.caption(f"Datáfono leído de la hoja «{data['hoja']}»: "
+                       f"{data['n_filas']} centros · comisión {data['comision']:,.2f} · "
+                       f"retenciones {data['retefuente']+data['reteiva']+data['reteica']:,.2f}.")
+
         # ---- cuadro de conciliación ----
         st.subheader(f"Conciliación — {nom}")
         cuadro = [
