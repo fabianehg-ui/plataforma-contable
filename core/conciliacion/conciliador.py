@@ -242,33 +242,50 @@ def tipo_abono(detalle, concepto=""):
     return "OTRO"
 
 
+def _col_frag(up, *frags):
+    """Índice de la 1ª columna cuyo encabezado contiene alguno de los fragmentos."""
+    for f in frags:
+        for j, h in enumerate(up):
+            if f in h:
+                return j
+    return None
+
+
 def leer_banco(fuente, hoja: str, gasto_reglas=None):
-    """De la HOJA del banco: movimientos con N COMPROBANTE, débito, crédito,
+    """De la HOJA del banco: movimientos con comprobante, débito, crédito,
     concepto, OASIS (centro de costo) y tipo de abono; desglose de GTO
-    FINANCIERO en gasto/comisiones/IVA/GMF."""
+    FINANCIERO en gasto/comisiones/IVA/GMF.
+
+    Robusto a los distintos formatos de cada banco (4451, Occidente, Davivienda,
+    Bogotá, ahorros, etc.): busca el encabezado hasta 20 filas abajo (algunos
+    reportes traen filas de título del banco) y ubica las columnas por su nombre
+    aunque varíe: «N COMPROBANTE» / «COMPROBANTE» / «#COMPROBANTE»,
+    «DÉBITOS/CRÉDITOS», «TRANSACCIÓN/DESCRIPCIÓN/MOTIVO», etc."""
     reglas = gasto_reglas or GASTO_REGLAS_DEF
     ws, _ = _abrir(fuente, hoja)
     rows = list(ws.iter_rows(values_only=True))
-    # encabezado: primera fila con 'N COMPROBANTE' o 'DEBITO'
-    hdr_i = 0
-    for i, r in enumerate(rows[:6]):
-        up = [str(c or "").strip().upper() for c in r]
-        if "N COMPROBANTE" in up or "DEBITO" in up or "DÉBITO" in up:
-            hdr_i = i
+    if not rows:
+        return {"movimientos": [], "gastos": {}}
+    # encabezado: 1ª fila con (DÉBITO y CRÉDITO) o con COMPROBANTE
+    hdr_i, up = None, None
+    for i, r in enumerate(rows[:20]):
+        u = [str(c or "").strip().upper() for c in r]
+        tiene_deb = _col_frag(u, "DEBITO", "DÉBITO") is not None
+        tiene_cred = _col_frag(u, "CREDITO", "CRÉDITO") is not None
+        tiene_comp = _col_frag(u, "COMPROBANTE") is not None
+        if (tiene_deb and tiene_cred) or tiene_comp:
+            hdr_i, up = i, u
             break
-    # el encabezado puede repetir 'OASIS'; tomamos la 1ª aparición de cada nombre
-    H = {}
-    for j, c in enumerate(rows[hdr_i]):
-        k = str(c or "").strip().upper()
-        if k and k not in H:
-            H[k] = j
-    cNC = H.get("N COMPROBANTE")
-    cDeb = H.get("DEBITO", H.get("DÉBITO", H.get("DEBITOS", H.get("DÉBITOS"))))
-    cCred = H.get("CREDITO", H.get("CRÉDITO", H.get("CREDITOS", H.get("CRÉDITOS"))))
-    cCon = H.get("CONCEPTO")
-    cDet = H.get("DETALLE", H.get("TRANSACCIÓN", H.get("DESCRIPCIÓN")))
-    cFec = H.get("FECHA")
-    cOa = H.get("OASIS", H.get("CENTRO DE COSTO", H.get("PUNTO")))
+    if hdr_i is None:
+        hdr_i, up = 0, [str(c or "").strip().upper() for c in rows[0]]
+
+    cNC = _col_frag(up, "COMPROBANTE")   # N COMPROBANTE / COMPROBANTE / #COMPROBANTE
+    cDeb = _col_frag(up, "DEBITO", "DÉBITO")
+    cCred = _col_frag(up, "CREDITO", "CRÉDITO")
+    cCon = _col_frag(up, "CONCEPTO")
+    cDet = _col_frag(up, "DETALLE", "TRANSACC", "DESCRIP", "MOTIVO")
+    cFec = _col_frag(up, "FECHA")
+    cOa = _col_frag(up, "OASIS", "CENTRO DE COSTO", "PUNTO")
 
     movs = []
     g = defaultdict(float)
@@ -943,6 +960,38 @@ def plano_a_texto(filas) -> str:
     return "\r\n".join("\t".join(str(c) for c in fila) for fila in filas) + "\r\n"
 
 
+def generar_plano_gastos_consolidado(resultados, centros, puc_por_banco,
+                                     cuentas_gasto=None, comprobante="10",
+                                     documento="1", fecha=None):
+    """Plano ÚNICO con los gastos bancarios de TODOS los bancos conciliados.
+
+    Por cada banco: sus gastos bancarios (gasto bancario, comisiones, IVA, GMF)
+    repartidos en PARTES IGUALES entre `centros`, y —solo donde aplica datáfono
+    (la 4451)— la comisión y retenciones del datáfono POR CENTRO DE COSTO. La
+    contrapartida de cada banco va contra SU propia cuenta puente
+    (`puc_por_banco[nombre_banco]`). Cada banco queda cuadrado por separado y el
+    conjunto también.
+
+    `resultados`: [{'banco','cuenta','r'}]. Devuelve
+    {filas, debitos, creditos, cuadra, por_banco}."""
+    filas = [list(HDR_PLANO)]
+    tot = 0.0
+    por_banco = []
+    for res in resultados:
+        nombre = res["banco"]
+        puc = str(puc_por_banco.get(nombre, "") or "").strip()
+        p = generar_plano_gastos(
+            res["r"], centros, cuenta_puc=puc, cuentas_gasto=cuentas_gasto,
+            comprobante=comprobante, documento=documento, fecha=fecha,
+            detalle=f"CONCILIACION BANCARIA {nombre}"[:60])
+        filas += p["filas"][1:]                 # sin repetir el encabezado
+        tot += p["debitos"]
+        por_banco.append({"banco": nombre, "cuenta_puc": puc, "debitos": p["debitos"],
+                          "lineas": p["n"], "sin_puc": (not puc and p["debitos"] > 0)})
+    return {"filas": filas, "debitos": round(tot, 2), "creditos": round(tot, 2),
+            "cuadra": True, "por_banco": por_banco, "n": len(filas) - 1}
+
+
 # ===========================================================================
 # PDF de la conciliación con la firma del software que lo generó
 # ===========================================================================
@@ -1069,6 +1118,208 @@ def exportar_pdf(r, nombre_banco="", cuenta="", periodo="", empresa="",
 
 
 # ===========================================================================
+# CONSOLIDADO de varios bancos (conciliar TODO junto)
+# ===========================================================================
+def exportar_excel_consolidado(resultados, empresa="", periodo="") -> bytes:
+    """Un solo Excel con una hoja RESUMEN (una fila por banco) y una hoja por
+    banco (cuadro + tránsito). `resultados`: [{'banco','cuenta','r'}]."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    azul = PatternFill("solid", fgColor="1F4E78")
+    verde = PatternFill("solid", fgColor="E2EFDA")
+    b_tit = Font(bold=True, color="FFFFFF", size=10)
+    b_bold = Font(bold=True, size=10)
+    center = Alignment(horizontal="center")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "RESUMEN"
+    ws.merge_cells("A1:J1")
+    ws["A1"] = f"{(empresa or '').upper()} — CONCILIACIÓN BANCARIA CONSOLIDADA" + (f" · {periodo}" if periodo else "")
+    ws["A1"].font = Font(bold=True, size=12, color="1F4E78")
+    enc = ["Banco", "Saldo libros", "Consignaciones", "Pagos", "Notas débito",
+           "Saldo a cierre", "Tránsito", "Saldo extracto", "Diferencia", "Cuadra"]
+    for j, e in enumerate(enc, 1):
+        c = ws.cell(row=3, column=j, value=e); c.font = b_tit; c.fill = azul; c.alignment = center
+    fila = 4
+    tot = [0.0] * 8
+    for res in resultados:
+        r = res["r"]
+        dif = round((r["saldo_cierre"] - r["consignaciones_transito"]) - r["saldo_banco"], 2)
+        vals = [r["saldo_ant"], r["consignaciones"], -r["pagos"], -r["notas_debito"],
+                r["saldo_cierre"], -r["consignaciones_transito"], r["saldo_banco"], dif]
+        ws.cell(row=fila, column=1, value=res["banco"])
+        for j, v in enumerate(vals, 2):
+            cc = ws.cell(row=fila, column=j, value=round(v, 2)); cc.number_format = _FMT_NUM
+        ws.cell(row=fila, column=10, value="SÍ" if r["cuadra"] else "NO").alignment = center
+        for k in range(8):
+            tot[k] += vals[k]
+        fila += 1
+    ws.cell(row=fila, column=1, value="TOTAL").font = b_bold
+    for j, v in enumerate(tot, 2):
+        cc = ws.cell(row=fila, column=j, value=round(v, 2)); cc.number_format = _FMT_NUM; cc.font = b_bold; cc.fill = verde
+    for col, w in zip("ABCDEFGHIJ", (26, 16, 16, 16, 16, 16, 15, 16, 13, 8)):
+        ws.column_dimensions[col].width = w
+    ws.sheet_view.showGridLines = False
+
+    # hoja por banco (cuadro + tránsito)
+    for res in resultados:
+        r = res["r"]
+        wsx = wb.create_sheet(res["banco"][:28] or "Banco")
+        wsx["A1"] = f"{res['banco']} · cuenta {res.get('cuenta','')}" + (f" · {periodo}" if periodo else "")
+        wsx["A1"].font = b_bold
+        cuadro = [
+            ("SALDO EN LIBROS", r["saldo_ant"]), ("(+) CONSIGNACIONES", r["consignaciones"]),
+            ("(−) PAGOS", -r["pagos"]), ("(−) NOTAS DÉBITO", -r["notas_debito"]),
+            ("      Gasto bancario", -r["gasto_bancario"]), ("      Comisiones", -r["comisiones"]),
+            ("      Comisión datáfono", -r["comision_datafono"]), ("      IVA", -r["iva"]),
+            ("      G.M.F.", -r["gmf"]), ("      ReteIVA", -r["reteiva"]),
+            ("      Retefuente", -r["retefuente"]), ("      ReteICA", -r["reteica"]),
+            ("(=) SALDO EN LIBROS A CIERRE", r["saldo_cierre"]),
+            ("(−) CONSIGNACIONES EN TRÁNSITO", -r["consignaciones_transito"]),
+            ("(=) SALDO SEGÚN EXTRACTO", r["saldo_banco"]),
+        ]
+        rw = 3
+        for et, v in cuadro:
+            wsx.cell(row=rw, column=1, value=et)
+            c = wsx.cell(row=rw, column=3, value=round(v, 2)); c.number_format = _FMT_PESO
+            rw += 1
+        rw += 1
+        wsx.cell(row=rw, column=1, value="CONSIGNACIONES EN TRÁNSITO — detalle (libros → mes siguiente)").font = b_bold
+        rw += 1
+        for j, e in enumerate(["DOCUMENTO", "TIPO DE ABONO", "CENTRO DE COSTO", "FECHA", "VALOR"], 1):
+            wsx.cell(row=rw, column=j, value=e).font = b_bold
+        rw += 1
+        for p in r.get("pend_transito", []):
+            cc = (f'{p["centro_costo"]} — ' if p.get("centro_costo") else "") + (p.get("punto") or "")
+            wsx.cell(row=rw, column=1, value=p["documento"])
+            wsx.cell(row=rw, column=2, value=p["tipo"])
+            wsx.cell(row=rw, column=3, value=cc.strip(" —"))
+            wsx.cell(row=rw, column=4, value=p["fecha"])
+            v = wsx.cell(row=rw, column=5, value=p["valor"]); v.number_format = _FMT_NUM
+            rw += 1
+        for col, w in zip("ABCDE", (34, 24, 26, 14, 16)):
+            wsx.column_dimensions[col].width = w
+        wsx.sheet_view.showGridLines = False
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    return bio.getvalue()
+
+
+def exportar_pdf_consolidado(resultados, empresa="", periodo="", usuario="") -> bytes:
+    """PDF con una página RESUMEN (todos los bancos) y una sección por banco
+    (cuadro + tránsito detallado), con firma del software."""
+    import datetime
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph,
+                                    Spacer, PageBreak)
+
+    def money(v):
+        v = float(v or 0)
+        return f"({abs(v):,.2f})" if v < 0 else f"{v:,.2f}"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(letter), leftMargin=12 * mm,
+                            rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=16 * mm,
+                            title="Conciliación bancaria consolidada")
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle("h", parent=styles["Title"], fontSize=13, spaceAfter=2,
+                       textColor=colors.HexColor("#1F4E78"))
+    sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9.5)
+    sec = ParagraphStyle("sec", parent=styles["Heading4"], fontSize=10,
+                         textColor=colors.HexColor("#1F4E78"), spaceBefore=8, spaceAfter=3)
+    el = [Paragraph((empresa or "").upper(), h),
+          Paragraph("CONCILIACIÓN BANCARIA CONSOLIDADA" + (f" · {periodo}" if periodo else ""), sub),
+          Spacer(1, 6)]
+    # resumen
+    data = [["Banco", "Saldo libros", "Consig.", "Pagos", "Notas déb.",
+             "Saldo cierre", "Tránsito", "Saldo extracto", "Dif.", "Cuadra"]]
+    tot = [0.0] * 8
+    for res in resultados:
+        r = res["r"]
+        dif = round((r["saldo_cierre"] - r["consignaciones_transito"]) - r["saldo_banco"], 2)
+        vals = [r["saldo_ant"], r["consignaciones"], -r["pagos"], -r["notas_debito"],
+                r["saldo_cierre"], -r["consignaciones_transito"], r["saldo_banco"], dif]
+        data.append([res["banco"]] + [money(v) for v in vals] + ["SÍ" if r["cuadra"] else "NO"])
+        for k in range(8):
+            tot[k] += vals[k]
+    data.append(["TOTAL"] + [money(v) for v in tot] + [""])
+    tr = Table(data, repeatRows=1)
+    tr.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E2EFDA")),
+        ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#BFBFBF")),
+    ]))
+    el.append(tr)
+
+    for res in resultados:
+        r = res["r"]
+        el.append(PageBreak())
+        el.append(Paragraph(f"{res['banco']} · cuenta {res.get('cuenta','')}", sec))
+        cuadro = [
+            ["SALDO EN LIBROS", money(r["saldo_ant"])], ["(+) CONSIGNACIONES", money(r["consignaciones"])],
+            ["(−) PAGOS", money(-r["pagos"])], ["(−) NOTAS DÉBITO", money(-r["notas_debito"])],
+            ["      Comisión datáfono", money(-r["comision_datafono"])],
+            ["(=) SALDO EN LIBROS A CIERRE", money(r["saldo_cierre"])],
+            ["(−) CONSIGNACIONES EN TRÁNSITO", money(-r["consignaciones_transito"])],
+            ["(=) SALDO SEGÚN EXTRACTO", money(r["saldo_banco"])],
+        ]
+        tc = Table(cuadro, colWidths=[110 * mm, 55 * mm])
+        tc.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 9), ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                                ("FONTNAME", (0, 5), (-1, 7), "Helvetica-Bold")]))
+        el.append(tc)
+        pend = r.get("pend_transito", [])
+        if pend:
+            el.append(Paragraph("Consignaciones en tránsito — detalle (libros → mes siguiente)", sec))
+            d = [["DOCUMENTO", "TIPO DE ABONO", "CENTRO DE COSTO", "FECHA", "VALOR"]]
+            t = 0.0
+            for p in pend:
+                cc = (f'{p["centro_costo"]} — ' if p.get("centro_costo") else "") + (p.get("punto") or "")
+                d.append([p["documento"], p["tipo"], cc.strip(" —"), p["fecha"], f'{p["valor"]:,.2f}'])
+                t += p["valor"]
+            d.append(["", "", "", "TOTAL", f"{t:,.2f}"])
+            td = Table(d, colWidths=[40 * mm, 45 * mm, 60 * mm, 28 * mm, 32 * mm], repeatRows=1)
+            td.setStyle(TableStyle([
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("ALIGN", (4, 1), (4, -1), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#BFBFBF")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F2F2F2")]),
+            ]))
+            el.append(td)
+
+    ahora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    firma = (f"Documento generado por INTEGRAL — Plataforma Contable · {ahora}"
+             + (f" · {usuario}" if usuario else "") + (f" · {empresa}" if empresa else ""))
+
+    def _foot(canvas, docu):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#CCCCCC"))
+        w, _hh = landscape(letter)
+        canvas.line(12 * mm, 12 * mm, w - 12 * mm, 12 * mm)
+        canvas.setFont("Helvetica-Oblique", 7.5)
+        canvas.setFillColor(colors.HexColor("#888888"))
+        canvas.drawString(12 * mm, 8 * mm, firma)
+        canvas.drawRightString(w - 12 * mm, 8 * mm, f"Página {docu.page}")
+        canvas.restoreState()
+
+    doc.build(el, onFirstPage=_foot, onLaterPages=_foot)
+    return buf.getvalue()
+
+
+# ===========================================================================
 # Configuración por empresa (Supabase) — tabla conciliacion_bancos
 # ===========================================================================
 def cargar_bancos(sb, empresa_id) -> list:
@@ -1080,6 +1331,10 @@ def cargar_bancos(sb, empresa_id) -> list:
         return []
 
 
+def _tobool(v) -> bool:
+    return str(v).strip().lower() in ("true", "1", "si", "sí", "x", "yes", "t")
+
+
 def guardar_bancos(sb, empresa_id, filas) -> int:
     filas = [f for f in filas if str(f.get("nombre") or "").strip()
              and str(f.get("cuenta_auxiliar") or "").strip()]
@@ -1089,24 +1344,55 @@ def guardar_bancos(sb, empresa_id, filas) -> int:
             sb.table("conciliacion_bancos").delete().eq("empresa_id", empresa_id).eq("nombre", b["nombre"]).execute()
     payload = [{"empresa_id": empresa_id, "nombre": str(f["nombre"]).strip(),
                 "cuenta_auxiliar": str(f.get("cuenta_auxiliar") or "").strip(),
-                "hoja_reporte": str(f.get("hoja_reporte") or "").strip(), "orden": i}
+                "hoja_reporte": str(f.get("hoja_reporte") or "").strip(),
+                "usa_datafono": bool(f.get("usa_datafono")) if not isinstance(f.get("usa_datafono"), str) else _tobool(f.get("usa_datafono")),
+                "orden": i}
                for i, f in enumerate(filas)]
-    if payload:
+    if not payload:
+        return 0
+    try:
+        sb.table("conciliacion_bancos").upsert(payload, on_conflict="empresa_id,nombre").execute()
+    except Exception:  # noqa: BLE001 — la columna usa_datafono aún no existe: reintenta sin ella
+        for p in payload:
+            p.pop("usa_datafono", None)
         sb.table("conciliacion_bancos").upsert(payload, on_conflict="empresa_id,nombre").execute()
     return len(payload)
 
 
 BANCOS_LOLITA = [
-    {"nombre": "BANCOLOMBIA CTE 4451",   "cuenta_auxiliar": "11-10-05-99", "hoja_reporte": "CTA- PUENTE 4451"},
-    {"nombre": "OCCIDENTE 9426",         "cuenta_auxiliar": "11-10-05-05", "hoja_reporte": "OCCIDENTE 9426"},
-    {"nombre": "DAVIVIENDA 7872",        "cuenta_auxiliar": "11-20-05-13", "hoja_reporte": "Davivienda cta 7872"},
-    {"nombre": "BOGOTA 3199",            "cuenta_auxiliar": "11-10-05-20", "hoja_reporte": "BOGOTA 3199"},
-    {"nombre": "BANCOLOMBIA AHORROS",    "cuenta_auxiliar": "11-10-05-06", "hoja_reporte": "BANCOLOMBA AHORROS"},
+    {"nombre": "BANCOLOMBIA CTE 4451",   "cuenta_auxiliar": "11-10-05-99", "hoja_reporte": "CTA- PUENTE 4451",   "usa_datafono": True},
+    {"nombre": "OCCIDENTE 9426",         "cuenta_auxiliar": "11-10-05-05", "hoja_reporte": "OCCIDENTE 9426",      "usa_datafono": False},
+    {"nombre": "DAVIVIENDA 7872",        "cuenta_auxiliar": "11-20-05-13", "hoja_reporte": "Davivienda cta 7872", "usa_datafono": False},
+    {"nombre": "BOGOTA 3199",            "cuenta_auxiliar": "11-10-05-20", "hoja_reporte": "BOGOTA 3199",         "usa_datafono": False},
+    {"nombre": "BANCOLOMBIA AHORROS",    "cuenta_auxiliar": "11-10-05-06", "hoja_reporte": "BANCOLOMBA AHORROS",  "usa_datafono": False},
 ]
+
+
+def usa_datafono(banco) -> bool:
+    """¿A este banco le aplica el recaudo por datáfono (Credibanco)? Usa el flag
+    configurado; si no existe, lo infiere por el nombre/cuenta de la 4451."""
+    if "usa_datafono" in banco and banco.get("usa_datafono") not in (None, ""):
+        v = banco["usa_datafono"]
+        return v if isinstance(v, bool) else _tobool(v)
+    txt = f"{banco.get('nombre','')} {banco.get('cuenta_auxiliar','')}".upper()
+    return "4451" in txt or "11-10-05-99" in txt
 
 
 def sembrar_lolita(sb, empresa_id) -> int:
     return guardar_bancos(sb, empresa_id, BANCOS_LOLITA)
+
+
+def hojas_de(fuente) -> list:
+    """Nombres de las hojas de un .xlsx (para ubicar el reporte de cada banco
+    cuando se suben varios archivos)."""
+    try:
+        import openpyxl
+        data = fuente if isinstance(fuente, (bytes, bytearray)) else (
+            fuente.read() if hasattr(fuente, "read") else open(fuente, "rb").read())
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True)
+        return [ws.title for ws in wb.worksheets]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 # ===========================================================================

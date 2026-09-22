@@ -31,22 +31,25 @@ st.title("🔁 Conciliación de bancos")
 emp, sb = guard_empresa()
 bancos = C.cargar_bancos(sb, emp["id"])
 
-tab_c, tab_cfg = st.tabs(["🔁 Conciliar", "⚙️ Configuración"])
+tab_c, tab_todo, tab_cfg = st.tabs(["🔁 Conciliar (uno)", "🧮 Conciliar todo", "⚙️ Configuración"])
 
 # ---- Configuración primero: así SIEMPRE se dibuja aunque no haya bancos ----
 with tab_cfg:
     st.markdown("#### 🏦 Bancos a conciliar")
     st.caption("Por cada banco: el prefijo de la **cuenta del auxiliar** (la cuenta "
                "puente, p.ej. 11-10-05-99) y el **nombre de la hoja** del reporte del "
-               "banco donde están sus movimientos con N COMPROBANTE.")
-    filas = bancos or [{"nombre": "", "cuenta_auxiliar": "", "hoja_reporte": ""}]
-    df = pd.DataFrame([{k: b.get(k, "") for k in ["nombre", "cuenta_auxiliar", "hoja_reporte"]}
-                       for b in filas])
+               "banco. Marca **usa datáfono** solo en la cuenta que recibe el recaudo "
+               "de Credibanco (la 4451); los demás se concilian sin datáfono.")
+    filas = bancos or [{"nombre": "", "cuenta_auxiliar": "", "hoja_reporte": "", "usa_datafono": False}]
+    df = pd.DataFrame([{"nombre": b.get("nombre", ""), "cuenta_auxiliar": b.get("cuenta_auxiliar", ""),
+                        "hoja_reporte": b.get("hoja_reporte", ""),
+                        "usa_datafono": C.usa_datafono(b)} for b in filas])
     ed = st.data_editor(df, num_rows="dynamic", use_container_width=True, key="cfg_conc",
                         column_config={
                             "nombre": st.column_config.TextColumn("Banco / cuenta", required=True),
                             "cuenta_auxiliar": st.column_config.TextColumn("Cuenta auxiliar (prefijo)", required=True),
                             "hoja_reporte": st.column_config.TextColumn("Hoja del reporte", required=True),
+                            "usa_datafono": st.column_config.CheckboxColumn("Usa datáfono (Credibanco)"),
                         })
     cbb = st.columns(2)
     if cbb[0].button("💾 Guardar bancos", type="primary"):
@@ -94,6 +97,197 @@ with tab_cfg:
     st.caption("💡 Si tu archivo original ya trae el centro de costo en la columna "
                "«NO TERMINAL», el cálculo funciona aunque el maestro esté vacío; el "
                "maestro sirve para forzar el mapeo y mostrar el nombre del punto.")
+
+# ===================================================================
+# CONCILIAR TODO (todos los bancos de una sola vez)
+# ===================================================================
+with tab_todo:
+  if not bancos:
+    st.info("Esta empresa no tiene bancos configurados. Ve a «Configuración».")
+  else:
+    st.markdown("#### 1. Sube los archivos del mes (una sola vez para todos)")
+    ta, tb, tc = st.columns(3)
+    with ta:
+        f_aux_t = st.file_uploader("Auxiliar general (.xlsx)", type=["xlsx"], key="ct_aux")
+    with tb:
+        f_rep_t = st.file_uploader("Reportes de los bancos (.xlsx, varios)",
+                                   type=["xlsx"], accept_multiple_files=True, key="ct_rep")
+        st.caption("Sube uno o varios archivos; cada banco se busca por el **nombre de "
+                   "su hoja** configurada.")
+    with tc:
+        f_data_t = st.file_uploader("Datáfono Credibanco (solo 4451)",
+                                    type=["xlsm", "xlsx"], key="ct_data")
+        st.caption("El recaudo por datáfono **solo se aplica** a los bancos marcados "
+                   "«usa datáfono» en Configuración (la 4451).")
+
+    periodo_t = st.text_input("Periodo (encabezado de los documentos)", "", key="ct_per")
+
+    # tabla editable con saldo y tránsito por banco
+    st.markdown("#### 2. Saldo del extracto y tránsito por banco")
+    base = [{"banco": b["nombre"], "cuenta_auxiliar": b.get("cuenta_auxiliar", ""),
+             "hoja_reporte": b.get("hoja_reporte", ""),
+             "usa_datafono": C.usa_datafono(b),
+             "saldo_extracto": 0.0, "transito_real": 0.0} for b in bancos]
+    dft = pd.DataFrame(base)
+    edt = st.data_editor(
+        dft, use_container_width=True, key="ct_tabla", hide_index=True,
+        column_config={
+            "banco": st.column_config.TextColumn("Banco", disabled=True),
+            "cuenta_auxiliar": st.column_config.TextColumn("Cuenta aux.", disabled=True),
+            "hoja_reporte": st.column_config.TextColumn("Hoja reporte", disabled=True),
+            "usa_datafono": st.column_config.CheckboxColumn("Datáfono"),
+            "saldo_extracto": st.column_config.NumberColumn("Saldo extracto", format="%.2f"),
+            "transito_real": st.column_config.NumberColumn("Tránsito real (0=auto)", format="%.2f"),
+        })
+    tol_t = st.number_input("Tolerancia ajuste al peso (±)", value=10000.0, step=1000.0,
+                            format="%.2f", key="ct_tol")
+
+    if st.button("🧮 Conciliar todo", type="primary",
+                 disabled=(f_aux_t is None or not f_rep_t)):
+        aux_bytes = f_aux_t.getvalue()
+        rep_files = [(f.name, f.getvalue()) for f in f_rep_t]
+        # índice hoja -> archivo
+        hoja_idx = {}
+        for name, data in rep_files:
+            for h in C.hojas_de(data):
+                hoja_idx.setdefault(h.strip().upper(), data)
+        maestro = C.cargar_maestro(sb, emp["id"])
+        data_df = f_data_t.getvalue() if f_data_t else None
+        resultados, avisos = [], []
+        for row in edt.to_dict("records"):
+            hoja = str(row["hoja_reporte"]).strip()
+            fbytes = hoja_idx.get(hoja.upper())
+            if fbytes is None:
+                avisos.append(f"• {row['banco']}: no encontré la hoja «{hoja}» en los archivos subidos.")
+                continue
+            try:
+                aux = C.leer_auxiliar(aux_bytes, row["cuenta_auxiliar"])
+                banco = C.leer_banco(fbytes, hoja)
+                usa_df = bool(row.get("usa_datafono"))
+                data = C.leer_datafono(data_df, maestro=maestro) if (usa_df and data_df) else \
+                    {"por_cc": [], "comision": 0.0, "retefuente": 0.0, "reteiva": 0.0, "reteica": 0.0}
+                tr = float(row.get("transito_real") or 0) or None
+                r = C.conciliar(aux, banco, data, float(row.get("saldo_extracto") or 0),
+                                transito_real=tr, tolerancia=tol_t)
+                resultados.append({"banco": row["banco"], "cuenta": row["cuenta_auxiliar"], "r": r})
+            except Exception as e:  # noqa: BLE001
+                avisos.append(f"• {row['banco']}: error — {e}")
+        st.session_state["ct_res"] = resultados
+        st.session_state["ct_avisos"] = avisos
+        st.session_state["ct_periodo"] = periodo_t
+
+    resultados = st.session_state.get("ct_res")
+    if resultados is not None:
+        for a in st.session_state.get("ct_avisos", []):
+            st.warning(a)
+        if resultados:
+            resumen = []
+            for res in resultados:
+                r = res["r"]
+                dif = round((r["saldo_cierre"] - r["consignaciones_transito"]) - r["saldo_banco"], 2)
+                resumen.append({"Banco": res["banco"], "Saldo libros": r["saldo_ant"],
+                                "Notas débito": -r["notas_debito"], "Saldo a cierre": r["saldo_cierre"],
+                                "Tránsito": -r["consignaciones_transito"], "Saldo extracto": r["saldo_banco"],
+                                "Diferencia": dif, "Cuadra": "SÍ" if r["cuadra"] else "NO"})
+            dfr = pd.DataFrame(resumen)
+            numcols = [c for c in dfr.columns if c not in ("Banco", "Cuadra")]
+            st.markdown("#### Resumen consolidado")
+            st.dataframe(dfr.style.format({c: "{:,.2f}" for c in numcols}),
+                         use_container_width=True, hide_index=True)
+            per = st.session_state.get("ct_periodo", "")
+            dd = st.columns(2)
+            try:
+                xlsx = C.exportar_excel_consolidado(resultados, empresa=emp.get("razon_social", ""), periodo=per)
+                dd[0].download_button("⬇ Consolidado (Excel)", data=xlsx, type="primary",
+                                      use_container_width=True,
+                                      file_name=f"conciliacion_consolidada_{per or 'mes'}.xlsx",
+                                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except Exception as e:  # noqa: BLE001
+                dd[0].error(f"Excel: {e}")
+            try:
+                pdfb = C.exportar_pdf_consolidado(resultados, empresa=emp.get("razon_social", ""),
+                                                  periodo=per, usuario=st.session_state.get("user_email", ""))
+                dd[1].download_button("⬇ Consolidado (PDF con firma)", data=pdfb,
+                                      use_container_width=True,
+                                      file_name=f"conciliacion_consolidada_{per or 'mes'}.pdf",
+                                      mime="application/pdf")
+            except Exception as e:  # noqa: BLE001
+                dd[1].error(f"PDF: {e}")
+            for res in resultados:
+                with st.expander(f"Detalle — {res['banco']}"):
+                    rr = res["r"]
+                    st.dataframe(pd.DataFrame([
+                        ("SALDO EN LIBROS", rr["saldo_ant"]),
+                        ("(−) NOTAS DÉBITO", -rr["notas_debito"]),
+                        ("(=) SALDO A CIERRE", rr["saldo_cierre"]),
+                        ("(−) CONSIGNACIONES EN TRÁNSITO", -rr["consignaciones_transito"]),
+                        ("(=) SALDO SEGÚN EXTRACTO", rr["saldo_banco"]),
+                    ], columns=["Concepto", "Valor"]).style.format({"Valor": "{:,.2f}"}),
+                        use_container_width=True, hide_index=True)
+                    if rr.get("pend_transito"):
+                        st.caption("Consignaciones en tránsito (libros → mes siguiente):")
+                        dt = pd.DataFrame(rr["pend_transito"])[
+                            ["documento", "tipo", "centro_costo", "punto", "fecha", "valor"]]
+                        st.dataframe(dt.style.format({"valor": "{:,.2f}"}),
+                                     use_container_width=True, hide_index=True)
+
+            # ---- PLANO DE GASTOS CONSOLIDADO (todos los bancos) ----
+            st.markdown("#### 🧾 Plano de gastos consolidado (todos los bancos)")
+            st.caption("Extrae los gastos bancarios de **todos** los bancos y los "
+                       "reparte en partes iguales entre los centros de costo; el "
+                       "datáfono va por centro de costo solo donde aplica (4451). "
+                       "Cada banco se acredita contra **su propia cuenta puente**.")
+            centros_rep, cuentas_g, puc_map = [], dict(C.CUENTAS_GASTO_DEF), {}
+            if ebm is not None:
+                try:
+                    centros_rep = ebm.cargar_centros(sb, emp["id"])
+                    cuentas_g = C.cuentas_gasto_desde_reglas(ebm.cargar_reglas(sb, emp["id"]))
+                    for bb in ebm.cargar_bancos(sb, emp["id"]):
+                        puc_map[bb.get("nombre", "").strip().upper()] = str(bb.get("cuenta_puc") or "").strip()
+                except Exception:  # noqa: BLE001
+                    pass
+            # tabla editable banco -> cuenta puente
+            puc_rows = [{"banco": res["banco"],
+                         "cuenta_puc": puc_map.get(res["banco"].strip().upper(), "")}
+                        for res in resultados]
+            st.caption("Cuenta puente (contrapartida) por banco — de «Bancos a Contai»; edítala si hace falta:")
+            edp = st.data_editor(pd.DataFrame(puc_rows), hide_index=True,
+                                 use_container_width=True, key="ct_puc",
+                                 column_config={
+                                     "banco": st.column_config.TextColumn("Banco", disabled=True),
+                                     "cuenta_puc": st.column_config.TextColumn("Cuenta puente"),
+                                 })
+            pcol = st.columns(4)
+            comp_c = pcol[0].text_input("Comprobante", "10", key="ct_pl_comp")
+            doc_c = pcol[1].text_input("Documento", "1", key="ct_pl_doc")
+            fec_c = pcol[2].date_input("Fecha del asiento", format="MM/DD/YYYY", key="ct_pl_fec")
+            cc_ctxt = pcol[3].text_input("Centros (coma) — vacío usa config", "", key="ct_pl_cc")
+            cc_list = [x.strip() for x in cc_ctxt.split(",") if x.strip()] or centros_rep or \
+                ["100401", "100501", "100601", "100901", "101201", "101301", "101801", "103001"]
+            if st.button("🧾 Generar plano consolidado", key="ct_pl_btn"):
+                puc_por_banco = {r["banco"]: r["cuenta_puc"] for r in edp.to_dict("records")}
+                pc = C.generar_plano_gastos_consolidado(
+                    resultados, cc_list, puc_por_banco, cuentas_gasto=cuentas_g,
+                    comprobante=comp_c, documento=doc_c, fecha=fec_c.strftime("%m/%d/%Y"))
+                st.session_state["ct_plano"] = {
+                    "pc": pc, "txt": C.plano_a_texto(pc["filas"]),
+                    "fname": f"plano_gastos_consolidado_{per or 'mes'}.txt"}
+            planoc = st.session_state.get("ct_plano")
+            if planoc:
+                pc = planoc["pc"]
+                faltan = [b["banco"] for b in pc["por_banco"] if b["sin_puc"]]
+                if faltan:
+                    st.warning("Sin cuenta puente (no se acreditó la contrapartida): "
+                               + ", ".join(faltan) + ". Complétala arriba y regenera.")
+                st.success(f"Plano consolidado: {pc['n']} líneas · Débitos = Créditos = "
+                           f"{pc['debitos']:,.2f}.")
+                st.dataframe(pd.DataFrame(
+                    [{"banco": b["banco"], "cuenta_puc": b["cuenta_puc"],
+                      "líneas": b["lineas"], "débitos": b["debitos"]} for b in pc["por_banco"]]
+                ).style.format({"débitos": "{:,.2f}"}), use_container_width=True, hide_index=True)
+                st.download_button("⬇ Descargar plano consolidado (.txt)",
+                                   data=planoc["txt"].encode("latin-1", errors="replace"),
+                                   file_name=planoc["fname"], mime="text/plain")
 
 with tab_c:
   if not bancos:

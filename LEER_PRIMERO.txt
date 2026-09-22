@@ -1,8 +1,9 @@
 CONCILIACIÓN DE BANCOS — módulo para la repo
 =============================================
 PASO 1 — Supabase -> SQL Editor -> ejecuta:
-   db/migrations/021_conciliacion_config.sql    (bancos a conciliar; si ya lo corriste, no pasa nada)
-   db/migrations/022_conciliacion_datafono.sql  (MAESTRO del datáfono: establecimiento -> centro de costo)
+   db/migrations/021_conciliacion_config.sql        (bancos a conciliar; si ya lo corriste, no pasa nada)
+   db/migrations/022_conciliacion_datafono.sql      (MAESTRO del datáfono: establecimiento -> centro de costo)
+   db/migrations/023_conciliacion_usa_datafono.sql  (marca «usa datáfono» por banco: solo la 4451)
 PASO 2 — Copia en tu repo:
    Home.py                                  (agrega la página al menú Asistente Contable)
    core/conciliacion/__init__.py            (vacío, para que sea paquete)
@@ -33,6 +34,23 @@ USO (Asistente Contable -> Conciliación de bancos):
         pagos − notas débito = saldo a cierre − consignaciones en tránsito =
         saldo del banco) y las partidas pendientes DETALLADAS por documento, tipo
         de abono (datáfono, consignación, transferencia, …) y centro de costo.
+
+CONCILIAR TODO (todos los bancos de una vez)
+ - Pestaña «🧮 Conciliar todo»: subes el AUXILIAR (uno), los REPORTES de los bancos
+   (uno o varios .xlsx; si tu archivo trae una hoja por banco, con ese basta) y el
+   DATÁFONO Credibanco. En la tabla pones el saldo del extracto y (opcional) el
+   tránsito real de cada banco. El sistema busca la hoja de cada banco por su
+   nombre configurado, concilia todos y muestra un RESUMEN consolidado, con
+   descarga en un solo Excel (hoja RESUMEN + una por banco) y un solo PDF.
+ - El RECAUDO POR DATÁFONO (Credibanco) SOLO se aplica a los bancos marcados
+   «usa datáfono» en Configuración (la 4451); los demás se concilian sin datáfono.
+ - Cada banco lee de SU propia cuenta del auxiliar y SU propia hoja del reporte
+   (el lector reconoce el formato de cada banco: 4451, Occidente, Davivienda,
+   Bogotá, ahorros, con «N COMPROBANTE»/«COMPROBANTE»/«#COMPROBANTE», etc.).
+ - PLANO DE GASTOS CONSOLIDADO: un solo plano con los gastos bancarios de TODOS
+   los bancos, repartidos en partes iguales entre los centros; el datáfono por
+   centro de costo solo donde aplica. Cada banco se acredita contra SU cuenta
+   puente (de «Bancos a Contai», editable). Débitos = Créditos.
 
 PDF Y PLANO DE GASTOS
  - Botón «Conciliación (PDF con firma del software)»: PDF con el cuadro y las
