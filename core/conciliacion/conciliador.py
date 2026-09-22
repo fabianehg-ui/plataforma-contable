@@ -785,6 +785,247 @@ def exportar_excel(r, nombre_banco="", cuenta="", periodo="", empresa="",
 
 
 # ===========================================================================
+# PLANO DE GASTOS para Contai (reparto igual + datáfono por centro de costo)
+# ===========================================================================
+HDR_PLANO = ["CUENTA", "COMPROBANTE", "FECHA", "DOCUMENTO", "DOC REFERENCIA",
+             "NIT", "DETALLE", "TR", "VALOR", "BASE", "CENTRO DE COSTO"]
+
+# cuentas del DATÁFONO (de la macro Credibanco) y sus divisores de base
+CUENTAS_DATAFONO = {"comision": "53051501", "retefuente": "19551507",
+                    "reteiva": "24082505", "reteica": "52150502"}
+DIV_DATAFONO = {"retefuente": 0.015, "reteiva": 0.15, "reteica": 0.009}
+NIT_DATAFONO = "890903938"
+
+# cuentas de GASTOS BANCARIOS por defecto (config de «Bancos a Contai» de LOLITA)
+CUENTAS_GASTO_DEF = {"gasto_bancario": "53050501", "comisiones": "53051501",
+                     "iva": "24081009", "gmf": "53050601"}
+
+
+def cuentas_gasto_desde_reglas(reglas) -> dict:
+    """Deduce las cuentas de gastos bancarios desde las reglas de «Bancos a
+    Contai» (por su etiqueta/cuenta). Cae a las de LOLITA si no encuentra."""
+    m = dict(CUENTAS_GASTO_DEF)
+    for rg in reglas or []:
+        etq = str(rg.get("etiqueta") or "").upper()
+        ct = str(rg.get("cuenta") or "").strip()
+        if not ct:
+            continue
+        if "GASTO" in etq:
+            m["gasto_bancario"] = ct
+        elif "COMIS" in etq:
+            m["comisiones"] = ct
+        elif "IVA" in etq:
+            m["iva"] = ct
+        elif "GMF" in etq or "GRAVAMEN" in etq or "4X1" in etq:
+            m["gmf"] = ct
+    return m
+
+
+def _repartir(total: float, n: int) -> list:
+    """Divide en n partes iguales (2 decimales); el residuo va al último."""
+    t = round(total, 2)
+    base = round(t / n, 2)
+    partes = [base] * n
+    partes[-1] = round(t - base * (n - 1), 2)
+    return partes
+
+
+def generar_plano_gastos(r, centros, cuenta_puc, cuentas_gasto=None,
+                         comprobante="10", documento="1", fecha=None,
+                         detalle="CONCILIACION BANCARIA",
+                         nit_datafono=NIT_DATAFONO, nit_banco=None,
+                         cuentas_datafono=None, divisores=None):
+    """Arma el plano de Contai de los GASTOS de la conciliación:
+      · Gastos bancarios (gasto bancario, comisiones, IVA, GMF) → repartidos en
+        PARTES IGUALES entre `centros`.
+      · Datáfono Credibanco (comisión, retefuente, reteIVA, reteICA) → por CENTRO
+        DE COSTO según la tabla de establecimientos (r['datafono_cc']), con las
+        cuentas de la macro y base = valor / divisor.
+      · Contrapartida: el total al débito se acredita contra `cuenta_puc` (la
+        cuenta puente del banco).
+    Devuelve {filas, debitos, creditos, cuadra, n}."""
+    import datetime
+    if not fecha:
+        fecha = datetime.date.today().strftime("%m/%d/%Y")
+    cuentas_gasto = cuentas_gasto or CUENTAS_GASTO_DEF
+    cuentas_df = cuentas_datafono or CUENTAS_DATAFONO
+    divs = divisores or DIV_DATAFONO
+    nit_banco = nit_banco or nit_datafono
+    centros = [str(c).strip() for c in (centros or []) if str(c).strip()] or ["001001"]
+
+    filas = [list(HDR_PLANO)]
+
+    def add(cta, nit, tr, valor, base, cc):
+        filas.append([str(cta), str(comprobante), fecha, str(documento), str(documento),
+                      str(nit), detalle, str(tr), f"{round(valor, 2):.2f}",
+                      f"{round(base, 2):.2f}", str(cc)])
+
+    tot_deb = 0.0
+    # 1) gastos bancarios en partes iguales
+    for cta, total in [(cuentas_gasto["gasto_bancario"], r.get("gasto_bancario", 0)),
+                       (cuentas_gasto["comisiones"], r.get("comisiones", 0)),
+                       (cuentas_gasto["iva"], r.get("iva", 0)),
+                       (cuentas_gasto["gmf"], r.get("gmf", 0))]:
+        if round(float(total or 0), 2) == 0:
+            continue
+        for cc, val in zip(centros, _repartir(float(total), len(centros))):
+            if round(val, 2) == 0:
+                continue
+            add(cta, nit_banco, 1, val, 0, cc)
+            tot_deb += val
+    # 2) datáfono por centro de costo
+    for d in r.get("datafono_cc", []):
+        cc = str(d.get("cc") or "").strip()
+        for key, cta in [("comision", cuentas_df["comision"]),
+                         ("retefuente", cuentas_df["retefuente"]),
+                         ("reteiva", cuentas_df["reteiva"]),
+                         ("reteica", cuentas_df["reteica"])]:
+            v = round(float(d.get(key, 0) or 0), 2)
+            if v == 0:
+                continue
+            div = divs.get(key)
+            base = round(v / div, 2) if div else 0
+            add(cta, nit_datafono, 1, v, base, cc)
+            tot_deb += v
+    # 3) contrapartida contra la cuenta puente del banco
+    tot_deb = round(tot_deb, 2)
+    if tot_deb:
+        add(cuenta_puc, nit_banco, 2, tot_deb, 0, "")
+    return {"filas": filas, "debitos": tot_deb, "creditos": tot_deb,
+            "cuadra": True, "n": len(filas) - 1}
+
+
+def plano_a_texto(filas) -> str:
+    """Convierte las filas del plano a texto tabulado (formato Contai)."""
+    return "\r\n".join("\t".join(str(c) for c in fila) for fila in filas) + "\r\n"
+
+
+# ===========================================================================
+# PDF de la conciliación con la firma del software que lo generó
+# ===========================================================================
+def exportar_pdf(r, nombre_banco="", cuenta="", periodo="", empresa="",
+                 usuario="") -> bytes:
+    """Genera el PDF de la conciliación (cuadro + partidas pendientes detalladas
+    por documento, tipo de abono y centro de costo), con el pie de firma del
+    software que lo generó (INTEGRAL · fecha y hora)."""
+    import datetime
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph,
+                                    Spacer)
+
+    def money(v):
+        v = float(v or 0)
+        return f"$ ({abs(v):,.2f})" if v < 0 else f"$ {v:,.2f}"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(letter),
+                            leftMargin=14 * mm, rightMargin=14 * mm,
+                            topMargin=12 * mm, bottomMargin=16 * mm,
+                            title="Conciliación bancaria")
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle("h", parent=styles["Title"], fontSize=13, spaceAfter=2,
+                       textColor=colors.HexColor("#1F4E78"))
+    sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9.5,
+                         textColor=colors.HexColor("#333333"))
+    sec = ParagraphStyle("sec", parent=styles["Heading4"], fontSize=10,
+                         textColor=colors.HexColor("#1F4E78"), spaceBefore=8, spaceAfter=3)
+    el = []
+    el.append(Paragraph((empresa or "").upper(), h))
+    el.append(Paragraph(f"CONCILIACIÓN BANCARIA · {nombre_banco} · cuenta {cuenta}", sub))
+    if periodo:
+        el.append(Paragraph(f"Periodo: {periodo}", sub))
+    el.append(Spacer(1, 6))
+
+    cuadro = [
+        ["SALDO EN LIBROS", money(r["saldo_ant"])],
+        ["(+) CONSIGNACIONES", money(r["consignaciones"])],
+        ["(−) PAGOS", money(-r["pagos"])],
+        ["(−) NOTAS DÉBITO", money(-r["notas_debito"])],
+        ["        Gasto bancario", money(-r["gasto_bancario"])],
+        ["        Comisiones", money(-r["comisiones"])],
+        ["        Comisión datáfono", money(-r["comision_datafono"])],
+        ["        IVA", money(-r["iva"])],
+        ["        G.M.F.", money(-r["gmf"])],
+        ["        ReteIVA", money(-r["reteiva"])],
+        ["        Retefuente", money(-r["retefuente"])],
+        ["        ReteICA", money(-r["reteica"])],
+        ["(=) SALDO EN LIBROS A FECHA DE CIERRE", money(r["saldo_cierre"])],
+        ["(−) CONSIGNACIONES EN TRÁNSITO", money(-r["consignaciones_transito"])],
+        ["(=) SALDO SEGÚN EXTRACTO DEL BANCO", money(r["saldo_banco"])],
+    ]
+    t = Table(cuadro, colWidths=[110 * mm, 60 * mm])
+    resalta = {0, 3, 12, 13, 14}
+    ts = [("FONTSIZE", (0, 0), (-1, -1), 9),
+          ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+          ("LINEBELOW", (0, -1), (-1, -1), 0.6, colors.HexColor("#1F4E78")),
+          ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
+    for i in resalta:
+        ts.append(("FONTNAME", (0, i), (-1, i), "Helvetica-Bold"))
+    ts.append(("BACKGROUND", (0, 12), (-1, 12), colors.HexColor("#E2EFDA")))
+    ts.append(("BACKGROUND", (0, 13), (-1, 13), colors.HexColor("#FFF2CC")))
+    ts.append(("BACKGROUND", (0, 14), (-1, 14), colors.HexColor("#E2EFDA")))
+    t.setStyle(TableStyle(ts))
+    el.append(t)
+    if abs(r.get("ajuste_al_peso", 0)) > 0:
+        el.append(Paragraph(f"* Ajuste al peso incluido en gasto bancario: "
+                            f"{r['ajuste_al_peso']:,.2f}", sub))
+
+    def tabla_pend(titulo, filas):
+        if not filas:
+            return
+        el.append(Paragraph(titulo, sec))
+        data = [["DOCUMENTO", "TIPO DE ABONO", "CENTRO DE COSTO", "FECHA", "VALOR"]]
+        tot = 0.0
+        for p in filas:
+            cc = (f'{p["centro_costo"]} — ' if p.get("centro_costo") else "") + (p.get("punto") or "")
+            data.append([p["documento"], p["tipo"], cc.strip(" —"), p["fecha"],
+                         f'{p["valor"]:,.2f}'])
+            tot += p["valor"]
+        data.append(["", "", "", "TOTAL", f"{tot:,.2f}"])
+        tt = Table(data, colWidths=[42 * mm, 45 * mm, 60 * mm, 30 * mm, 35 * mm], repeatRows=1)
+        tt.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("ALIGN", (4, 1), (4, -1), "RIGHT"),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#BFBFBF")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F2F2F2")]),
+        ]))
+        el.append(tt)
+
+    tabla_pend("PARTIDAS EN BANCO SIN LIBROS — abonos por identificar / en tránsito "
+               "(datáfono, consignación, transferencia, etc.)", r.get("pend_banco", []))
+    tabla_pend("PAGOS EN LIBROS QUE NO SALIERON DEL BANCO", r.get("pend_libros", []))
+
+    ahora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    firma = (f"Documento generado por INTEGRAL — Plataforma Contable · {ahora}"
+             + (f" · {usuario}" if usuario else "")
+             + (f" · {empresa}" if empresa else ""))
+    pie = ParagraphStyle("pie", parent=styles["Normal"], fontSize=7.5,
+                         textColor=colors.HexColor("#888888"))
+
+    def _foot(canvas, docu):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#CCCCCC"))
+        w, _h = landscape(letter)
+        canvas.line(14 * mm, 12 * mm, w - 14 * mm, 12 * mm)
+        canvas.setFont("Helvetica-Oblique", 7.5)
+        canvas.setFillColor(colors.HexColor("#888888"))
+        canvas.drawString(14 * mm, 8 * mm, firma)
+        canvas.drawRightString(w - 14 * mm, 8 * mm, f"Página {docu.page}")
+        canvas.restoreState()
+
+    el.append(Spacer(1, 6))
+    doc.build(el, onFirstPage=_foot, onLaterPages=_foot)
+    return buf.getvalue()
+
+
+# ===========================================================================
 # Configuración por empresa (Supabase) — tabla conciliacion_bancos
 # ===========================================================================
 def cargar_bancos(sb, empresa_id) -> list:

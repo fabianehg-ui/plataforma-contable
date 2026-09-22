@@ -34,6 +34,22 @@ USO (Asistente Contable -> Conciliación de bancos):
         saldo del banco) y las partidas pendientes DETALLADAS por documento, tipo
         de abono (datáfono, consignación, transferencia, …) y centro de costo.
 
+PDF Y PLANO DE GASTOS
+ - Botón «Conciliación (PDF con firma del software)»: PDF con el cuadro y las
+   partidas pendientes detalladas (documento · tipo de abono · centro de costo),
+   con pie de firma «Documento generado por INTEGRAL — Plataforma Contable ·
+   fecha y hora · usuario · empresa». Requiere reportlab (ya en requirements.txt).
+ - Sección «Plano de gastos para Contai»: genera el plano de los gastos de la
+   conciliación. Los GASTOS BANCARIOS (gasto bancario, comisiones, IVA, GMF) se
+   reparten en PARTES IGUALES entre los centros de costo; los gastos del DATÁFONO
+   (comisión, retefuente, reteIVA, reteICA) van POR CENTRO DE COSTO según la tabla
+   de establecimientos, con las cuentas de la macro y base = valor/divisor
+   (retefuente 0,015 · reteIVA 0,15 · reteICA 0,009). La contrapartida se acredita
+   contra la cuenta puente del banco. Reutiliza la configuración de «Bancos a
+   Contai» (centros del reparto, cuentas de las reglas y cuenta puente del banco);
+   todos los campos son editables antes de generar. Probado con julio 4451:
+   65 líneas, Débitos = Créditos = 19.553.303,95 (= notas débito).
+
 EXCEL CON FORMATO Y FÓRMULAS
  - El botón «Descargar conciliación (Excel con formato y fórmulas)» genera un
    archivo con el mismo estilo de la plantilla de la empresa: encabezado, cuadro

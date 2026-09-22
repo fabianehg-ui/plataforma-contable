@@ -22,6 +22,10 @@ import streamlit as st
 st.set_page_config(page_title="Conciliación de bancos", page_icon="🔁", layout="wide")
 from auth.guard import guard_empresa
 from core.conciliacion import conciliador as C
+try:
+    from core.procesadores import extractos_bancarios_multi as ebm  # config Bancos a Contai
+except Exception:  # noqa: BLE001
+    ebm = None
 
 st.title("🔁 Conciliación de bancos")
 emp, sb = guard_empresa()
@@ -228,14 +232,80 @@ with tab_c:
             st.dataframe(_tabla_pend(r["pend_libros"]), use_container_width=True,
                          hide_index=True, height=180)
 
-        # ---- descargar Excel con estilo y fórmulas (como la plantilla) ----
+        # ---- descargas: Excel, PDF ----
+        st.markdown("#### Descargas")
+        dcol = st.columns(2)
         try:
             xlsx = C.exportar_excel(
                 r, nombre_banco=nom, cuenta=banco_cfg.get("cuenta_auxiliar", ""),
                 periodo=periodo, empresa=emp.get("razon_social", ""))
-            st.download_button("⬇ Descargar conciliación (Excel con formato y fórmulas)",
-                               data=xlsx, type="primary",
+            dcol[0].download_button("⬇ Conciliación (Excel con formato y fórmulas)",
+                               data=xlsx, type="primary", use_container_width=True,
                                file_name=f"conciliacion_{nom.replace(' ','_')}.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         except Exception as e:  # noqa: BLE001
-            st.error(f"No pude generar el Excel con formato: {e}")
+            dcol[0].error(f"Excel: {e}")
+        try:
+            pdfb = C.exportar_pdf(
+                r, nombre_banco=nom, cuenta=banco_cfg.get("cuenta_auxiliar", ""),
+                periodo=periodo, empresa=emp.get("razon_social", ""),
+                usuario=(emp.get("razon_social") and st.session_state.get("user_email", "")) or "")
+            dcol[1].download_button("⬇ Conciliación (PDF con firma del software)",
+                               data=pdfb, use_container_width=True,
+                               file_name=f"conciliacion_{nom.replace(' ','_')}.pdf",
+                               mime="application/pdf")
+        except Exception as e:  # noqa: BLE001
+            dcol[1].error(f"PDF: {e}")
+
+        # ---- plano de gastos para Contai ----
+        st.markdown("#### 🧾 Plano de gastos para Contai")
+        st.caption("Gastos bancarios repartidos en **partes iguales** entre los centros "
+                   "de costo; los gastos de **Credibanco** por centro de costo según la "
+                   "tabla de establecimientos. Reutiliza la configuración de «Bancos a "
+                   "Contai» (centros del reparto, cuentas y cuenta puente del banco).")
+        # centros y cuentas desde la config de Bancos a Contai
+        centros_rep, cuentas_g, cuenta_puc = [], dict(C.CUENTAS_GASTO_DEF), ""
+        if ebm is not None:
+            try:
+                centros_rep = ebm.cargar_centros(sb, emp["id"])
+                cuentas_g = C.cuentas_gasto_desde_reglas(ebm.cargar_reglas(sb, emp["id"]))
+                for b in ebm.cargar_bancos(sb, emp["id"]):
+                    if b.get("nombre", "").strip().upper() == nom.strip().upper():
+                        cuenta_puc = str(b.get("cuenta_puc") or "").strip()
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+        pc = st.columns(4)
+        comprob = pc[0].text_input("Comprobante", "10", key="pl_comp")
+        docpl = pc[1].text_input("Documento", "1", key="pl_doc")
+        f_pl = pc[2].date_input("Fecha del asiento", format="MM/DD/YYYY", key="pl_fec")
+        cuenta_puc = pc[3].text_input("Cuenta puente (contrapartida)",
+                                      cuenta_puc or "11100599", key="pl_puc")
+        cc_txt = st.text_area(
+            "Centros de costo del reparto igualitario (uno por línea)",
+            "\n".join(centros_rep) if centros_rep else
+            "100401\n100501\n100601\n100901\n101201\n101301\n101801\n103001", height=110)
+        cc_rep = [x.strip() for x in cc_txt.splitlines() if x.strip()]
+        st.caption(f"Cuentas de gasto (de Bancos a Contai): gasto bancario "
+                   f"`{cuentas_g['gasto_bancario']}` · comisiones `{cuentas_g['comisiones']}` · "
+                   f"IVA `{cuentas_g['iva']}` · GMF `{cuentas_g['gmf']}`. Datáfono: comisión "
+                   f"`{C.CUENTAS_DATAFONO['comision']}` · retefuente `{C.CUENTAS_DATAFONO['retefuente']}` "
+                   f"· reteIVA `{C.CUENTAS_DATAFONO['reteiva']}` · reteICA `{C.CUENTAS_DATAFONO['reteica']}`.")
+        if st.button("🧾 Generar plano de gastos", disabled=not cc_rep):
+            p = C.generar_plano_gastos(
+                r, cc_rep, cuenta_puc=cuenta_puc, cuentas_gasto=cuentas_g,
+                comprobante=comprob, documento=docpl, fecha=f_pl.strftime("%m/%d/%Y"))
+            if abs(p["debitos"] - r["notas_debito"]) < 0.5:
+                st.success(f"Plano generado: {p['n']} líneas · Débitos = Créditos = "
+                           f"{p['debitos']:,.2f} (= notas débito de la conciliación).")
+            else:
+                st.warning(f"Plano generado ({p['n']} líneas), pero los débitos "
+                           f"{p['debitos']:,.2f} no igualan las notas débito "
+                           f"{r['notas_debito']:,.2f}; revisa.")
+            st.dataframe(pd.DataFrame(p["filas"][1:], columns=p["filas"][0]).head(30),
+                         use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇ Descargar plano de gastos (.txt)",
+                data=C.plano_a_texto(p["filas"]).encode("latin-1", errors="replace"),
+                file_name=f"plano_gastos_{nom.replace(' ','_')}_{f_pl:%Y_%m}.txt",
+                mime="text/plain")
