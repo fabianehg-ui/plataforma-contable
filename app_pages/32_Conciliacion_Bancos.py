@@ -29,12 +29,34 @@ bancos = C.cargar_bancos(sb, emp["id"])
 
 tab_c, tab_cfg = st.tabs(["🔁 Conciliar", "⚙️ Configuración"])
 
-with tab_c:
-    if not bancos:
-        st.info("Esta empresa no tiene bancos configurados para conciliar. "
-                "Ve a «Configuración» y agrégalos (o siembra los de GRUPO DE LOLITA).")
-        st.stop()
+# ---- Configuración primero: así SIEMPRE se dibuja aunque no haya bancos ----
+with tab_cfg:
+    st.markdown("#### 🏦 Bancos a conciliar")
+    st.caption("Por cada banco: el prefijo de la **cuenta del auxiliar** (la cuenta "
+               "puente, p.ej. 11-10-05-99) y el **nombre de la hoja** del reporte del "
+               "banco donde están sus movimientos con N COMPROBANTE.")
+    filas = bancos or [{"nombre": "", "cuenta_auxiliar": "", "hoja_reporte": ""}]
+    df = pd.DataFrame([{k: b.get(k, "") for k in ["nombre", "cuenta_auxiliar", "hoja_reporte"]}
+                       for b in filas])
+    ed = st.data_editor(df, num_rows="dynamic", use_container_width=True, key="cfg_conc",
+                        column_config={
+                            "nombre": st.column_config.TextColumn("Banco / cuenta", required=True),
+                            "cuenta_auxiliar": st.column_config.TextColumn("Cuenta auxiliar (prefijo)", required=True),
+                            "hoja_reporte": st.column_config.TextColumn("Hoja del reporte", required=True),
+                        })
+    cbb = st.columns(2)
+    if cbb[0].button("💾 Guardar bancos", type="primary"):
+        n = C.guardar_bancos(sb, emp["id"], ed.to_dict("records"))
+        st.success(f"{n} bancos guardados."); st.rerun()
+    if cbb[1].button("🌱 Sembrar GRUPO DE LOLITA"):
+        n = C.sembrar_lolita(sb, emp["id"])
+        st.success(f"Sembrados {n} bancos. Ajusta la cuenta auxiliar / hoja si aplica."); st.rerun()
 
+with tab_c:
+  if not bancos:
+    st.info("Esta empresa no tiene bancos configurados para conciliar. "
+            "Ve a «Configuración» y agrégalos (o siembra los de GRUPO DE LOLITA).")
+  else:
     st.markdown("#### 1. Sube los archivos del mes")
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -56,12 +78,33 @@ with tab_c:
         saldo_banco = st.number_input("Saldo según extracto del banco", value=0.0,
                                       step=1000.0, format="%.2f")
 
+    st.markdown("#### 3. Partidas en tránsito y ajuste al peso (opcional)")
+    e1, e2 = st.columns(2)
+    with e1:
+        transito_txt = st.text_input(
+            "Consignaciones en tránsito reales (deja vacío para calcularlas)",
+            value="", placeholder="p.ej. 18049006",
+            help="Valor de las consignaciones/datáfonos que quedaron en puente "
+                 "para el próximo mes. Si lo dejas vacío, el sistema calcula el "
+                 "tránsito como cuadre exacto.")
+    with e2:
+        tolerancia = st.number_input(
+            "Tolerancia ajuste al peso (±)", value=10000.0, step=1000.0, format="%.2f",
+            help="Si al usar el tránsito real queda una diferencia mínima por "
+                 "acumulación de redondeos, se carga a GASTO BANCARIO como "
+                 "«ajuste al peso» siempre que no supere esta tolerancia.")
+
     if st.button("🔁 Conciliar", type="primary", disabled=(f_aux is None or f_banco is None)):
         try:
+            transito_real = None
+            _t = (transito_txt or "").replace(",", "").replace("$", "").strip()
+            if _t not in ("", "-"):
+                transito_real = float(_t)
             aux = C.leer_auxiliar(f_aux.getvalue(), banco_cfg["cuenta_auxiliar"])
             banco = C.leer_banco(f_banco.getvalue(), banco_cfg["hoja_reporte"])
             data = C.leer_datafono(f_data.getvalue() if f_data else None)
-            r = C.conciliar(aux, banco, data, saldo_banco)
+            r = C.conciliar(aux, banco, data, saldo_banco,
+                            transito_real=transito_real, tolerancia=tolerancia)
         except Exception as e:  # noqa: BLE001
             st.error(f"No pude conciliar: {e}")
             st.stop()
@@ -74,6 +117,7 @@ with tab_c:
             ("(−) PAGOS", -r["pagos"]),
             ("(−) NOTAS DÉBITO", -r["notas_debito"]),
             ("      Gasto bancario", -r["gasto_bancario"]),
+            ("         (incl. ajuste al peso)", -r["ajuste_al_peso"]),
             ("      Comisiones", -r["comisiones"]),
             ("      Comisión datáfono", -r["comision_datafono"]),
             ("      IVA", -r["iva"]),
@@ -88,12 +132,17 @@ with tab_c:
         st.dataframe(pd.DataFrame(cuadro, columns=["Concepto", "Valor"])
                      .style.format({"Valor": "{:,.2f}"}),
                      use_container_width=True, hide_index=True)
+        if abs(r["ajuste_al_peso"]) > 0:
+            st.info(f"Ajuste al peso cargado a gasto bancario: "
+                    f"{r['ajuste_al_peso']:,.2f} (por acumulación de redondeos, "
+                    f"dentro de la tolerancia de ±{tolerancia:,.0f}).")
         if r["cuadra"]:
             st.success(f"Cuadra: saldo a cierre − tránsito = saldo del banco. "
                        f"Documentos que cruzan: {r['n_cruzan']}.")
         else:
             st.warning("El cuadro no cierra contra el saldo del banco; revisa el saldo "
-                       "del extracto o las partidas en tránsito.")
+                       "del extracto o las partidas en tránsito. Si diste el tránsito "
+                       "real, la diferencia superó la tolerancia del ajuste al peso.")
 
         m1, m2 = st.columns(2)
         with m1:
@@ -119,25 +168,3 @@ with tab_c:
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         except Exception:  # noqa: BLE001
             pass
-
-with tab_cfg:
-    st.markdown("#### 🏦 Bancos a conciliar")
-    st.caption("Por cada banco: el prefijo de la **cuenta del auxiliar** (la cuenta "
-               "puente, p.ej. 11-10-05-99) y el **nombre de la hoja** del reporte del "
-               "banco donde están sus movimientos con N COMPROBANTE.")
-    filas = bancos or [{"nombre": "", "cuenta_auxiliar": "", "hoja_reporte": ""}]
-    df = pd.DataFrame([{k: b.get(k, "") for k in ["nombre", "cuenta_auxiliar", "hoja_reporte"]}
-                       for b in filas])
-    ed = st.data_editor(df, num_rows="dynamic", use_container_width=True, key="cfg_conc",
-                        column_config={
-                            "nombre": st.column_config.TextColumn("Banco / cuenta", required=True),
-                            "cuenta_auxiliar": st.column_config.TextColumn("Cuenta auxiliar (prefijo)", required=True),
-                            "hoja_reporte": st.column_config.TextColumn("Hoja del reporte", required=True),
-                        })
-    cbb = st.columns(2)
-    if cbb[0].button("💾 Guardar bancos", type="primary"):
-        n = C.guardar_bancos(sb, emp["id"], ed.to_dict("records"))
-        st.success(f"{n} bancos guardados."); st.rerun()
-    if cbb[1].button("🌱 Sembrar GRUPO DE LOLITA"):
-        n = C.sembrar_lolita(sb, emp["id"])
-        st.success(f"Sembrados {n} bancos. Ajusta la cuenta auxiliar / hoja si aplica."); st.rerun()

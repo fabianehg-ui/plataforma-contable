@@ -15,10 +15,20 @@ USO (Asistente Contable -> Conciliación de bancos):
      1) sube el AUXILIAR general del mes, el REPORTE del banco (con N COMPROBANTE)
         y, opcional, el DATÁFONO Credibanco (para comisión y retenciones).
      2) elige el banco y escribe el SALDO según el extracto.
-     3) genera: sale el cuadro de conciliación (saldo libros + consignaciones −
+     3) (opcional) escribe las CONSIGNACIONES EN TRÁNSITO REALES (lo que quedó en
+        puente para el mes siguiente) y la TOLERANCIA del ajuste al peso (±10.000
+        por defecto). Si lo dejas vacío, el tránsito se calcula como cuadre exacto.
+     4) genera: sale el cuadro de conciliación (saldo libros + consignaciones −
         pagos − notas débito = saldo a cierre − consignaciones en tránsito =
         saldo del banco) y las partidas (en banco sin libros / en libros sin
         banco), con descarga en Excel.
+
+AJUSTE AL PESO
+ - Cuando das el tránsito real, la diferencia mínima que sobra por acumulación
+   de redondeos en ingresos/egresos se carga a GASTO BANCARIO como «ajuste al
+   peso», siempre que |diferencia| ≤ tolerancia (±10.000). Así el cuadro cierra
+   exacto contra el extracto. Si la diferencia supera la tolerancia, no se ajusta
+   y el cuadro queda marcado como NO cuadra para que lo revises.
 
 QUÉ HACE POR DENTRO
  - Consignaciones = total débitos del auxiliar de esa cuenta (ignora la fila
@@ -27,12 +37,14 @@ QUÉ HACE POR DENTRO
  - Notas débito = gasto bancario + comisiones + IVA + GMF (del reporte, concepto
    GTO FINANCIERO) + comisión y retenciones del datáfono (Credibanco).
  - Cruce banco <-> libros por número (N COMPROBANTE <-> Documento).
- - Consignaciones en tránsito = saldo a cierre − saldo del banco (la partida
-   que queda en puente para el mes siguiente).
+ - Consignaciones en tránsito = saldo a cierre − saldo del banco (si no das el
+   tránsito real), o el valor que tú escribas (la partida que queda en puente
+   para el mes siguiente).
 
-Probado con julio 2026 de la 4451: cuadra (saldo libros 30.721.082,92 →
-saldo banco 26.030.633,32), 328 documentos cruzan.
+Probado con julio 2026 de la 4451: con tránsito real 18.049.006 la diferencia
+de 5.448,99 se carga como ajuste al peso a gasto bancario (428.549,12 →
+433.998,11), el cuadro cierra exacto contra el extracto (26.030.633,32) y
+328 documentos cruzan.
 
 PENDIENTE (siguiente iteración): desglose automático del DETALLE de las
-consignaciones en tránsito (los consecutivos de los últimos días en puente) y
-afinar el "gasto bancario" (diferencia de 5.448,99 en julio por clasificación).
+consignaciones en tránsito (los consecutivos de los últimos días en puente).

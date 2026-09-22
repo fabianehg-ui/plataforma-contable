@@ -187,9 +187,19 @@ def leer_datafono(fuente, hoja="RESUMEN MENSUAL"):
             "reteiva": round(riva, 2), "reteica": round(rica, 2)}
 
 
-def conciliar(aux, banco, datafono, saldo_banco: float):
+def conciliar(aux, banco, datafono, saldo_banco: float,
+              transito_real=None, tolerancia: float = 10000.0):
     """Arma la conciliación y las partidas. Recibe los dict de leer_* y el saldo
-    del extracto del banco. Devuelve un dict con el resumen y los detalles."""
+    del extracto del banco.
+
+    - Si `transito_real` es None: las consignaciones en tránsito se calculan como
+      el plug (saldo a cierre − saldo del banco), así siempre cuadra.
+    - Si se entrega `transito_real` (valor de las partidas reales en puente): el
+      residuo = saldo a cierre − tránsito real − saldo del banco se carga como
+      AJUSTE AL PESO a gasto bancario SIEMPRE QUE |residuo| ≤ `tolerancia`
+      (por defecto ±10.000), para que cuadre exacto. Si supera la tolerancia se
+      deja el residuo visible y `cuadra=False` para que lo revises.
+    """
     g = banco["gastos"]
     gasto_banc = g.get("GASTO BANCARIO", 0.0)
     comis = g.get("COMISIONES", 0.0)
@@ -199,9 +209,22 @@ def conciliar(aux, banco, datafono, saldo_banco: float):
     ret_d = datafono["retefuente"]
     riva_d = datafono["reteiva"]
     rica_d = datafono["reteica"]
-    notas = round(gasto_banc + comis + com_d + iva + gmf + riva_d + ret_d + rica_d, 2)
-    cierre = round(aux["saldo_ant"] + aux["consignaciones"] - aux["pagos"] - notas, 2)
-    transito = round(cierre - saldo_banco, 2)
+
+    ajuste = 0.0
+    if transito_real is None:
+        notas = round(gasto_banc + comis + com_d + iva + gmf + riva_d + ret_d + rica_d, 2)
+        cierre = round(aux["saldo_ant"] + aux["consignaciones"] - aux["pagos"] - notas, 2)
+        transito = round(cierre - saldo_banco, 2)
+    else:
+        transito = round(float(transito_real), 2)
+        notas0 = round(gasto_banc + comis + com_d + iva + gmf + riva_d + ret_d + rica_d, 2)
+        cierre0 = round(aux["saldo_ant"] + aux["consignaciones"] - aux["pagos"] - notas0, 2)
+        residuo = round(cierre0 - transito - saldo_banco, 2)   # lo que sobra/falta
+        if abs(residuo) <= tolerancia:
+            ajuste = residuo                 # se carga a gasto bancario
+            gasto_banc = round(gasto_banc + ajuste, 2)
+        notas = round(gasto_banc + comis + com_d + iva + gmf + riva_d + ret_d + rica_d, 2)
+        cierre = round(aux["saldo_ant"] + aux["consignaciones"] - aux["pagos"] - notas, 2)
 
     # cruce por documento
     lby = defaultdict(list)
@@ -227,6 +250,7 @@ def conciliar(aux, banco, datafono, saldo_banco: float):
         "saldo_cierre": cierre,
         "consignaciones_transito": transito,
         "saldo_banco": round(saldo_banco, 2),
+        "ajuste_al_peso": round(ajuste, 2),
         "cuadra": abs((cierre - transito) - saldo_banco) < 0.01,
         "n_cruzan": len(cruzan),
         "solo_libros": [x for d in solo_libros for x in lby[d]],
