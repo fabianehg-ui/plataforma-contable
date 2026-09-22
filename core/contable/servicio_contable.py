@@ -1016,11 +1016,15 @@ _ALIAS_TERCEROS = {
 
 _ALIAS_CUENTAS = {
     "cuenta": "codigo", "codigo": "codigo", "cod": "codigo", "cuentacontable": "codigo",
+    "codigocuenta": "codigo", "codigocuentaniif": "codigo",   # Contai NIIF
     "nombre": "nombre", "descripcion": "nombre", "nombrecuenta": "nombre",
+    "nombrecuentaniif": "nombre",                             # Contai NIIF
     "naturaleza": "naturaleza", "nat": "naturaleza",
     "tipo": "tipo_cuenta", "tipocuenta": "tipo_cuenta",
+    "tipodecuenta": "tipo_cuenta", "tipodecuentaniif": "tipo_cuenta",  # Contai NIIF
     "manejanit": "maneja_nit", "nit": "maneja_nit",
     "manejacc": "maneja_cc", "centrocosto": "maneja_cc", "cc": "maneja_cc",
+    "idcentrocosto": "maneja_cc", "idcentrocostoniif": "maneja_cc",    # Contai NIIF
     "manejabase": "maneja_base", "base": "maneja_base",
 }
 

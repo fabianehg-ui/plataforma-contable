@@ -36,17 +36,70 @@ st.caption(f"Empresa activa: **{emp['razon_social']}** · Terceros, plan de cuen
 st.markdown("---")
 
 
+def _leer_terceros_contai(lineas) -> pd.DataFrame:
+    """Parsea el export de TERCEROS de Contai (ANCHO FIJO, con relleno de bytes
+    nulos). Extrae NIT y NOMBRE (razón social o nombres+apellidos) de cada
+    registro. Devuelve columnas nit, nombre, tipo_persona."""
+    import re
+    LET = re.compile(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}")
+
+    def limpiar(n: str) -> str:
+        n = re.sub(r"\s+", " ", n).strip()
+        n = re.sub(r"\b0?\d{4,5}S?N?\d{0,3}\b", "", n)   # códigos ciudad/municipio
+        n = re.sub(r"\d{5,}", "", n)
+        n = re.sub(r"\bSN\b", "", n)
+        return re.sub(r"\s+", " ", n).strip(" -0")
+
+    filas, vistos = [], set()
+    for s in lineas[1:]:
+        if "\t" in s:  # algunas filas vienen con tabs en vez de ancho fijo
+            p = [x.strip() for x in s.split("\t") if x.strip()]
+            if not p:
+                continue
+            nit = "".join(c for c in p[0].split()[0] if c.isdigit()) if p[0].split() else ""
+            nombre, tipo = " ".join(p[1:]).strip(), ""
+        else:
+            nit = s[0:11].strip()
+            razon = s[12:42].strip()
+            pn, sn2, pa, sa = s[104:134].strip(), s[134:164].strip(), s[164:194].strip(), s[194:224].strip()
+            persona = " ".join(x for x in (pn, sn2, pa, sa) if x).strip()
+            if persona and not razon:
+                nombre, tipo = persona, "N"
+            else:
+                nombre, tipo = razon, ""
+        nitd = "".join(c for c in nit if c.isdigit())
+        nombre = limpiar(nombre)
+        if not nitd or len(nitd) < 4 or not LET.search(nombre):
+            continue
+        if nitd in vistos:
+            continue
+        vistos.add(nitd)
+        filas.append({"nit": nitd, "nombre": nombre, "tipo_persona": tipo})
+    return pd.DataFrame(filas)
+
+
 def _leer_tabla(archivo) -> pd.DataFrame:
-    """Lee un plano (.xlsx/.txt/.csv) a DataFrame (como texto)."""
+    """Lee un plano (.xlsx/.txt/.csv) a DataFrame (como texto). Tolera los
+    archivos que se bajan de Contai: quita bytes nulos y reconoce el export
+    de terceros en ancho fijo."""
     nombre = archivo.name.lower()
     if nombre.endswith((".xlsx", ".xls")):
         return pd.read_excel(archivo, dtype=str).fillna("")
-    raw = archivo.read().decode("latin-1")
-    lineas = [l for l in raw.splitlines() if l.strip() and not l.lower().startswith("sep=")]
+    raw = archivo.read()
+    if isinstance(raw, (bytes, bytearray)):
+        raw = bytes(raw).replace(b"\x00", b"")        # Contai rellena con NUL
+        texto = raw.decode("latin-1")
+    else:
+        texto = str(raw).replace("\x00", "")
+    lineas = [l for l in texto.splitlines() if l.strip() and not l.lower().startswith("sep=")]
     if not lineas:
         return pd.DataFrame()
-    # Detectar delimitador por la primera línea
     cab = lineas[0]
+    # ¿Export de TERCEROS de Contai (ancho fijo)? Encabezado con RAZON SOCIAL y
+    # sin delimitador utilizable.
+    if ("\t" not in cab and ";" not in cab) and "RAZON SOCIAL" in cab.upper():
+        return _leer_terceros_contai(lineas)
+    # Detectar delimitador por la primera línea
     delim = "\t" if "\t" in cab else (";" if ";" in cab else ("," if "," in cab else "\t"))
     filas = [l.split(delim) for l in lineas]
     df = pd.DataFrame(filas).fillna("")
@@ -55,7 +108,8 @@ def _leer_tabla(archivo) -> pd.DataFrame:
     if any(k in primera for k in ("NIT", "NOMBRE", "CODIGO", "CÓDIGO", "CUENTA", "RAZON")):
         df.columns = [str(x).strip() for x in df.iloc[0]]
         df = df.iloc[1:].reset_index(drop=True)
-    return df
+    # quitar caracteres de control residuales en celdas de texto
+    return df.applymap(lambda x: str(x).replace("\x00", "").strip() if isinstance(x, str) else x)
 
 
 def _bloque_import(titulo, ayuda, key, fn_import):

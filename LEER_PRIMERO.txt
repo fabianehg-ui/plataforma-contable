@@ -1,36 +1,32 @@
-CORRECCIÓN 2 — Cierre de costo JULIO (cuenta 71 no cerraba)
-==========================================================
+INTEGRAL — Importar maestros TAL CUAL bajan de Contai
+=====================================================
+Reemplaza en tu repo:
+  app_pages/22_Maestros.py
+  core/contable/servicio_contable.py
 
-DOS COSAS QUE ME REPORTASTE
+QUÉ CAMBIA
+Ahora la página de Maestros procesa los archivos como los descargas de Contai,
+sin tener que limpiarlos:
 
-1) LA CUENTA 71 NO QUEDÓ EN CEROS  (esto SÍ era un error del módulo)
-   El centro de costo 001001 ADMINISTRACIÓN tenía una compra de ASEO de
-   $300.000 (cuenta 71-05-04-01). El módulo solo usaba 001001 como línea de
-   control y NO cerraba sus compras, así que la 71 quedaba con saldo.
-   CORREGIDO: ahora cierra TODOS los centros de costo que tengan compras,
-   aunque no tengan inventario. Los que no tienen inventario (como
-   administración) cierran la compra entera a costo:
-       71059503 CR 300.000  (cierre compras aseo)
-       61401001 DR 300.000  (costo cafetería y aseo)
-   Con esto los créditos de compras suben a $639.903.169 y la 71 cierra.
-   NOTA: en tu BP la 71 traía un saldo ANTERIOR de -$2.734,60 (de un mes
-   previo). Eso no lo toca el cierre del mes; si quieres dejar la 71 en 0
-   exacto hay que hacer un ajuste aparte por esos $2.734,60.
+1. TERCEROS (.txt de Contai, ancho fijo con bytes nulos):
+   - Antes tronaba (ValueError por los bytes nulos \x00).
+   - Ahora se limpian los nulos y se parsea por posiciones fijas
+     (NIT, RAZÓN SOCIAL, y nombres+apellidos). Extrae NIT y NOMBRE.
+   - Sube el archivo NITS...TXT tal cual en la pestaña Terceros.
 
-2) EL INVENTARIO FINAL CONTABLE NO COINCIDE CON EL DEL DOCUMENTO
-   Aquí el módulo está BIEN. La suma real de los inventarios finales de
-   alimentos por punto es $640.362.269,69 = exactamente tu saldo contable.
-   El que está mal es la celda "TOTAL EMPRESA" del RESULTADOS: da
-   $638.554.107,69 porque su FÓRMULA NO SUMA LA COLUMNA DE VENDING
-   ($1.808.162). 640.362.269,69 − 1.808.162 = 638.554.107,69.
-   => El libro está completo; corrige la fórmula del TOTAL EMPRESA del
-      RESULTADOS para que incluya VENDING (o, si vending no debe llevar
-      inventario, quítale el inventario final en el RESULTADOS).
+2. PLAN DE CUENTAS (.xlsx de Contai con columnas "... - NIIF"):
+   - Se reconocen los encabezados "Código Cuenta - NIIF",
+     "Nombre Cuenta - NIIF", "Tipo de Cuenta - NIIF",
+     "Id. Centro Costo - NIIF" (maneja CC).
+   - Sube el PUC ... .xlsx tal cual en Plan de cuentas.
 
-ARCHIVOS
-  core/reportes/cierre_costo_jiper.py            -> reemplaza en tu repo
-  plano_cierre_costo_julio_doc3_OK_v2.txt        -> doc 3 corregido (subir)
-  plano_traslado_cdp_julio_doc4_OK_v2.txt        -> doc 4 corregido (subir)
+3. CENTROS DE COSTO (.xlsx de Contai):
+   - "Centro de Costos - NIIF" / "Nombre - NIIF" se leen por posición.
+   - Sube el archivo de centros tal cual.
 
-En Contai anula el doc 3 y doc 4 de julio anteriores y sube estos.
-Junio sigue dando idéntico a lo que ya tenías.
+En los tres casos, INTEGRAL guarda la info en la configuración de la empresa
+activa (cn_terceros, cn_plan_cuentas / cuentas, cn_centros_costo).
+
+NOTA: el export de terceros de Contai trae unas pocas filas mal alineadas;
+esas se descartan automáticamente (se quedan solo los registros con NIT y
+nombre válidos).
