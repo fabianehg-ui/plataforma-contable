@@ -47,7 +47,10 @@ QUÉ HACE POR DENTRO
  - Pagos = total créditos del auxiliar.
  - Notas débito = gasto bancario + comisiones + IVA + GMF (del reporte, concepto
    GTO FINANCIERO) + comisión y retenciones del datáfono (Credibanco).
- - Cruce banco <-> libros por número (N COMPROBANTE <-> Documento).
+ - Cruce banco <-> libros por número (N COMPROBANTE <-> Documento). Un renglón
+   del banco puede AGRUPAR varios documentos en la misma celda: se expanden y se
+   cruza cada uno. El guion es separador de LISTA (28637-28638-5664-5665 = cuatro
+   documentos, no un rango); solo 'X al Y' / 'X a Y' se toma como rango.
  - Consignaciones en tránsito = saldo a cierre − saldo del banco (si no das el
    tránsito real), o el valor que tú escribas (la partida que queda en puente
    para el mes siguiente).

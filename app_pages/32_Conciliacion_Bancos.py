@@ -201,14 +201,25 @@ with tab_c:
                        "del extracto o las partidas en tránsito. Si diste el tránsito "
                        "real, la diferencia superó la tolerancia del ajuste al peso.")
 
+        def _tabla(regs):
+            """Aplana la columna 'docs' (lista) a texto para poder mostrarla."""
+            df = pd.DataFrame(regs)
+            if "docs" in df.columns:
+                df["docs"] = df["docs"].apply(
+                    lambda v: ", ".join(v) if isinstance(v, (list, tuple)) else v)
+            return df
+
+        st.caption(f"Cruce por documento: **{r['n_cruzan']}** documentos cruzan "
+                   "(los renglones del banco que agrupan varios comprobantes, "
+                   "p.ej. «28637-28638-5664-5665», se expanden y cruzan cada uno).")
         m1, m2 = st.columns(2)
         with m1:
             st.markdown("**En banco sin libros (no están en contabilidad)**")
-            st.dataframe(pd.DataFrame(r["solo_banco"]), use_container_width=True,
+            st.dataframe(_tabla(r["solo_banco"]), use_container_width=True,
                          hide_index=True, height=220)
         with m2:
             st.markdown("**En libros sin banco (pagos no salidos)**")
-            st.dataframe(pd.DataFrame(r["solo_libros"]), use_container_width=True,
+            st.dataframe(_tabla(r["solo_libros"]), use_container_width=True,
                          hide_index=True, height=220)
 
         # ---- descargar Excel ----
@@ -216,8 +227,8 @@ with tab_c:
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine="openpyxl") as xw:
                 pd.DataFrame(cuadro, columns=["Concepto", "Valor"]).to_excel(xw, index=False, sheet_name="Conciliacion")
-                pd.DataFrame(r["solo_banco"]).to_excel(xw, index=False, sheet_name="No en contabilidad")
-                pd.DataFrame(r["solo_libros"]).to_excel(xw, index=False, sheet_name="Pagos no salidos")
+                _tabla(r["solo_banco"]).to_excel(xw, index=False, sheet_name="No en contabilidad")
+                _tabla(r["solo_libros"]).to_excel(xw, index=False, sheet_name="Pagos no salidos")
                 if r["datafono_cc"]:
                     pd.DataFrame(r["datafono_cc"]).to_excel(xw, index=False, sheet_name="Datafono por CC")
             st.download_button("⬇ Descargar conciliación (Excel)", data=buf.getvalue(),

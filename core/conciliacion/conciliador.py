@@ -49,6 +49,37 @@ def _nk(x) -> str:
     return re.sub(r"\D", "", str(x or "")).lstrip("0")
 
 
+def _expandir_docs(x) -> set:
+    """Un renglón del banco (o del auxiliar) puede AGRUPAR varios documentos en la
+    misma celda de N COMPROBANTE / Documento. Devuelve el CONJUNTO de documentos
+    que representa esa celda, normalizados como _nk (sin ceros a la izquierda).
+
+    Reglas (según cómo lo escribe la empresa):
+      · Lista separada por guion / coma / barra / espacio -> cada número es un
+        documento distinto:  '28637-28638-5664-5665' -> {28637,28638,5664,5665}
+        (el guion NO es rango: '28493-28557' son dos documentos, no 65).
+      · Rango explícito con la palabra 'al' o 'a' -> se expande el intervalo:
+        'de 1 al 4' / '1 al 4' / '1 a 4' -> {1,2,3,4}.
+      · Un solo número -> ese documento.
+    """
+    s = str(x or "").strip()
+    if not s:
+        return set()
+    nums = re.findall(r"\d+", s)
+    if not nums:
+        return set()
+    low = s.lower()
+    m = re.search(r"(\d+)\s*(?:al|a)\s+(\d+)", low)      # rango explícito
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        a, b = min(a, b), max(a, b)
+        docs = {str(n) for n in range(a, b + 1)} if 0 <= b - a <= 500 \
+            else {str(int(n)) for n in nums}
+        docs |= {str(int(n)) for n in nums}             # + cualquier suelto
+        return {d for d in docs if d and d != "0"}
+    return {str(int(n)) for n in nums if int(n) != 0}   # lista de documentos
+
+
 def _abrir(fuente, hoja=None):
     import openpyxl
     if isinstance(fuente, (bytes, bytearray)):
@@ -116,7 +147,10 @@ def leer_auxiliar(fuente, cuenta_prefijo: str):
             continue
         consig += deb
         pagos += cred
-        detalle.append({"doc": _nk(r[cDoc]), "fecha": str(r[cFec] or ""),
+        doc_raw = str(r[cDoc] or "")
+        detalle.append({"doc": _nk(doc_raw), "doc_raw": doc_raw,
+                        "docs": sorted(_expandir_docs(doc_raw)),
+                        "fecha": str(r[cFec] or ""),
                         "detalle": str(r[cDet] or "")[:60], "deb": deb, "cred": cred})
     return {"saldo_ant": saldo_ant or 0.0, "consignaciones": round(consig, 2),
             "pagos": round(pagos, 2), "detalle": detalle}
@@ -152,7 +186,9 @@ def leer_banco(fuente, hoja: str, gasto_reglas=None):
             continue
         det = str(r[cDet] or "") if cDet is not None else ""
         con = str(r[cCon] or "").strip() if cCon is not None else ""
-        movs.append({"nc": _nk(r[cNC]) if cNC is not None else "",
+        nc_raw = str(r[cNC] or "") if cNC is not None else ""
+        movs.append({"nc": _nk(nc_raw), "nc_raw": nc_raw,
+                     "docs": sorted(_expandir_docs(nc_raw)),
                      "fecha": str(r[cFec] or "") if cFec is not None else "",
                      "detalle": det[:60], "deb": deb, "cred": cred, "concepto": con})
         if con.upper() == "GTO FINANCIERO":
@@ -416,18 +452,26 @@ def conciliar(aux, banco, datafono, saldo_banco: float,
         notas = round(gasto_banc + comis + com_d + iva + gmf + riva_d + ret_d + rica_d, 2)
         cierre = round(aux["saldo_ant"] + aux["consignaciones"] - aux["pagos"] - notas, 2)
 
-    # cruce por documento
-    lby = defaultdict(list)
-    bby = defaultdict(list)
+    # ---- cruce por documento (expandiendo los renglones que agrupan varios) ----
+    def _docs_de(x, llave):
+        ds = x.get("docs")
+        if ds:
+            return set(ds)
+        return {x[llave]} if x.get(llave) else set()
+
+    libros_docs = set()
     for x in aux["detalle"]:
-        lby[x["doc"]].append(x)
+        libros_docs |= _docs_de(x, "doc")
+    banco_docs = set()
     for x in banco["movimientos"]:
-        bby[x["nc"]].append(x)
-    dl = set(lby) - {""}
-    db = set(bby) - {""}
-    cruzan = sorted(dl & db)
-    solo_libros = sorted(dl - db)   # en libros, no en banco
-    solo_banco = sorted(db - dl)    # en banco, no en libros (no en contabilidad)
+        banco_docs |= _docs_de(x, "nc")
+    libros_docs -= {""}
+    banco_docs -= {""}
+
+    cruzan = libros_docs & banco_docs
+    # un renglón queda "solo" si NINGUNO de sus documentos cruza con el otro lado
+    solo_libros = [x for x in aux["detalle"] if _docs_de(x, "doc") and not (_docs_de(x, "doc") & banco_docs)]
+    solo_banco = [x for x in banco["movimientos"] if _docs_de(x, "nc") and not (_docs_de(x, "nc") & libros_docs)]
 
     return {
         "saldo_ant": round(aux["saldo_ant"], 2),
@@ -443,8 +487,8 @@ def conciliar(aux, banco, datafono, saldo_banco: float,
         "ajuste_al_peso": round(ajuste, 2),
         "cuadra": abs((cierre - transito) - saldo_banco) < 0.01,
         "n_cruzan": len(cruzan),
-        "solo_libros": [x for d in solo_libros for x in lby[d]],
-        "solo_banco": [x for d in solo_banco for x in bby[d]],
+        "solo_libros": solo_libros,
+        "solo_banco": solo_banco,
         "datafono_cc": datafono["por_cc"],
     }
 
