@@ -468,3 +468,37 @@ def sembrar_lolita(sb, empresa_id) -> tuple:
     nb = guardar_bancos(sb, empresa_id, BANCOS_LOLITA)
     nr = guardar_reglas(sb, empresa_id, REGLAS_LOLITA)
     return nb, nr
+
+
+# ===========================================================================
+# Resumen por concepto y por cuenta bancaria (para reporte)
+# ===========================================================================
+def resumen_conceptos(movimientos: list):
+    """Devuelve (bancos, filas) para una tabla CONCEPTO x BANCO.
+    Agrupa por cuenta (concepto), con columnas por banco, TOTAL por concepto y
+    una fila TOTAL por banco. Sirve para "total gasto, total comisión, total
+    gravamen, total IVA, intereses, etc." por cada cuenta bancaria."""
+    bancos = sorted({m["banco"] for m in movimientos})
+    conc = {}  # (cuenta, lado) -> {"etq":..., banco: val}
+    for m in movimientos:
+        lado = m.get("lado", "D")
+        k = (m["cuenta"], lado)
+        d = conc.setdefault(k, {"etq": m.get("detalle", ""), "_v": defaultdict(float)})
+        d["_v"][m["banco"]] += m["valor"]
+    tipo_nom = {"D": "Gasto", "C": "Ingreso", "R": "Retención"}
+    filas = []
+    for (cta, lado), d in sorted(conc.items(), key=lambda x: (x[0][1] != "C", x[1]["etq"])):
+        fila = {"Concepto": d["etq"], "Cuenta": cta, "Tipo": tipo_nom.get(lado, lado)}
+        tot = 0.0
+        for b in bancos:
+            v = round(d["_v"].get(b, 0.0), 2)
+            fila[b] = v
+            tot += v
+        fila["TOTAL"] = round(tot, 2)
+        filas.append(fila)
+    total = {"Concepto": "TOTAL", "Cuenta": "", "Tipo": ""}
+    for b in bancos:
+        total[b] = round(sum(f[b] for f in filas), 2)
+    total["TOTAL"] = round(sum(f["TOTAL"] for f in filas), 2)
+    filas.append(total)
+    return bancos, filas

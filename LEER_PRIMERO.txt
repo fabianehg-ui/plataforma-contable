@@ -1,30 +1,24 @@
-BANCOS A CONTAI — configuración por empresa (gastos e ingresos)
-================================================================
-PASO 1 — Supabase -> SQL Editor -> ejecuta db/migrations/020_bancos_config.sql
-PASO 2 — Reemplaza en el repo:
-           core/procesadores/extractos_bancarios_multi.py
-           app_pages/19_Bancos_a_Contai.py
-         Entra a Bancos a Contai (empresa GRUPO DE LOLITA) -> pestaña
-         "Configuración de la empresa" -> botón:
-             🌱 Sembrar GRUPO DE LOLITA (bancos + reglas)
-         Elige los centros de costo para el reparto y guarda.
-PASO 3 — Pestaña "Procesar extractos": sube los PDF y genera el plano.
+BANCOS A CONTAI — configuración + RESUMEN por concepto y banco
+==============================================================
+NOVEDAD: la pestaña "Procesar extractos" ahora muestra un RESUMEN de gastos e
+ingresos por CONCEPTO (total gasto, comisión, gravamen 4x1000, IVA, intereses,
+retención...) y por CADA cuenta bancaria, con TOTAL por concepto y por banco.
+Se puede descargar en Excel (hoja Resumen + hoja Detalle).
 
-BANCOS QUE QUEDAN SEMBRADOS (6) con su cuenta del PUC:
-   DAVIVIENDA 7872         -> 11200513
-   OCCIDENTE 9426          -> 11100505
-   BANCOLOMBIA AHORRO 8271 -> 11100501   (en tu PUC dice CANCELADA: verifica)
-   FIDU DAVIVIENDA 3122    -> 11304001
-   FIDU BANCOLOMBIA 4655   -> 11304002
-   BANCOLOMBIA CTE 4451    -> 11100599   (CUENTA PUENTE 4451 BBIA)
+Para actualizar solo reemplaza estos dos archivos (NO hay que correr SQL de
+nuevo, ni volver a sembrar bancos):
+   core/procesadores/extractos_bancarios_multi.py
+   app_pages/19_Bancos_a_Contai.py
 
-REGLAS (cuentas de tu PUC):
-   GMF/4x1000 53050601 | IVA descontable gastos 24081009 (base) |
-   Retefuente rendimientos 13551509 | Comisiones 53051501 |
-   Gastos bancarios 53050501 | Ingresos financieros 42100501
+(Si es la primera vez que instalas el módulo, sí corre una vez
+ db/migrations/020_bancos_config.sql en Supabase y usa el botón
+ "🌱 Sembrar GRUPO DE LOLITA".)
 
-Probado con tus 6 extractos: los detecta todos y el plano cuadra.
-Solo se contabilizan los cargos/ingresos bancarios (GMF, IVA, comisión, cuota
-manejo, rendimientos, intereses). Los PAGO QR, pagos a proveedores, nómina,
-consignaciones y traslados quedan FUERA a propósito. Ajusta las reglas si algo
-no te cuadra.
+Ejemplo del resumen con tus 6 extractos de julio:
+   INGRESOS FINANCIEROS   42100501   Ingreso    500,126.71
+   COMISIONES             53051501   Gasto      170,199.15
+   GASTOS BANCARIOS       53050501   Gasto      389,104.90
+   GRAVAMEN 4X1000        53050601   Gasto    2,808,091.53
+   IVA DESCONTABLE GASTOS 24081009   Gasto      125,611.78
+   RETEFUENTE RENDIMIENTOS 13551509  Retención   55,640.91
+   (con una columna por banco y su TOTAL)

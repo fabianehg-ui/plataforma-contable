@@ -84,6 +84,29 @@ with tab_proc:
         st.dataframe(pd.DataFrame(info), use_container_width=True, hide_index=True)
 
         if movs:
+            # ---- Resumen por concepto y cuenta bancaria (reporte) ----
+            st.subheader("Resumen de gastos e ingresos por concepto y banco")
+            _bcs, _filas = ebm.resumen_conceptos(movs)
+            df_res = pd.DataFrame(_filas)
+            _cols_num = [c for c in df_res.columns if c not in ("Concepto", "Cuenta", "Tipo")]
+            st.dataframe(
+                df_res.style.format({c: "{:,.2f}" for c in _cols_num}),
+                use_container_width=True, hide_index=True,
+            )
+            try:
+                import io as _io
+                buf = _io.BytesIO()
+                with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+                    df_res.to_excel(xw, index=False, sheet_name="Resumen")
+                    pd.DataFrame(movs).to_excel(xw, index=False, sheet_name="Detalle")
+                st.download_button("⬇ Descargar resumen (Excel)", data=buf.getvalue(),
+                                   file_name="resumen_gastos_bancarios.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except Exception:  # noqa: BLE001
+                st.download_button("⬇ Descargar resumen (CSV)",
+                                   data=df_res.to_csv(index=False).encode("utf-8-sig"),
+                                   file_name="resumen_gastos_bancarios.csv", mime="text/csv")
+
             with st.expander("Ver movimientos clasificados"):
                 st.dataframe(pd.DataFrame(movs), use_container_width=True, hide_index=True)
 
