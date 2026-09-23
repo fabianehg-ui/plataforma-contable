@@ -67,6 +67,17 @@ CONCILIAR TODO (todos los bancos de una vez)
    centro de costo solo donde aplica. Cada banco se acredita contra SU cuenta
    puente (de «Bancos a Contai», editable). Débitos = Créditos.
 
+FIDUCUENTAS (cuentas que no están en el reporte de Excel)
+ - Se agregaron FIDU DAVIVIENDA 3122 (cuenta 11-30-40-01) y FIDU BANCOLOMBIA 4655
+   (cuenta 11-30-40-02). Como NO tienen hoja en el reporte de Excel, se concilian
+   SOLO desde el PDF: el auxiliar de esa cuenta contra el SALDO FINAL del PDF.
+   No se cargan notas débito (rendimientos, retención, comisión y GMF ya vienen
+   registrados en el auxiliar); esos valores quedan informativos. Probado:
+   ambas cuadran exacto (FIDU DAVI 423.910,64 · FIDU BANCOL 23.891.716,39).
+ - Para usarlas: sube el PDF de cada fiducuenta en «Conciliar todo». Si tu
+   configuración ya estaba sembrada, vuelve a «🌱 Sembrar GRUPO DE LOLITA» para
+   que aparezcan las dos fiducuentas (o agrégalas a mano con su cuenta y hoja vacía).
+
 EXTRACTOS EN PDF (verificación)
  - En «Conciliar todo» puedes subir los PDF de los extractos de cada banco.
    INTEGRAL empareja cada PDF con su banco (por el número del nombre), lee el

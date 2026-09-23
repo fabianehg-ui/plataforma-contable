@@ -204,34 +204,41 @@ with tab_todo:
         data_df = f_data_t.getvalue() if f_data_t else None
         resultados, avisos, verif = [], [], []
         cfg_by_name = {b["nombre"]: b for b in bancos}
+        vacio_df = {"por_cc": [], "comision": 0.0, "retefuente": 0.0, "reteiva": 0.0, "reteica": 0.0}
         for row in edt.to_dict("records"):
             hoja = str(row["hoja_reporte"]).strip()
             fbytes = hoja_idx.get(hoja.upper())
-            if fbytes is None:
-                avisos.append(f"• {row['banco']}: no encontré la hoja «{hoja}» en los archivos subidos.")
+            pf = pdf_por_banco.get(row["banco"])
+            # movimientos del PDF (si hay PDF), para verificación o para conciliar
+            movs_pdf = []
+            if pf:
+                fmt = C.formato_pdf_sugerido(row["banco"], row["cuenta_auxiliar"])
+                if ebm is not None and fmt in getattr(ebm, "PARSERS", {}):
+                    try:
+                        movs_pdf = ebm.PARSERS[fmt](pf["texto"])
+                    except Exception:  # noqa: BLE001
+                        movs_pdf = []
+            if fbytes is None and pf is None:
+                avisos.append(f"• {row['banco']}: no encontré la hoja «{hoja}» en Excel ni un PDF; se omite.")
                 continue
             try:
                 aux = C.leer_auxiliar(aux_bytes, row["cuenta_auxiliar"])
-                banco = C.leer_banco(fbytes, hoja)
+                if fbytes is not None:                     # banco con hoja de Excel
+                    banco = C.leer_banco(fbytes, hoja)
+                    saldo_ex = float(row.get("saldo_extracto") or 0)
+                    excel_final = C.saldo_extracto_de(fbytes, hoja).get("final")
+                else:                                      # SOLO PDF (fiducuentas)
+                    banco = C.banco_desde_pdf(movs_pdf)
+                    saldo_ex = float(row.get("saldo_extracto") or 0) or (pf["saldos"].get("final") or 0.0)
+                    excel_final = None
                 usa_df = bool(row.get("usa_datafono"))
-                data = C.leer_datafono(data_df, maestro=maestro) if (usa_df and data_df) else \
-                    {"por_cc": [], "comision": 0.0, "retefuente": 0.0, "reteiva": 0.0, "reteica": 0.0}
+                data = C.leer_datafono(data_df, maestro=maestro) if (usa_df and data_df) else dict(vacio_df)
                 tr = float(row.get("transito_real") or 0) or None
-                r = C.conciliar(aux, banco, data, float(row.get("saldo_extracto") or 0),
-                                transito_real=tr, tolerancia=tol_t)
+                r = C.conciliar(aux, banco, data, saldo_ex, transito_real=tr, tolerancia=tol_t)
+                r["solo_pdf"] = (fbytes is None)
                 resultados.append({"banco": row["banco"], "cuenta": row["cuenta_auxiliar"], "r": r})
-                # verificación contra el PDF del banco (si se subió)
-                pf = pdf_por_banco.get(row["banco"])
                 if pf:
-                    fmt = C.formato_pdf_sugerido(row["banco"], row["cuenta_auxiliar"])
-                    movs_pdf = []
-                    if ebm is not None and fmt in getattr(ebm, "PARSERS", {}):
-                        try:
-                            movs_pdf = ebm.PARSERS[fmt](pf["texto"])
-                        except Exception:  # noqa: BLE001
-                            movs_pdf = []
-                    cr = C.cruzar_pdf(pf["saldos"], movs_pdf, banco,
-                                      C.saldo_extracto_de(fbytes, hoja).get("final"))
+                    cr = C.cruzar_pdf(pf["saldos"], movs_pdf, banco, excel_final)
                     cr["banco"] = row["banco"]
                     verif.append(cr)
             except Exception as e:  # noqa: BLE001

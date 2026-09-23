@@ -471,14 +471,59 @@ def _num_pdf(s) -> float:
 
 def saldos_desde_texto(texto):
     """Del TEXTO de un PDF de extracto: saldo inicial y final (por etiquetas).
-    Sirve para verificar/rellenar el saldo del banco desde el PDF."""
-    def val(label):
-        m = re.search(label + r"[^0-9\-]*\$?\s*([\d\.,]+)", texto, re.I)
-        return _num_pdf(m.group(1)) if m else None
-    ini = val(r"SALDO\s*ANTERIOR") or val(r"SALDO\s*INICIAL") or val(r"Saldo\s*Anterior")
-    fin = (val(r"SALDO\s*ACTUAL") or val(r"NUEVO\s*SALDO") or val(r"Nuevo\s*Saldo")
-           or val(r"SALDO\s*FINAL") or val(r"SALDO\s*NUEVO"))
+    Cubre bancos normales, fiducuenta Davivienda («Saldo al inicio/final del mes»)
+    y fiducuenta Bancolombia (bloque «REND. NETOS RETENCIÓN NUEVO SALDO»)."""
+    def val(*labels):
+        for lab in labels:
+            m = re.search(lab + r"[^0-9\-]*\$?\s*([\-\d\.,]+)", texto, re.I)
+            if m:
+                v = _num_pdf(m.group(1))
+                if v:
+                    return v
+        return None
+    ini = fin = None
+    # 1) fiducuenta Bancolombia: bloques con valores 2 líneas abajo del rótulo
+    mb = re.search(r"REND\.?\s*NETOS\s+RETENCI[ÓO]N\s+NUEVO\s*SALDO.*?\n.*?\n\s*"
+                   r"[\d\.,]+\s+[\d\.,]+\s+([\d\.,]+)", texto, re.I | re.S)
+    if mb:
+        fin = _num_pdf(mb.group(1))
+    mi = re.search(r"SALDO\s+ANTERIOR\s+ADICIONES\s+RETIROS.*?\n.*?\n\s*([\d\.,]+)",
+                   texto, re.I | re.S)
+    if mi:
+        ini = _num_pdf(mi.group(1))
+    # 2) etiquetas normales (si no las llenó el bloque de fiducuenta)
+    if ini is None:
+        ini = val(r"Saldo\s+al\s+inicio\s+del\s+mes", r"SALDO\s*ANTERIOR",
+                  r"SALDO\s*INICIAL", r"Saldo\s*Anterior")
+    if fin is None:
+        fin = val(r"Saldo\s+al\s+final\s+del\s+mes", r"SALDO\s*ACTUAL",
+                  r"Nuevo\s*Saldo", r"SALDO\s*FINAL", r"SALDO\s*NUEVO")
     return {"inicial": ini, "final": fin}
+
+
+def banco_desde_pdf(movs_pdf):
+    """Arma un 'banco' (como el de leer_banco) para conciliar cuentas que NO están
+    en el reporte de Excel (p.ej. las fiducuentas): se concilia el AUXILIAR contra
+    el saldo final del PDF. No se cargan notas débito (los rendimientos, comisión,
+    retención y GMF ya vienen registrados en el auxiliar de la fiducuenta); los
+    componentes del PDF quedan solo INFORMATIVOS."""
+    from collections import defaultdict as _dd
+    comp = _dd(float)
+    ingresos = 0.0
+    for m in (movs_pdf or []):
+        d = str(m.get("desc", "")).upper()
+        if m.get("debito"):
+            if "COMIS" in d:
+                comp["comision"] += m["valor"]
+            elif "GMF" in d or "GRAVAMEN" in d:
+                comp["gmf"] += m["valor"]
+            else:
+                comp["retencion"] += m["valor"]
+        else:
+            ingresos += m["valor"]
+    return {"movimientos": [], "gastos": {}, "desde_pdf": True,
+            "componentes_pdf": {k: round(v, 2) for k, v in comp.items()},
+            "rendimientos_pdf": round(ingresos, 2)}
 
 
 def formato_pdf_sugerido(nombre, cuenta_auxiliar=""):
@@ -513,11 +558,13 @@ def cruzar_pdf(saldos_pdf, movs_pdf, banco_excel, saldo_excel_final=None):
     ex_deb = round(sum(m["deb"] for m in banco_excel.get("movimientos", [])), 2)
     ex_cred = round(sum(m["cred"] for m in banco_excel.get("movimientos", [])), 2)
     sfin_pdf = saldos_pdf.get("final")
+    desde_pdf = bool(banco_excel.get("desde_pdf"))
     alertas = []
     if sfin_pdf is not None and saldo_excel_final is not None:
         if abs(round(sfin_pdf, 2) - round(saldo_excel_final, 2)) > 1:
             alertas.append(f"Saldo final PDF {sfin_pdf:,.2f} ≠ Excel {saldo_excel_final:,.2f}.")
-    if movs_pdf:
+    # comparación de totales solo cuando el reporte de Excel es la fuente (no fiducuenta)
+    if movs_pdf and not desde_pdf:
         if abs(pdf_deb - ex_cred) > 1 and abs(pdf_deb - ex_deb) > 1:
             alertas.append(f"Total débitos PDF {pdf_deb:,.2f} no coincide con el Excel.")
         if abs(pdf_cred - ex_deb) > 1 and abs(pdf_cred - ex_cred) > 1:
@@ -1487,6 +1534,9 @@ BANCOS_LOLITA = [
     {"nombre": "DAVIVIENDA 7872",        "cuenta_auxiliar": "11-20-05-13", "hoja_reporte": "Davivienda cta 7872", "usa_datafono": False},
     {"nombre": "BOGOTA 3199",            "cuenta_auxiliar": "11-10-05-22", "hoja_reporte": "BOGOTA 3199",         "usa_datafono": False},
     {"nombre": "BANCOLOMBIA AHORROS",    "cuenta_auxiliar": "11-20-05-01", "hoja_reporte": "BANCOLOMBA AHORROS",  "usa_datafono": False},
+    # Fiducuentas: NO están en el reporte de Excel; se concilian desde el PDF.
+    {"nombre": "FIDU DAVIVIENDA 3122",   "cuenta_auxiliar": "11-30-40-01", "hoja_reporte": "",                    "usa_datafono": False},
+    {"nombre": "FIDU BANCOLOMBIA 4655",  "cuenta_auxiliar": "11-30-40-02", "hoja_reporte": "",                    "usa_datafono": False},
 ]
 
 
