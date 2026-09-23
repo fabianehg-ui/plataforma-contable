@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import io
+import re
 import pandas as pd
 import streamlit as st
 
@@ -120,19 +121,52 @@ with tab_todo:
         st.caption("El recaudo por datáfono **solo se aplica** a los bancos marcados "
                    "«usa datáfono» en Configuración (la 4451).")
 
+    f_pdf_t = st.file_uploader("Extractos en PDF de los bancos (opcional, varios) — "
+                               "para leer saldo inicial/final y verificar movimientos",
+                               type=["pdf"], accept_multiple_files=True, key="ct_pdf")
     periodo_t = st.text_input("Periodo (encabezado de los documentos)", "", key="ct_per")
 
     # índice hoja -> archivo y saldo del extracto (FINAL) detectado al pie de cada hoja
-    hoja_idx, saldo_map = {}, {}
+    hoja_idx = {}
     if f_rep_t:
         for f in f_rep_t:
             data = f.getvalue()
             for h in C.hojas_de(data):
                 hoja_idx.setdefault(h.strip().upper(), data)
+
+    # ---- PDFs: extraer texto/saldos/movimientos (cacheado) y emparejar con banco
+    def _tok_banco(nombre):
+        m = re.findall(r"\d{3,}", nombre or "")
+        return m[0] if m else (nombre or "").upper().split()[0]
+    pdf_por_banco = {}
+    if f_pdf_t:
+        cache = st.session_state.setdefault("ct_pdfcache", {})
+        pdfs = []
+        for f in f_pdf_t:
+            data = f.getvalue()
+            key = f"{f.name}:{len(data)}"
+            if key not in cache:
+                try:
+                    import pdfplumber
+                    with pdfplumber.open(io.BytesIO(data)) as pdf:
+                        txt = "\n".join((p.extract_text() or "") for p in pdf.pages)
+                except Exception:  # noqa: BLE001
+                    txt = ""
+                cache[key] = {"nombre": f.name, "texto": txt,
+                              "saldos": C.saldos_desde_texto(txt)}
+            pdfs.append(cache[key])
+        # emparejar cada banco con el PDF cuyo nombre contenga su token
+        for b in bancos:
+            tok = _tok_banco(b["nombre"]).upper()
+            for pf in pdfs:
+                if tok and tok in pf["nombre"].upper():
+                    pdf_por_banco[b["nombre"]] = pf
+                    break
+
     # tabla editable con saldo y tránsito por banco
     st.markdown("#### 2. Saldo del extracto y tránsito por banco")
-    st.caption("El **saldo del extracto** se detecta automáticamente del pie de "
-               "cada hoja (bloque INICIAL/DÉBITOS/CRÉDITOS/FINAL); puedes ajustarlo.")
+    st.caption("El **saldo del extracto** se detecta del pie de la hoja (Excel) o, si "
+               "falta, del **PDF** (SALDO ACTUAL / NUEVO SALDO). Puedes ajustarlo.")
     base = []
     for b in bancos:
         hoja = b.get("hoja_reporte", "").strip()
@@ -142,6 +176,10 @@ with tab_todo:
             det = C.saldo_extracto_de(fbytes, hoja)
             if det.get("final") is not None:
                 sal = round(det["final"], 2)
+        if not sal and b["nombre"] in pdf_por_banco:   # respaldo desde el PDF
+            fpdf = pdf_por_banco[b["nombre"]]["saldos"].get("final")
+            if fpdf is not None:
+                sal = round(fpdf, 2)
         base.append({"banco": b["nombre"], "cuenta_auxiliar": b.get("cuenta_auxiliar", ""),
                      "hoja_reporte": hoja, "usa_datafono": C.usa_datafono(b),
                      "saldo_extracto": sal, "transito_real": 0.0})
@@ -164,7 +202,8 @@ with tab_todo:
         aux_bytes = f_aux_t.getvalue()
         maestro = C.cargar_maestro(sb, emp["id"])
         data_df = f_data_t.getvalue() if f_data_t else None
-        resultados, avisos = [], []
+        resultados, avisos, verif = [], [], []
+        cfg_by_name = {b["nombre"]: b for b in bancos}
         for row in edt.to_dict("records"):
             hoja = str(row["hoja_reporte"]).strip()
             fbytes = hoja_idx.get(hoja.upper())
@@ -181,10 +220,25 @@ with tab_todo:
                 r = C.conciliar(aux, banco, data, float(row.get("saldo_extracto") or 0),
                                 transito_real=tr, tolerancia=tol_t)
                 resultados.append({"banco": row["banco"], "cuenta": row["cuenta_auxiliar"], "r": r})
+                # verificación contra el PDF del banco (si se subió)
+                pf = pdf_por_banco.get(row["banco"])
+                if pf:
+                    fmt = C.formato_pdf_sugerido(row["banco"], row["cuenta_auxiliar"])
+                    movs_pdf = []
+                    if ebm is not None and fmt in getattr(ebm, "PARSERS", {}):
+                        try:
+                            movs_pdf = ebm.PARSERS[fmt](pf["texto"])
+                        except Exception:  # noqa: BLE001
+                            movs_pdf = []
+                    cr = C.cruzar_pdf(pf["saldos"], movs_pdf, banco,
+                                      C.saldo_extracto_de(fbytes, hoja).get("final"))
+                    cr["banco"] = row["banco"]
+                    verif.append(cr)
             except Exception as e:  # noqa: BLE001
                 avisos.append(f"• {row['banco']}: error — {e}")
         st.session_state["ct_res"] = resultados
         st.session_state["ct_avisos"] = avisos
+        st.session_state["ct_verif"] = verif
         st.session_state["ct_periodo"] = periodo_t
 
     resultados = st.session_state.get("ct_res")
@@ -207,6 +261,29 @@ with tab_todo:
             st.markdown("#### Resumen consolidado")
             st.dataframe(dfr.style.format({c: "{:,.2f}" for c in numcols}),
                          use_container_width=True, hide_index=True)
+
+            # ---- verificación contra los extractos PDF ----
+            verif = st.session_state.get("ct_verif") or []
+            if verif:
+                st.markdown("#### 🔎 Verificación con los extractos PDF")
+                vf = pd.DataFrame([{
+                    "Banco": v["banco"],
+                    "Saldo inicial (PDF)": v.get("saldo_inicial_pdf"),
+                    "Saldo final (PDF)": v.get("saldo_final_pdf"),
+                    "Débitos PDF": v["pdf_debitos"], "Créditos PDF": v["pdf_creditos"],
+                    "Débitos Excel": v["excel_debitos"], "Créditos Excel": v["excel_creditos"],
+                    "Estado": "✅ OK" if v["ok"] else "⚠️ Revisar",
+                } for v in verif])
+                vnum = [c for c in vf.columns if c not in ("Banco", "Estado")]
+                st.dataframe(vf.style.format({c: "{:,.2f}" for c in vnum}, na_rep="—"),
+                             use_container_width=True, hide_index=True)
+                for v in verif:
+                    for a in v.get("alertas", []):
+                        st.warning(f"{v['banco']}: {a}")
+                st.caption("Los débitos/créditos del PDF (extracto real del banco) van "
+                           "en sentido contrario a los del reporte (cuenta puente); el "
+                           "cruce lo tiene en cuenta. «Revisar» avisa si algo no coincide.")
+
             per = st.session_state.get("ct_periodo", "")
             dd = st.columns(2)
             try:
@@ -259,9 +336,12 @@ with tab_todo:
                         puc_map[bb.get("nombre", "").strip().upper()] = str(bb.get("cuenta_puc") or "").strip()
                 except Exception:  # noqa: BLE001
                     pass
-            # tabla editable banco -> cuenta puente
+            # tabla editable banco -> cuenta puente. Por defecto, la cuenta PUC es
+            # el prefijo del auxiliar sin guiones (11-10-05-99 -> 11100599); si
+            # «Bancos a Contai» tiene otra, se usa esa.
             puc_rows = [{"banco": res["banco"],
-                         "cuenta_puc": puc_map.get(res["banco"].strip().upper(), "")}
+                         "cuenta_puc": puc_map.get(res["banco"].strip().upper(), "")
+                         or C.puc_de(res.get("cuenta", ""))}
                         for res in resultados]
             st.caption("Cuenta puente (contrapartida) por banco — de «Bancos a Contai»; edítala si hace falta:")
             edp = st.data_editor(pd.DataFrame(puc_rows), hide_index=True,

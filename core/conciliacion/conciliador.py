@@ -137,7 +137,7 @@ def _mapa_cc_oasis(por_cc):
     return buscar
 
 
-def _abrir(fuente, hoja=None):
+def _abrir(fuente, hoja=None, estricto=False):
     import openpyxl
     if isinstance(fuente, (bytes, bytearray)):
         wb = openpyxl.load_workbook(io.BytesIO(fuente), data_only=True, read_only=True)
@@ -150,6 +150,10 @@ def _abrir(fuente, hoja=None):
     for ws in wb.worksheets:
         if ws.title.strip().upper() == str(hoja).strip().upper():
             return ws, wb
+    # NO se encontró la hoja pedida. En modo estricto NO caemos a otra hoja
+    # (evita mezclar movimientos de un banco con la hoja de otro).
+    if estricto:
+        return None, wb
     return wb.active, wb
 
 
@@ -262,7 +266,9 @@ def leer_banco(fuente, hoja: str, gasto_reglas=None):
     aunque varíe: «N COMPROBANTE» / «COMPROBANTE» / «#COMPROBANTE»,
     «DÉBITOS/CRÉDITOS», «TRANSACCIÓN/DESCRIPCIÓN/MOTIVO», etc."""
     reglas = gasto_reglas or GASTO_REGLAS_DEF
-    ws, _ = _abrir(fuente, hoja)
+    ws, _ = _abrir(fuente, hoja, estricto=True)
+    if ws is None:   # la hoja de ESTE banco no está en el archivo: no leemos nada
+        return {"movimientos": [], "gastos": {}, "hoja_no_encontrada": True}
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         return {"movimientos": [], "gastos": {}}
@@ -448,13 +454,90 @@ def _leer_raw_credibanco(wb, maestro=None):
     return None
 
 
+def _num_pdf(s) -> float:
+    """Convierte '1,234,567.89' (US) o '1.234.567,89' (col) a float (magnitud)."""
+    s = str(s or "").strip().replace("$", "").replace(" ", "")
+    if not s:
+        return 0.0
+    if re.search(r"\d\.\d{3},\d", s) or (s.count(",") == 1 and s.rfind(",") > s.rfind(".")):
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        s = s.replace(",", "")
+    try:
+        return abs(float(re.sub(r"[^0-9.\-]", "", s)))
+    except ValueError:
+        return 0.0
+
+
+def saldos_desde_texto(texto):
+    """Del TEXTO de un PDF de extracto: saldo inicial y final (por etiquetas).
+    Sirve para verificar/rellenar el saldo del banco desde el PDF."""
+    def val(label):
+        m = re.search(label + r"[^0-9\-]*\$?\s*([\d\.,]+)", texto, re.I)
+        return _num_pdf(m.group(1)) if m else None
+    ini = val(r"SALDO\s*ANTERIOR") or val(r"SALDO\s*INICIAL") or val(r"Saldo\s*Anterior")
+    fin = (val(r"SALDO\s*ACTUAL") or val(r"NUEVO\s*SALDO") or val(r"Nuevo\s*Saldo")
+           or val(r"SALDO\s*FINAL") or val(r"SALDO\s*NUEVO"))
+    return {"inicial": ini, "final": fin}
+
+
+def formato_pdf_sugerido(nombre, cuenta_auxiliar=""):
+    """Sugiere el formato de PDF (parser de «Bancos a Contai») según el banco."""
+    t = f"{nombre} {cuenta_auxiliar}".upper()
+    if "OCCIDENTE" in t:
+        return "occidente"
+    if "DAVIVIENDA" in t and "FIDU" not in t:
+        return "davivienda"
+    if "AHORRO" in t:
+        return "bancolombia_ahorro"
+    if "FIDU" in t and "DAVI" in t:
+        return "fidu_davivienda"
+    if "FIDU" in t and "BANCOL" in t:
+        return "fidu_bancolombia"
+    if "BANCOLOMBIA" in t or "4451" in t:
+        return "bancolombia_cta"
+    return ""
+
+
+def cruzar_pdf(saldos_pdf, movs_pdf, banco_excel, saldo_excel_final=None):
+    """Compara el PDF (saldos + movimientos {valor,debito}) contra el reporte de
+    Excel de ese banco. Devuelve un cuadro con:
+      · saldo final PDF vs Excel (FINAL del pie),
+      · total débitos/créditos PDF vs Excel,
+      · alertas si hay diferencias (por si falta algún movimiento).
+    """
+    # totales del PDF
+    pdf_deb = round(sum(m["valor"] for m in (movs_pdf or []) if m.get("debito")), 2)
+    pdf_cred = round(sum(m["valor"] for m in (movs_pdf or []) if not m.get("debito")), 2)
+    # totales del Excel (reporte del banco)
+    ex_deb = round(sum(m["deb"] for m in banco_excel.get("movimientos", [])), 2)
+    ex_cred = round(sum(m["cred"] for m in banco_excel.get("movimientos", [])), 2)
+    sfin_pdf = saldos_pdf.get("final")
+    alertas = []
+    if sfin_pdf is not None and saldo_excel_final is not None:
+        if abs(round(sfin_pdf, 2) - round(saldo_excel_final, 2)) > 1:
+            alertas.append(f"Saldo final PDF {sfin_pdf:,.2f} ≠ Excel {saldo_excel_final:,.2f}.")
+    if movs_pdf:
+        if abs(pdf_deb - ex_cred) > 1 and abs(pdf_deb - ex_deb) > 1:
+            alertas.append(f"Total débitos PDF {pdf_deb:,.2f} no coincide con el Excel.")
+        if abs(pdf_cred - ex_deb) > 1 and abs(pdf_cred - ex_cred) > 1:
+            alertas.append(f"Total créditos PDF {pdf_cred:,.2f} no coincide con el Excel.")
+    return {"saldo_inicial_pdf": saldos_pdf.get("inicial"),
+            "saldo_final_pdf": sfin_pdf,
+            "pdf_debitos": pdf_deb, "pdf_creditos": pdf_cred,
+            "excel_debitos": ex_deb, "excel_creditos": ex_cred,
+            "alertas": alertas, "ok": not alertas}
+
+
 def saldo_extracto_de(fuente, hoja):
     """Lee, del PIE de la hoja del banco, el bloque INICIAL / DÉBITOS / CRÉDITOS /
     FINAL y devuelve {'final','inicial'}. El FINAL es el saldo del extracto (así
     no hay que digitarlo a mano). Devuelve None si la hoja no trae ese bloque."""
     try:
-        ws, _ = _abrir(fuente, hoja)
+        ws, _ = _abrir(fuente, hoja, estricto=True)
     except Exception:  # noqa: BLE001
+        return {"final": None, "inicial": None}
+    if ws is None:
         return {"final": None, "inicial": None}
     final = inicial = None
     ETIQ_F = ("SALDO FINAL EXTRACTO", "SALDO FINAL", "SALDO EN EXTRACTO",
@@ -1390,12 +1473,20 @@ def guardar_bancos(sb, empresa_id, filas) -> int:
     return len(payload)
 
 
+def puc_de(cuenta_auxiliar) -> str:
+    """La cuenta PUC (contrapartida) es la del auxiliar sin guiones:
+    11-10-05-99 -> 11100599."""
+    return re.sub(r"\D", "", str(cuenta_auxiliar or ""))
+
+
+# cuenta_auxiliar = prefijo con que cada HOJA cruza en el auxiliar (según la guía
+# de LUZAVA). La cuenta PUC de contrapartida es ese mismo código sin guiones.
 BANCOS_LOLITA = [
     {"nombre": "BANCOLOMBIA CTE 4451",   "cuenta_auxiliar": "11-10-05-99", "hoja_reporte": "CTA- PUENTE 4451",   "usa_datafono": True},
     {"nombre": "OCCIDENTE 9426",         "cuenta_auxiliar": "11-10-05-05", "hoja_reporte": "OCCIDENTE 9426",      "usa_datafono": False},
     {"nombre": "DAVIVIENDA 7872",        "cuenta_auxiliar": "11-20-05-13", "hoja_reporte": "Davivienda cta 7872", "usa_datafono": False},
-    {"nombre": "BOGOTA 3199",            "cuenta_auxiliar": "11-10-05-20", "hoja_reporte": "BOGOTA 3199",         "usa_datafono": False},
-    {"nombre": "BANCOLOMBIA AHORROS",    "cuenta_auxiliar": "11-10-05-06", "hoja_reporte": "BANCOLOMBA AHORROS",  "usa_datafono": False},
+    {"nombre": "BOGOTA 3199",            "cuenta_auxiliar": "11-10-05-22", "hoja_reporte": "BOGOTA 3199",         "usa_datafono": False},
+    {"nombre": "BANCOLOMBIA AHORROS",    "cuenta_auxiliar": "11-20-05-01", "hoja_reporte": "BANCOLOMBA AHORROS",  "usa_datafono": False},
 ]
 
 
