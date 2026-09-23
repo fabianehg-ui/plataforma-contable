@@ -1,150 +1,77 @@
-CONCILIACIÓN DE BANCOS — módulo para la repo
-=============================================
+COSTO OASIS — Traslado del costo (Grupo de Lolita) — módulo para la repo
+==========================================================
+
+QUÉ HACE
+  Arma el TRASLADO DEL COSTO por centro de costo usando los SALDOS de inventario:
+     Inventario inicial + Compras − Inventario final = COSTO   (por cada CC)
+  y genera el ESTADO DEL COSTO (Excel) y el PLANO de Contai.
+
+  El plano deja el inventario FINAL en la cuenta 14 (crédito 143599) y lleva a la
+  cuenta 61 lo consumido en el mes (débito 613599). Comprobante 20, NIT 120,
+  DETALLE "TRASLADO DEL COSTO". Débitos = Créditos.
+
+  CLAVE — MEMORIA: el inventario FINAL de cada mes se GUARDA en Supabase y el
+  mes siguiente se usa AUTOMÁTICAMENTE como inventario INICIAL. Así no hay
+  descuadres ni diferencias entre meses.
+
 PASO 1 — Supabase -> SQL Editor -> ejecuta:
-   db/migrations/021_conciliacion_config.sql        (bancos a conciliar; si ya lo corriste, no pasa nada)
-   db/migrations/022_conciliacion_datafono.sql      (MAESTRO del datáfono: establecimiento -> centro de costo)
-   db/migrations/023_conciliacion_usa_datafono.sql  (marca «usa datáfono» por banco: solo la 4451)
+   db/migrations/024_costo_inventario_final.sql
+   (crea la tabla costo_inventario_final que memoriza el inventario final por
+    empresa / periodo / versión / centro de costo, con RLS por empresa)
+
 PASO 2 — Copia en tu repo:
-   Home.py                                  (agrega la página al menú Asistente Contable)
-   core/conciliacion/__init__.py            (vacío, para que sea paquete)
-   core/conciliacion/conciliador.py         (motor)
-   app_pages/32_Conciliacion_Bancos.py      (página)
+   Home.py                                   (agrega la página al menú Asistente Contable)
+   core/costo/__init__.py                    (vacío, para que sea paquete)
+   core/costo/costo_oasis.py       (motor)
+   app_pages/33_Costo_Oasis.py     (página)
 
-USO (Asistente Contable -> Conciliación de bancos):
-  Pestaña Configuración -> botón "Sembrar GRUPO DE LOLITA" (o agrega bancos):
-     por cada banco defines el prefijo de la CUENTA DEL AUXILIAR (cuenta puente,
-     ej. 11-10-05-99) y el NOMBRE DE LA HOJA del reporte del banco.
-  Pestaña Configuración -> «Datáfono Credibanco — MAESTRO»:
-     define la relación CÓDIGO DE ESTABLECIMIENTO -> CENTRO DE COSTO (la misma
-     hoja MAESTRO de la macro). Puedes «Sembrar GRUPO DE LOLITA», editarla a mano
-     o «Importar desde la macro (.xlsm)». Con esto INTEGRAL calcula la comisión y
-     las retenciones DIRECTAMENTE desde el archivo original de Credibanco.
+USO (Asistente Contable -> «Costo Oasis»):
+  1. Periodo y archivos:
+     · Periodo del costo (YYYY-MM), p.ej. 2026-07.
+     · Documento y Comprobante (Contai). Comprobante por defecto 20.
+     · Versión de inventario: SIN IVA (SUBTOTAL + ICUI) por defecto, o Con IVA.
+     · Sube el INFORME DE INVENTARIOS (el archivo grande con la data cruda por
+       producto: columnas TOTAL PRECIO SIN IVA, ICUI, FECHA, OASIS).
+     · Sube el BALANCE de la CUENTA 14 por CC (Balance de Prueba). De ahí salen
+       las COMPRAS del mes = débitos de la cuenta 14 por centro de costo.
+     · Fecha de corte del inventario final: se elige del propio informe (por
+       defecto el 1° del mes siguiente al periodo). El inventario final se toma
+       a esa fecha.
+     · Fecha del plano (MM/DD/AAAA): por defecto el último día del periodo.
 
-  Pestaña Conciliar:
-     1) sube el AUXILIAR general del mes, el REPORTE del banco (con N COMPROBANTE)
-        y, opcional, el DATÁFONO Credibanco. Aquí puedes subir el ARCHIVO ORIGINAL
-        de Credibanco (hoja «Reporte Conciliar»): INTEGRAL agrupa por centro de
-        costo con el MAESTRO y suma comisión y retenciones. También sigue aceptando
-        la macro con «RESUMEN MENSUAL».
-     2) elige el banco y escribe el SALDO según el extracto.
-     3) (opcional) escribe las CONSIGNACIONES EN TRÁNSITO REALES (lo que quedó en
-        puente para el mes siguiente) y la TOLERANCIA del ajuste al peso (±10.000
-        por defecto). Si lo dejas vacío, el tránsito se calcula como cuadre exacto.
-     4) genera: sale el cuadro de conciliación (saldo libros + consignaciones −
-        pagos − notas débito = saldo a cierre − consignaciones en tránsito =
-        saldo del banco) y las partidas pendientes DETALLADAS por documento, tipo
-        de abono (datáfono, consignación, transferencia, …) y centro de costo.
+  2. Inventario inicial (memoria):
+     · Si ya guardaste el inventario final del mes anterior, aparece cargado
+       automáticamente como inicial (no tienes que digitarlo).
+     · El PRIMER mes (o si no hay memoria) escribes el inicial a mano — la
+       semilla; p.ej. el inicial del libro de costo de ese mes.
 
-CONCILIAR TODO (todos los bancos de una vez)
- - Pestaña «🧮 Conciliar todo»: subes el AUXILIAR (uno), los REPORTES de los bancos
-   (uno o varios .xlsx; si tu archivo trae una hoja por banco, con ese basta) y el
-   DATÁFONO Credibanco. En la tabla pones el saldo del extracto y (opcional) el
-   tránsito real de cada banco. El sistema busca la hoja de cada banco por su
-   nombre configurado, concilia todos y muestra un RESUMEN consolidado, con
-   descarga en un solo Excel (hoja RESUMEN + una por banco) y un solo PDF.
- - El RECAUDO POR DATÁFONO (Credibanco) SOLO se aplica a los bancos marcados
-   «usa datáfono» en Configuración (la 4451); los demás se concilian sin datáfono.
- - Cada banco lee de SU propia cuenta del auxiliar y SU propia hoja del reporte
-   (el lector reconoce el formato de cada banco: 4451, Occidente, Davivienda,
-   Bogotá, ahorros, con «N COMPROBANTE»/«COMPROBANTE»/«#COMPROBANTE», etc.).
-   LECTOR ESTRICTO: si la hoja de un banco no está en el archivo, NO lee nada
-   (nunca usa la hoja de otro banco). La contrapartida del plano es la cuenta
-   del auxiliar SIN guiones (11-10-05-99 -> 11100599).
- - IMPORTANTE: se corrigieron las cuentas de BOGOTÁ (11-10-05-22) y AHORROS
-   (11-20-05-01). Si ya habías sembrado los bancos con las anteriores, entra a
-   Configuración y vuelve a tocar «🌱 Sembrar GRUPO DE LOLITA» (o corrige esas
-   dos cuentas a mano) para actualizarlas.
- - En el auxiliar se toman AMBOS lados: DÉBITOS = consignaciones/abonos,
-   CRÉDITOS = pagos.
- - SALDO DEL EXTRACTO AUTOMÁTICO: se detecta del PIE de cada hoja del reporte
-   (bloque INICIAL/DÉBITOS/CRÉDITOS/FINAL → el FINAL es el saldo del extracto),
-   tanto en «Conciliar todo» como en «Conciliar (uno)». Igual puedes ajustarlo.
-   Si una hoja no trae ese bloque (o está vacía), el saldo queda en 0 para que
-   lo digites (p.ej. si el saldo de un banco está en otra hoja, ajusta el
-   «nombre de la hoja» de ese banco en Configuración).
- - PLANO DE GASTOS CONSOLIDADO: un solo plano con los gastos bancarios de TODOS
-   los bancos, repartidos en partes iguales entre los centros; el datáfono por
-   centro de costo solo donde aplica. Cada banco se acredita contra SU cuenta
-   puente (de «Bancos a Contai», editable). Débitos = Créditos.
+  3. Calcular:
+     · Botón «Calcular traslado del costo»: muestra el estado del costo por CC
+       (inicial + compras = disponible − final = costo) y el total. Verifica que
+       el plano CUADRE (débitos = créditos).
+     · Descargas: Estado del costo (Excel) y Plano Contai (.txt).
 
-FIDUCUENTAS (cuentas que no están en el reporte de Excel)
- - Se agregaron FIDU DAVIVIENDA 3122 (cuenta 11-30-40-01) y FIDU BANCOLOMBIA 4655
-   (cuenta 11-30-40-02). Como NO tienen hoja en el reporte de Excel, se concilian
-   SOLO desde el PDF: el auxiliar de esa cuenta contra el SALDO FINAL del PDF.
-   No se cargan notas débito (rendimientos, retención, comisión y GMF ya vienen
-   registrados en el auxiliar); esos valores quedan informativos. Probado:
-   ambas cuadran exacto (FIDU DAVI 423.910,64 · FIDU BANCOL 23.891.716,39).
- - Para usarlas: sube el PDF de cada fiducuenta en «Conciliar todo». Si tu
-   configuración ya estaba sembrada, vuelve a «🌱 Sembrar GRUPO DE LOLITA» para
-   que aparezcan las dos fiducuentas (o agrégalas a mano con su cuenta y hoja vacía).
+  4. Guardar el inventario final del mes (memoria):
+     · Botón «Guardar inventario final de <periodo>»: memoriza el final de ese
+       periodo. El próximo mes se usará como inicial. Guárdalo SOLO cuando el
+       costo del mes esté correcto.
 
-EXTRACTOS EN PDF (verificación)
- - En «Conciliar todo» puedes subir los PDF de los extractos de cada banco.
-   INTEGRAL empareja cada PDF con su banco (por el número del nombre), lee el
-   SALDO INICIAL/FINAL del PDF y lo usa como respaldo cuando el Excel no trae el
-   saldo al pie (p.ej. ahorros). Además CRUZA los totales de débitos/créditos del
-   PDF contra el reporte de Excel y marca «Revisar» si algo no coincide (por si
-   falta algún movimiento). Reutiliza los lectores de PDF de «Bancos a Contai».
-   Requiere pdfplumber (ya en requirements.txt).
+MAPEO DE PUNTOS (OASIS del informe -> centro de costo de Grupo de Lolita)
+   MONTERREY -> 100401 · TORRE MEDICA -> 100501 · PUNTO CLAVE -> 100601 ·
+   MAYORCA P4 -> 100901 · MAYORCA MEGA PLAZA -> 101201 · CLINICA PRADO -> 101301 ·
+   LIBERTAD -> 101801 · UNICENTRO -> 103001.
+   (En el motor, MAPA_OASIS_CC; ajústalo si cambian los nombres o los centros.)
 
-PDF Y PLANO DE GASTOS
- - Botón «Conciliación (PDF con firma del software)»: PDF con el cuadro y las
-   partidas pendientes detalladas (documento · tipo de abono · centro de costo),
-   con pie de firma «Documento generado por INTEGRAL — Plataforma Contable ·
-   fecha y hora · usuario · empresa». Requiere reportlab (ya en requirements.txt).
- - Sección «Plano de gastos para Contai»: genera el plano de los gastos de la
-   conciliación. Los GASTOS BANCARIOS (gasto bancario, comisiones, IVA, GMF) se
-   reparten en PARTES IGUALES entre los centros de costo; los gastos del DATÁFONO
-   (comisión, retefuente, reteIVA, reteICA) van POR CENTRO DE COSTO según la tabla
-   de establecimientos, con las cuentas de la macro y base = valor/divisor
-   (retefuente 0,015 · reteIVA 0,15 · reteICA 0,009). La contrapartida se acredita
-   contra la cuenta puente del banco. Reutiliza la configuración de «Bancos a
-   Contai» (centros del reparto, cuentas de las reglas y cuenta puente del banco);
-   todos los campos son editables antes de generar. Probado con julio 4451:
-   65 líneas, Débitos = Créditos = 19.553.303,95 (= notas débito).
+DEPENDENCIAS
+   openpyxl (ya está en requirements.txt de la repo). El motor usa solo openpyxl
+   y la librería estándar.
 
-EXCEL CON FORMATO Y FÓRMULAS
- - El botón «Descargar conciliación (Excel con formato y fórmulas)» genera un
-   archivo con el mismo estilo de la plantilla de la empresa: encabezado, cuadro
-   con SUMAS COMO FÓRMULAS (notas débito, saldo a cierre, saldo según extracto y
-   DIFERENCIA), y las secciones de partidas pendientes con columnas DOCUMENTO ·
-   TIPO DE ABONO · CENTRO DE COSTO · FECHA · VALOR (con su total). Además una
-   hoja «Datafono por CC». La DIFERENCIA cierra en 0 (probado recalculando).
-
-AJUSTE AL PESO
- - Cuando das el tránsito real, la diferencia mínima que sobra por acumulación
-   de redondeos en ingresos/egresos se carga a GASTO BANCARIO como «ajuste al
-   peso», siempre que |diferencia| ≤ tolerancia (±10.000). Así el cuadro cierra
-   exacto contra el extracto. Si la diferencia supera la tolerancia, no se ajusta
-   y el cuadro queda marcado como NO cuadra para que lo revises.
-
-QUÉ HACE POR DENTRO
- - Consignaciones = total débitos del auxiliar de esa cuenta (ignora la fila
-   de subtotal que trae el auxiliar).
- - Pagos = total créditos del auxiliar.
- - Notas débito = gasto bancario + comisiones + IVA + GMF (del reporte, concepto
-   GTO FINANCIERO) + comisión y retenciones del datáfono (Credibanco).
- - Cruce banco <-> libros por número (N COMPROBANTE <-> Documento). Un renglón
-   del banco puede AGRUPAR varios documentos en la misma celda: se expanden y se
-   cruza cada uno. El guion es separador de LISTA (28637-28638-5664-5665 = cuatro
-   documentos, no un rango); solo 'X al Y' / 'X a Y' se toma como rango.
- - Consignaciones en tránsito = saldo a cierre − saldo del banco (si no das el
-   tránsito real), o el valor que tú escribas (la partida que queda en puente
-   para el mes siguiente).
-
-DATÁFONO DESDE EL ARCHIVO ORIGINAL
- - Calcula la comisión y las retenciones desde el crudo de Credibanco (hoja
-   «Reporte Conciliar»): agrupa CODIGO ESTABLECIMIENTO -> centro de costo con el
-   MAESTRO, y suma VALOR COMISION / RETEFUENTE / RETE IVA / RTE ICA (en magnitud).
- - Reproduce EXACTO el RESUMEN MENSUAL de la macro (probado con GRUPO DE LOLITA:
-   comisión 4.511.020,92 · retef 3.958.113,95 · reteIVA 7.521.209,55 ·
-   reteICA 695.871,49) sin tener que correr la macro.
- - Si el crudo ya trae el centro de costo en «NO TERMINAL», funciona aunque el
-   MAESTRO esté vacío.
-
-Probado con julio 2026 de la 4451: con tránsito real 18.049.006 la diferencia
-de 5.448,99 se carga como ajuste al peso a gasto bancario (428.549,12 →
-433.998,11), el cuadro cierra exacto contra el extracto (26.030.633,32).
-
-PENDIENTE (siguiente iteración): desglose automático del DETALLE de las
-consignaciones en tránsito (los consecutivos de los últimos días en puente).
+PROBADO (julio 2026, Grupo de Lolita)
+   Inventario final sin IVA por CC (@ 01/08/2026): Monterrey 7.462.782 ·
+   Torre Médica 9.459.855 · Punto Clave 8.280.599 · Mayorca P4 12.032.220 ·
+   Mega Plaza 25.006.673 · Clínica Prado 11.322.072 · La Libertad 9.017.529 ·
+   Unicentro 9.031.170. Total final 91.612.900.
+   Costo del mes: 217.730.467 (16 líneas de plano, débitos = créditos). Coincide
+   exactamente con el traslado que hicimos a mano.
+   Ciclo de memoria verificado: guardado el final de julio, el inicial de agosto
+   se carga solo = 91.612.900.

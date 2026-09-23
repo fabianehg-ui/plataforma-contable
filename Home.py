@@ -344,6 +344,12 @@ asistente_conciliacion = st.Page(
     icon="🔁",
     url_path="conciliacion-bancos",
 )
+asistente_costo_oasis = st.Page(
+    "app_pages/33_Costo_Oasis.py",
+    title="Costo Oasis",
+    icon="📦",
+    url_path="costo-oasis",
+)
 rep_contabilidad = st.Page(
     "app_pages/20_Contabilidad.py",
     title="Contabilidad (Libros)",
@@ -430,6 +436,7 @@ nav = st.navigation(
             rep_plano_credibanco,
             asistente_cierre_costo,
             asistente_conciliacion,
+            asistente_costo_oasis,
         ],
         "🔌 Integraciones": [
             integ_plano_contai,
