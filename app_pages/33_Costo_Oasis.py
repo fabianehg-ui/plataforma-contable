@@ -129,9 +129,13 @@ if st.button("🧮 Calcular traslado del costo", type="primary",
     try:
         final = T.inventario_final_informe(informe.getvalue(), fecha_corte, version)
         bp = T.compras_balance14(balance.getvalue())
+        # compras NETAS = débitos − créditos (devoluciones/NC)
         compras = {cc: bp.get(cc, {}).get("compras", 0.0) for cc in ccs}
+        detalle = {cc: {"debitos": bp.get(cc, {}).get("debitos", 0.0),
+                        "creditos": bp.get(cc, {}).get("creditos", 0.0)} for cc in ccs}
         res = T.generar_traslado(inicial, compras, final, comprobante=comprobante,
-                                 documento=documento, fecha=fecha_plano, ccs=ccs)
+                                 documento=documento, fecha=fecha_plano, ccs=ccs,
+                                 detalle_compras=detalle)
         st.session_state["tc_res"] = res
         st.session_state["tc_final"] = final
         st.session_state["tc_meta"] = dict(periodo=periodo, version=version,
@@ -143,17 +147,24 @@ res = st.session_state.get("tc_res")
 if res:
     meta = st.session_state.get("tc_meta", {})
     est = pd.DataFrame(res["estado"]).rename(columns={
-        "cc": "CC", "nombre": "PUNTO", "inicial": "INV. INICIAL", "compras": "+ COMPRAS",
-        "disponible": "= DISPONIBLE", "final": "− INV. FINAL", "costo": "= COSTO"})
-    st.dataframe(est.style.format({c: "{:,.0f}" for c in
-                 ["INV. INICIAL", "+ COMPRAS", "= DISPONIBLE", "− INV. FINAL", "= COSTO"]}),
+        "cc": "CC", "nombre": "PUNTO", "inicial": "INV. INICIAL",
+        "compras_brutas": "COMPRAS BRUTAS", "devoluciones": "− DEVOLUCIONES",
+        "compras": "= COMPRAS NETAS", "disponible": "= DISPONIBLE",
+        "final": "− INV. FINAL", "costo": "= COSTO"})
+    _cols = ["CC", "PUNTO", "INV. INICIAL", "COMPRAS BRUTAS", "− DEVOLUCIONES",
+             "= COMPRAS NETAS", "= DISPONIBLE", "− INV. FINAL", "= COSTO"]
+    est = est[[c for c in _cols if c in est.columns]]
+    _num_cols = ["INV. INICIAL", "COMPRAS BRUTAS", "− DEVOLUCIONES", "= COMPRAS NETAS",
+                 "= DISPONIBLE", "− INV. FINAL", "= COSTO"]
+    st.dataframe(est.style.format({c: "{:,.0f}" for c in _num_cols if c in est.columns}),
                  hide_index=True, use_container_width=True)
     t = res["totales"]
-    m = st.columns(4)
+    m = st.columns(5)
     m[0].metric("Inventario inicial", f"{t['inicial']:,.0f}")
-    m[1].metric("Compras", f"{t['compras']:,.0f}")
-    m[2].metric("Inventario final", f"{t['final']:,.0f}")
-    m[3].metric("COSTO del mes", f"{t['costo']:,.0f}")
+    m[1].metric("Compras brutas", f"{t.get('compras_brutas', t['compras']):,.0f}")
+    m[2].metric("− Devoluciones", f"{t.get('devoluciones', 0):,.0f}")
+    m[3].metric("Inventario final", f"{t['final']:,.0f}")
+    m[4].metric("COSTO del mes", f"{t['costo']:,.0f}")
     st.caption(f"Plano: {res['n']} líneas · débitos {res['debitos']:,.0f} = "
                f"créditos {res['creditos']:,.0f} · "
                + ("✅ cuadra" if res["cuadra"] else "⚠️ NO cuadra"))

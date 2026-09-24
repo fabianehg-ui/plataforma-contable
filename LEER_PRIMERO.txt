@@ -33,7 +33,12 @@ USO (Asistente Contable -> «Costo Oasis»):
      · Sube el INFORME DE INVENTARIOS (el archivo grande con la data cruda por
        producto: columnas TOTAL PRECIO SIN IVA, ICUI, FECHA, OASIS).
      · Sube el BALANCE de la CUENTA 14 por CC (Balance de Prueba). De ahí salen
-       las COMPRAS del mes = débitos de la cuenta 14 por centro de costo.
+       las COMPRAS del mes = DÉBITOS − CRÉDITOS de la cuenta 14 por centro de
+       costo. Es decir, a las compras brutas se les RESTAN las DEVOLUCIONES o
+       notas crédito del mes (movimiento neto). El estado del costo muestra las
+       columnas COMPRAS BRUTAS, − DEVOLUCIONES y = COMPRAS NETAS para que puedas
+       verificar la resta. Solo cuenta las filas que traen centro de costo (no
+       duplica los subtotales de las cuentas padre).
      · Fecha de corte del inventario final: se elige del propio informe (por
        defecto el 1° del mes siguiente al periodo). El inventario final se toma
        a esa fecha.

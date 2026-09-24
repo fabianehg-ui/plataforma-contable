@@ -151,9 +151,12 @@ def fechas_informe(fuente):
 
 
 def compras_balance14(fuente, cuenta_prefijo="14"):
-    """Del BALANCE de la cuenta 14 por CC: {cc: {'saldo_anterior','compras'}}.
-    Compras = Débitos. Solo suma las filas que traen centro de costo (evita
-    duplicar los subtotales de las cuentas padre)."""
+    """Del BALANCE de la cuenta 14 por CC: {cc: {'saldo_anterior','debitos',
+    'creditos','compras'}}.
+    COMPRAS (movimiento neto del mes) = Débitos − Créditos: los créditos son las
+    DEVOLUCIONES o notas crédito de la cuenta 14 y deben restarse. Solo suma las
+    filas que traen centro de costo (evita duplicar los subtotales de las cuentas
+    padre)."""
     ws, _ = _abrir(fuente)
     rows = list(ws.iter_rows(values_only=True))
     hdr_i = 0
@@ -173,21 +176,30 @@ def compras_balance14(fuente, cuenta_prefijo="14"):
     cCC = col("centro de costo")
     cSA = col("saldo anterior")
     cDeb = col("débito", "debito")
-    out = defaultdict(lambda: {"saldo_anterior": 0.0, "compras": 0.0})
+    cCred = col("crédito", "credito")
+    out = defaultdict(lambda: {"saldo_anterior": 0.0, "debitos": 0.0, "creditos": 0.0})
     for r in rows[hdr_i + 1:]:
         cta = str(r[cCta] or "").strip()
         cc = str(r[cCC] or "").strip() if cCC is not None else ""
         if not cta.startswith(cuenta_prefijo) or not cc:
             continue
         out[cc]["saldo_anterior"] += _num(r[cSA]) if cSA is not None else 0.0
-        out[cc]["compras"] += _num(r[cDeb]) if cDeb is not None else 0.0
-    return {cc: {"saldo_anterior": round(v["saldo_anterior"], 2),
-                 "compras": round(v["compras"], 2)} for cc, v in out.items()}
+        out[cc]["debitos"] += _num(r[cDeb]) if cDeb is not None else 0.0
+        out[cc]["creditos"] += abs(_num(r[cCred])) if cCred is not None else 0.0
+    res = {}
+    for cc, v in out.items():
+        deb = round(v["debitos"], 2)
+        cred = round(v["creditos"], 2)
+        res[cc] = {"saldo_anterior": round(v["saldo_anterior"], 2),
+                   "debitos": deb, "creditos": cred,
+                   "compras": round(deb - cred, 2)}  # neto: débitos − devoluciones
+    return res
 
 
 def generar_traslado(inicial, compras, final, comprobante=COMPROBANTE,
                      documento="7", fecha=None, nit=NIT_TRASLADO,
-                     cuenta_inv=CUENTA_INV, cuenta_costo=CUENTA_COSTO, ccs=None):
+                     cuenta_inv=CUENTA_INV, cuenta_costo=CUENTA_COSTO, ccs=None,
+                     detalle_compras=None):
     """inicial/compras/final: dict {cc: valor}. Devuelve {estado, filas, debitos,
     creditos, cuadra}. Costo = inicial + compras − final por CC. Plano:
     cuenta 143599 crédito (deja final en la 14) y 613599 débito (costo a la 61)."""
@@ -196,19 +208,26 @@ def generar_traslado(inicial, compras, final, comprobante=COMPROBANTE,
         fecha = datetime.date.today().strftime("%m/%d/%Y")
     ccs = ccs or sorted(set(list(inicial) + list(compras) + list(final)),
                         key=lambda c: str(c))
+    detalle_compras = detalle_compras or {}
     estado, filas = [], [list(HDR_PLANO)]
     tot_deb = tot_cred = 0.0
     tini = tcom = tfin = tcosto = 0.0
+    tdebc = tdevo = 0.0
     for cc in ccs:
         cc = str(cc)
         ini = round(float(inicial.get(cc, 0) or 0), 2)
         com = round(float(compras.get(cc, 0) or 0), 2)
         fin = round(float(final.get(cc, 0) or 0), 2)
+        det = detalle_compras.get(cc, {})
+        debc = round(float(det.get("debitos", com) or 0), 2)   # compras brutas
+        devo = round(float(det.get("creditos", 0) or 0), 2)    # devoluciones/NC
         costo = round(ini + com - fin, 2)
         estado.append({"cc": cc, "nombre": NOMBRES_CC.get(cc, cc),
-                       "inicial": ini, "compras": com, "disponible": round(ini + com, 2),
+                       "inicial": ini, "compras_brutas": debc, "devoluciones": devo,
+                       "compras": com, "disponible": round(ini + com, 2),
                        "final": fin, "costo": costo})
         tini += ini; tcom += com; tfin += fin; tcosto += costo
+        tdebc += debc; tdevo += devo
         if costo == 0:
             continue
         filas.append([cuenta_inv, comprobante, fecha, documento, documento, nit,
@@ -219,7 +238,8 @@ def generar_traslado(inicial, compras, final, comprobante=COMPROBANTE,
     return {"estado": estado, "filas": filas,
             "debitos": round(tot_deb, 2), "creditos": round(tot_cred, 2),
             "cuadra": abs(tot_deb - tot_cred) < 0.01,
-            "totales": {"inicial": round(tini, 2), "compras": round(tcom, 2),
+            "totales": {"inicial": round(tini, 2), "compras_brutas": round(tdebc, 2),
+                        "devoluciones": round(tdevo, 2), "compras": round(tcom, 2),
                         "final": round(tfin, 2), "costo": round(tcosto, 2)},
             "n": len(filas) - 1}
 
@@ -305,15 +325,15 @@ def estado_costo_excel(resultado, periodo="", version="sin_iva",
     ws["A2"] = f"Periodo {periodo}  ·  inventario {vtxt}  ·  documento {documento}  ·  fecha {fecha}"
     ws["A2"].font = Font(italic=True, color="808080")
 
-    hdr = ["CENTRO DE COSTO", "PUNTO", "INV. INICIAL", "+ COMPRAS",
-           "= DISPONIBLE", "− INV. FINAL", "= COSTO"]
+    hdr = ["CENTRO DE COSTO", "PUNTO", "INV. INICIAL", "COMPRAS BRUTAS",
+           "− DEVOLUCIONES", "= COMPRAS NETAS", "= DISPONIBLE", "− INV. FINAL", "= COSTO"]
     r0 = 4
     for j, h in enumerate(hdr, 1):
         c = ws.cell(r0, j, h); c.fill = az; c.font = wht; c.alignment = cen; c.border = bd
     r = r0 + 1
     for e in resultado["estado"]:
-        vals = [e["cc"], e["nombre"], e["inicial"], e["compras"],
-                e["disponible"], e["final"], e["costo"]]
+        vals = [e["cc"], e["nombre"], e["inicial"], e.get("compras_brutas", e["compras"]),
+                e.get("devoluciones", 0), e["compras"], e["disponible"], e["final"], e["costo"]]
         for j, v in enumerate(vals, 1):
             c = ws.cell(r, j, v); c.border = bd
             if j >= 3:
@@ -322,13 +342,14 @@ def estado_costo_excel(resultado, periodo="", version="sin_iva",
                 c.alignment = cen
         r += 1
     t = resultado["totales"]
-    trow = ["TOTAL", "", t["inicial"], t["compras"],
+    trow = ["TOTAL", "", t["inicial"], t.get("compras_brutas", t["compras"]),
+            t.get("devoluciones", 0), t["compras"],
             round(t["inicial"] + t["compras"], 2), t["final"], t["costo"]]
     for j, v in enumerate(trow, 1):
         c = ws.cell(r, j, v); c.fill = tot; c.font = bld; c.border = bd
         if j >= 3:
             c.number_format = money; c.alignment = rgt
-    widths = [16, 22, 15, 15, 15, 15, 15]
+    widths = [16, 22, 14, 15, 15, 15, 14, 14, 15]
     for j, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(j)].width = w
     ws.freeze_panes = "A5"
