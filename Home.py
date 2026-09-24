@@ -350,7 +350,7 @@ asistente_costo_oasis = st.Page(
     icon="📦",
     url_path="costo-oasis",
 )
-asistente_eeff = st.Page(
+rep_eeff = st.Page(
     "app_pages/34_Estados_Financieros.py",
     title="Estados Financieros NIIF",
     icon="📊",
@@ -443,7 +443,6 @@ nav = st.navigation(
             asistente_cierre_costo,
             asistente_conciliacion,
             asistente_costo_oasis,
-            asistente_eeff,
         ],
         "🔌 Integraciones": [
             integ_plano_contai,
@@ -468,6 +467,7 @@ nav = st.navigation(
             rep_pyg_detallado,
             rep_certificados,
             rep_recurrente,
+            rep_eeff,
         ],
         "⚙️ Sistema": [
             sistema_panel_admin,

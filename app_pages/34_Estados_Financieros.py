@@ -52,16 +52,14 @@ anio_comp = c[2].number_input("Año comparativo", min_value=2019, max_value=2099
 periodo = f"{int(anio):04d}-{int(mes):02d}"
 
 # ------------------------------------------------------------------ 2. archivos
-st.markdown("#### 2. Balances de prueba del mes")
-st.caption("Los balances pueden venir en pesos o en miles (se detecta solo). El "
-           "balance por NIT alimenta los estados; el balance por NIT y CC arma el "
-           "anexo por centro de costo.")
-c2 = st.columns(3)
-bp_act = c2[0].file_uploader(f"BP por NIT — {E.MESES[mes]} {int(anio)}", type=["xlsx", "xls"], key="bp_act")
-bp_ant = c2[1].file_uploader(f"BP por NIT — {E.MESES[mes]} {int(anio_comp)} (año anterior)",
-                             type=["xlsx", "xls"], key="bp_ant")
-bp_cc = c2[2].file_uploader(f"BP por NIT y CC — {E.MESES[mes]} {int(anio)} (anexo)",
-                            type=["xlsx", "xls"], key="bp_cc")
+st.markdown("#### 2. Balances de prueba (por NIT y centro de costo)")
+st.caption("Sube el balance de prueba **por NIT y centro de costo** de cada año. "
+           "El mismo archivo alimenta todo el informe: los estados (se colapsa por "
+           "NIT) y el anexo por centro de costo. Pueden venir en pesos o en miles "
+           "(se detecta solo).")
+c2 = st.columns(2)
+bp_act = c2[0].file_uploader(f"Balance {int(anio)}", type=["xlsx", "xls"], key="bp_act")
+bp_ant = c2[1].file_uploader(f"Balance {int(anio_comp)}", type=["xlsx", "xls"], key="bp_ant")
 
 with st.expander("⚙️ Plantilla del informe (opcional)"):
     st.caption("Por defecto se usa la plantilla EE.FF de Grupo de Lolita incluida en "
@@ -77,18 +75,15 @@ puede = bp_act is not None and bp_ant is not None and (PLANTILLA_DEF.exists() or
 if st.button("📊 Generar Estados Financieros", type="primary", disabled=not puede):
     try:
         template = tpl_up.getvalue() if tpl_up is not None else PLANTILLA_DEF.read_bytes()
-        res = E.generar_informe(template, bp_act.getvalue(), bp_ant.getvalue(),
+        balance = bp_act.getvalue()   # universal por NIT y CC (año en curso)
+        res = E.generar_informe(template, balance, bp_ant.getvalue(),
                                 mes=int(mes), anio=int(anio),
-                                bp_cc=bp_cc.getvalue() if bp_cc is not None else None,
+                                bp_cc=balance,           # el mismo balance arma el anexo
                                 anio_comp=int(anio_comp))
         st.session_state["eeff_bytes"] = res["bytes"]
         st.session_state["eeff_meta"] = dict(periodo=periodo, n_act=res["n_actual"],
                                              n_ant=res["n_anterior"], anexo=res.get("anexo"))
-        # totales por CC para memoria / comparativo
-        if bp_cc is not None:
-            st.session_state["eeff_tot_cc"] = E.totales_cc_por_clase(E.leer_bp(bp_cc.getvalue()))
-        else:
-            st.session_state["eeff_tot_cc"] = None
+        st.session_state["eeff_tot_cc"] = E.totales_cc_por_clase(E.leer_bp(balance))
     except Exception as e:  # noqa: BLE001
         st.error(f"No pude generar el informe: {e}")
         st.exception(e)
@@ -134,5 +129,3 @@ if by:
                            "Se usará como comparativo del mes siguiente.")
             except Exception as e:  # noqa: BLE001
                 st.error(f"No pude guardar: {e}")
-    elif bp_cc is None:
-        st.info("Sube el balance por NIT y CC para incluir el anexo por centro de costo.")

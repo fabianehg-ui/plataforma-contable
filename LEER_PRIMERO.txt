@@ -30,7 +30,7 @@ PASO 1 — Supabase -> SQL Editor -> ejecuta:
    (tabla eeff_resultado_cc: memoriza el resultado por CC del mes, con RLS)
 
 PASO 2 — Copia en tu repo:
-   Home.py                                   (agrega la página; conserva Costo Oasis)
+   Home.py                                   (agrega la página en la pestaña REPORTES; conserva Costo Oasis)
    core/eeff/__init__.py                     (vacío)
    core/eeff/eeff_niif.py                     (motor)
    app_pages/34_Estados_Financieros.py       (página)
@@ -38,15 +38,14 @@ PASO 2 — Copia en tu repo:
 
    Si tu repo no tiene carpeta 'plantillas/', créala en la raíz (junto a Home.py).
 
-USO (Asistente Contable -> «Estados Financieros NIIF»):
+USO (pestaña REPORTES -> «Estados Financieros NIIF»):
   1. Periodo: elige mes, año y año comparativo (por defecto el anterior).
-  2. Sube los balances del mes:
-       · BP por NIT del mes (año en curso)         -> alimenta los estados
-       · BP por NIT del mismo mes del año anterior  -> comparativo 2025
-       · BP por NIT y CC del mes                     -> anexo por centro de costo
-     Los balances pueden venir en PESOS o en MILES; se detecta solo (si el título
-     dice «Miles» se escala a pesos, porque la plantilla trabaja en pesos y
-     DATOS divide por 1000).
+  2. Sube UN SOLO balance por año, el BALANCE DE PRUEBA POR NIT Y CENTRO DE
+     COSTO (universal): «Balance 2026» (año en curso) y «Balance 2025» (año
+     anterior). El mismo archivo alimenta TODO el informe: los estados (se
+     colapsa por NIT) y el anexo por centro de costo. Pueden venir en PESOS o en
+     MILES; se detecta solo (si el título dice «Miles» se escala a pesos, porque
+     la plantilla trabaja en pesos y DATOS divide por 1000).
   3. «Generar Estados Financieros»: descarga el Excel. ÁBRELO EN EXCEL: recalcula
      solo al abrir (todas las hojas quedan con las cifras del mes). Debajo verás
      el resultado por centro de costo y, si guardaste el mes anterior, la
