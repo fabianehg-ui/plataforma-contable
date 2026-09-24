@@ -352,7 +352,7 @@ asistente_costo_oasis = st.Page(
 )
 rep_eeff = st.Page(
     "app_pages/34_Estados_Financieros.py",
-    title="Estados Financieros NIIF",
+    title="Estados Financieros",
     icon="📊",
     url_path="estados-financieros-niif",
 )

@@ -1,71 +1,77 @@
-ESTADOS FINANCIEROS NIIF — informe recurrente mensual — módulo para la repo
-===========================================================================
+ESTADOS FINANCIEROS — informe recurrente mensual — módulo para la repo
+======================================================================
 
 QUÉ HACE
-  Genera el paquete de EE.FF NIIF de Grupo de Lolita RELLENANDO tu propia
-  plantilla (la que maneja todo por SUMIF desde la hoja DATOS). No reescribe tus
-  fórmulas: pega los balances y deja que Excel recalcule.
+  Genera los EE.FF de Grupo de Lolita RELLENANDO tus propias plantillas (las que
+  manejan todo por SUMIF desde la hoja DATOS). No reescribe fórmulas: pega los
+  balances, actualiza las fechas y deja que Excel recalcule al abrir.
 
-  Cada mes:
-   · Pega el balance del mes (por NIT) en la hoja 'BCE 2026'.
-   · Pega el balance del mismo mes del año anterior en la hoja 'BCE 2025'.
-   · Actualiza las fechas del informe (mes, corte, fechas comparativas).
-   · Marca el libro para que RECALCULE al abrir (fullCalcOnLoad).
-  Con eso quedan al día: Estado de Resultados del MES y ACUMULADO (2026 vs 2025,
-  con análisis vertical y horizontal), Estado de Situación Financiera (Balance),
-  Flujo de Efectivo (EFE), Cambios en el Patrimonio (ECP), Indicadores y Notas.
+  DOS INFORMES a elegir (misma mecánica, mismos balances de prueba):
+   1) «Estado de Situación Financiera Fiscal»  (plantilla EEFF_NIIF...):
+        Estado de Resultados (mes y acumulado, 2026 vs 2025, A.V y A.H),
+        Estado de Situación Financiera (Balance), Cambios en el Patrimonio (ECP),
+        Flujo de Efectivo (EFE), Indicadores y Notas.
+        · Hojas de balance: 'BCE 2026' y 'BCE 2025'.  Trabaja en PESOS.
+        · El módulo agrega el anexo 'RESULTADO POR CC' (nivel amplio, con
+          desplegar/contraer) porque esta plantilla no trae P&G por centro.
+   2) «Balance General y PyG Administrativo»  (plantilla EF_ADMIN...):
+        Balance General y P&G administrativo (incluye su propio P&G por centro
+        de costo por mes).
+        · Hojas de balance: '6.BP2026' y '7.BP2025'.  Trabaja en MILES.
 
-  ANEXO: agrega la hoja 'RESULTADO POR CC' con el resultado del mes por centro de
-  costo, a NIVEL AMPLIO (clase → grupo → cuenta) con DESPLEGAR/CONTRAER (esquema
-  de Excel: las cuentas de 4 dígitos arrancan contraídas; se despliegan con los
-  botones +/− de la izquierda). Incluye la fila de UTILIDAD/(PÉRDIDA) del mes por
-  centro. Se construye del balance por NIT y CENTRO DE COSTO.
+  UNIDADES (tu pregunta): tú subes el balance en PESOS. El módulo pone la unidad
+  correcta en cada plantilla: en la fiscal lo deja en pesos (su DATOS divide por
+  1000); en la administrativa lo convierte a MILES (÷1000) porque su DATOS ya
+  trabaja en miles. Si el balance viniera en miles, también se detecta y ajusta.
 
   COMPARATIVO MES ANTERIOR: al generar, el resultado por CC del mes se memoriza;
-  el mes siguiente el informe muestra la columna de utilidad del mes anterior y
-  su variación por centro de costo.
+  el mes siguiente se muestra la utilidad del mes anterior y su variación por CC.
 
 PASO 1 — Supabase -> SQL Editor -> ejecuta:
    db/migrations/025_eeff_resultado_cc.sql
    (tabla eeff_resultado_cc: memoriza el resultado por CC del mes, con RLS)
 
 PASO 2 — Copia en tu repo:
-   Home.py                                   (agrega la página en la pestaña REPORTES; conserva Costo Oasis)
-   core/eeff/__init__.py                     (vacío)
-   core/eeff/eeff_niif.py                     (motor)
-   app_pages/34_Estados_Financieros.py       (página)
-   plantillas/EEFF_NIIF_GRUPO_DE_LOLITA.xlsx  (tu plantilla base del informe)
+   Home.py                                          (página en la pestaña REPORTES; conserva Costo Oasis)
+   core/eeff/__init__.py                            (vacío)
+   core/eeff/eeff_niif.py                           (motor: 2 plantillas + unidades)
+   app_pages/34_Estados_Financieros.py              (página, con selector de informe)
+   plantillas/EEFF_NIIF_GRUPO_DE_LOLITA.xlsx         (plantilla FISCAL)
+   plantillas/EF_ADMIN_BALANCE_PYG_GRUPO_DE_LOLITA.xlsx  (plantilla ADMINISTRATIVA)
 
    Si tu repo no tiene carpeta 'plantillas/', créala en la raíz (junto a Home.py).
 
-USO (pestaña REPORTES -> «Estados Financieros NIIF»):
-  1. Periodo: elige mes, año y año comparativo (por defecto el anterior).
-  2. Sube UN SOLO balance por año, el BALANCE DE PRUEBA POR NIT Y CENTRO DE
-     COSTO (universal): «Balance 2026» (año en curso) y «Balance 2025» (año
-     anterior). El mismo archivo alimenta TODO el informe: los estados (se
-     colapsa por NIT) y el anexo por centro de costo. Pueden venir en PESOS o en
-     MILES; se detecta solo (si el título dice «Miles» se escala a pesos, porque
-     la plantilla trabaja en pesos y DATOS divide por 1000).
-  3. «Generar Estados Financieros»: descarga el Excel. ÁBRELO EN EXCEL: recalcula
-     solo al abrir (todas las hojas quedan con las cifras del mes). Debajo verás
-     el resultado por centro de costo y, si guardaste el mes anterior, la
-     variación. Usa «Guardar resultado por CC» para tener el comparativo el mes
-     siguiente.
+USO (pestaña REPORTES -> «Estados Financieros»):
+  1. Tipo de informe: elige «...Fiscal» o «Balance General y PyG Administrativo».
+  2. Periodo: mes, año y año comparativo (por defecto el anterior).
+  3. Sube UN SOLO balance por año, el BALANCE DE PRUEBA POR NIT Y CENTRO DE COSTO
+     (universal), en PESOS: «Balance 2026» (año en curso) y «Balance 2025» (año
+     anterior). El mismo archivo alimenta todo el informe (los estados se colapsan
+     por NIT; el detalle por CC arma el anexo cuando aplica).
+  4. «Generar»: descarga el Excel. ÁBRELO EN EXCEL: recalcula solo al abrir.
+     Debajo ves el resultado por centro de costo y, si guardaste el mes anterior,
+     la variación. «Guardar resultado por CC» deja el comparativo para el próximo.
 
 NOTAS TÉCNICAS
-  · La plantilla se maneja por SUMIF contra 'BCE 2026'/'BCE 2025' (columna de
-    cuenta = código; columnas Débitos/Créditos = movimiento del mes; Nuevo Saldo
-    = acumulado del año). El módulo respeta esa estructura: código numérico en la
-    col A, movimientos en las cols F..I, y J = LEN(A).
-  · Si el balance viene por NIT y CC, el módulo lo COLAPSA por NIT para las hojas
-    BCE (los estados no cambian por centro de costo), y usa el detalle por CC solo
-    para el anexo.
-  · Puedes usar OTRA plantilla (menú «Plantilla del informe (opcional)») siempre
-    que tenga las hojas DATOS, BCE 2026 y BCE 2025 con la misma disposición.
+  · Cada plantilla se maneja por SUMIF contra sus hojas de balance (código de
+    cuenta; Débitos/Créditos = movimiento del mes; Nuevo Saldo = acumulado del
+    año). El módulo respeta la estructura: escribe guiado por el ENCABEZADO real
+    de cada hoja de balance (ubica Saldo Anterior, Débitos, Créditos, Nuevo Saldo,
+    NIVEL y la columna «Mes» si existe), con el código numérico en la col A.
+  · El balance por NIT y CC se COLAPSA por NIT para las hojas de balance (los
+    estados consolidados no cambian por centro de costo).
+  · La plantilla administrativa trae su matriz de P&G por centro de costo por mes
+    (hoja '2.E.R.I. MES-ACUMULADO'): esos bloques por punto son valores digitados,
+    no fórmulas. El módulo deja el Balance General y el P&G consolidado al día por
+    SUMIF; ese detalle mensual por punto se mantiene aparte (si lo quieres
+    automatizar también, se puede en una siguiente iteración).
+  · Puedes usar OTRA plantilla (menú «Plantilla del informe (opcional)») con la
+    misma disposición (hoja DATOS + hojas de balance por SUMIF).
 
 PROBADO (junio 2026, Grupo de Lolita)
-  Inyectando el balance real: el Estado de Resultados acumulado recalcula
-  Ingresos de Comercialización 3.045.764 (miles) y Costo de ventas -1.279.136;
-  el Balance recalcula Caja 462.620 — todo coincide con el balance de prueba.
-  El anexo por CC queda con clase/grupo/cuenta y desplegar-contraer (28 cuentas
-  contraídas por defecto).
+  Fiscal: al inyectar el balance real, el Estado de Resultados acumulado recalcula
+  Ingresos de Comercialización 3.045.764 (miles) y Costo de ventas -1.279.136; el
+  Balance recalcula Caja 462.620. El anexo por CC queda con desplegar/contraer.
+  Administrativo: el Balance General recalcula Caja 462.620 (en miles) y el
+  Efectivo 576.780 — coincide con el balance. La conversión pesos→miles es
+  automática.

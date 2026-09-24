@@ -151,28 +151,67 @@ def _agregar_por_nit(rows):
     return list(agg.values())
 
 
-def inyectar_bce(wb, rows, hoja):
+def inyectar_bce(wb, rows, hoja, unidad="pesos", mes=None):
     """Reemplaza los datos de la hoja del BCE (desde la fila 4) con `rows`
-    (normalizadas a pesos, colapsadas por NIT). Col A numérica; col J = LEN(A)."""
+    (normalizadas a PESOS internamente, colapsadas por NIT). Guiado por el
+    ENCABEZADO real de la hoja (fila 3): ubica las columnas Saldo Anterior,
+    Débitos, Créditos, Nuevo Saldo, NIVEL y (si existe) Mes.
+      unidad = 'pesos'  -> escribe en pesos (plantilla con DATOS que divide /1000)
+             = 'miles'  -> escribe en miles (plantilla que ya trabaja en miles)
+    """
     ws = wb[hoja]
     rows = _agregar_por_nit(rows)
+    factor = 0.001 if unidad == "miles" else 1.0
+    # mapear columnas por el encabezado (fila 3)
+    hdr = [str(ws.cell(3, j).value or "").strip().lower() for j in range(1, 16)]
+    def cidx(*frag, default=None):
+        for f in frag:
+            for j, h in enumerate(hdr, 1):
+                if f in h:
+                    return j
+        return default
+    cCta = cidx("cuenta", default=1)
+    cEq = cidx("equivalencia", default=2)
+    cNom = 3
+    for j, h in enumerate(hdr, 1):
+        if h == "nombre":
+            cNom = j; break
+    cNit = cidx("nit", default=4)
+    cNomNit = cidx("nombre nit", default=5)
+    cSA = cidx("saldo anterior", default=6)
+    cDeb = cidx("débito", "debito", default=7)
+    cCred = cidx("crédito", "credito", default=8)
+    cNS = cidx("nuevo saldo", default=9)
+    cMes = cidx("mes")
+    cNiv = cidx("nivel")
     # limpiar datos viejos (desde fila 4 hasta el final)
     if ws.max_row >= 4:
         ws.delete_rows(4, ws.max_row - 3)
     i = 4
     for r in rows:
-        ws.cell(i, 1, _cta_num(r["cuenta"]))
-        ws.cell(i, 2, r["equivalencia"])
-        ws.cell(i, 3, r["nombre"])
-        ws.cell(i, 4, r["nit"])
-        ws.cell(i, 5, r["nombre_nit"])
-        ws.cell(i, 6, round(r["saldo_ant"], 2))
-        ws.cell(i, 7, round(r["debitos"], 2))
-        ws.cell(i, 8, round(r["creditos"], 2))
-        ws.cell(i, 9, round(r["nuevo_saldo"], 2))
-        ws.cell(i, 10, f"=+LEN(A{i})")
+        ws.cell(i, cCta, _cta_num(r["cuenta"]))
+        if cEq:
+            ws.cell(i, cEq, r["equivalencia"])
+        ws.cell(i, cNom, r["nombre"])
+        if cNit:
+            ws.cell(i, cNit, r["nit"])
+        if cNomNit:
+            ws.cell(i, cNomNit, r["nombre_nit"])
+        ws.cell(i, cSA, round(r["saldo_ant"] * factor, 2))
+        ws.cell(i, cDeb, round(r["debitos"] * factor, 2))
+        ws.cell(i, cCred, round(r["creditos"] * factor, 2))
+        ws.cell(i, cNS, round(r["nuevo_saldo"] * factor, 2))
+        if cMes:
+            ws.cell(i, cMes, round((r["debitos"] - r["creditos"]) * factor, 2))
+        if cNiv:
+            ws.cell(i, cNiv, f"=+LEN({_colletter(cCta)}{i})")
         i += 1
     return i - 4
+
+
+def _colletter(idx):
+    from openpyxl.utils import get_column_letter
+    return get_column_letter(idx)
 
 
 def actualizar_meta(wb, mes, anio, anio_comp=None):
@@ -209,24 +248,65 @@ def forzar_recalculo(wb):
             pass
 
 
+# ===========================================================================
+# Configuración de las dos plantillas (informes) disponibles
+# ===========================================================================
+PLANTILLAS = OrderedDict([
+    ("fiscal", {
+        "titulo": "Estado de Situación Financiera Fiscal",
+        "archivo": "EEFF_NIIF_GRUPO_DE_LOLITA.xlsx",
+        "hoja_2026": "BCE 2026", "hoja_2025": "BCE 2025",
+        "unidad": "pesos",         # la hoja DATOS divide por 1000
+        "anexo_cc": True,          # el módulo agrega el anexo por CC
+        "descripcion": "Estado de resultados, situación financiera, cambios en el "
+                       "patrimonio y flujo de caja (NIIF).",
+    }),
+    ("administrativo", {
+        "titulo": "Balance General y PyG Administrativo",
+        "archivo": "EF_ADMIN_BALANCE_PYG_GRUPO_DE_LOLITA.xlsx",
+        "hoja_2026": "6.BP2026", "hoja_2025": "7.BP2025",
+        "unidad": "miles",         # la hoja DATOS ya trabaja en miles
+        "anexo_cc": False,         # esta plantilla ya trae su P&G por CC
+        "descripcion": "Balance general y P&G administrativo (trabaja en miles; el "
+                       "balance en pesos se convierte automáticamente).",
+    }),
+])
+
+
+def _hojas_bce(wb, cfg):
+    h26 = cfg["hoja_2026"] if cfg["hoja_2026"] in wb.sheetnames else None
+    h25 = cfg["hoja_2025"] if cfg["hoja_2025"] in wb.sheetnames else None
+    if h26 is None or h25 is None:
+        # respaldo: detectar por nombre que contenga 2026/2025
+        for s in wb.sheetnames:
+            if h26 is None and "2026" in s:
+                h26 = s
+            if h25 is None and "2025" in s:
+                h25 = s
+    return h26, h25
+
+
 def generar_informe(template, bp_actual, bp_anio_anterior, mes, anio,
-                    bp_cc=None, anio_comp=None):
-    """Rellena la plantilla y devuelve los bytes del informe.
-      template          : bytes/ruta de la plantilla EEFF.
-      bp_actual         : BP por NIT del mes (año en curso)   -> 'BCE 2026'
-      bp_anio_anterior  : BP por NIT del mismo mes año pasado -> 'BCE 2025'
-      bp_cc             : BP por NIT y CC del mes (para el anexo). Opcional.
-    """
+                    bp_cc=None, anio_comp=None, tipo="fiscal", cfg=None):
+    """Rellena la plantilla del tipo indicado y devuelve los bytes del informe.
+      template          : bytes/ruta de la plantilla.
+      bp_actual         : BP del mes (año en curso)          -> hoja 2026
+      bp_anio_anterior  : BP del mismo mes del año anterior  -> hoja 2025
+      bp_cc             : BP por NIT y CC del mes (para el anexo, si aplica).
+      tipo              : 'fiscal' | 'administrativo' (define hojas y unidad).
+    Los BP se leen en pesos o miles (autodetectado) y se inyectan en la unidad
+    que la plantilla espera (pesos o miles)."""
     import openpyxl
+    cfg = cfg or PLANTILLAS.get(tipo, PLANTILLAS["fiscal"])
+    unidad = cfg.get("unidad", "pesos")
     data = template if isinstance(template, (bytes, bytearray)) else open(template, "rb").read()
     wb = openpyxl.load_workbook(io.BytesIO(data))  # con fórmulas
-    hoja_act = "BCE 2026" if "BCE 2026" in wb.sheetnames else wb.sheetnames[-2]
-    hoja_ant = "BCE 2025" if "BCE 2025" in wb.sheetnames else wb.sheetnames[-1]
-    n1 = inyectar_bce(wb, leer_bp(bp_actual)["rows"], hoja_act)
-    n2 = inyectar_bce(wb, leer_bp(bp_anio_anterior)["rows"], hoja_ant)
+    hoja_act, hoja_ant = _hojas_bce(wb, cfg)
+    n1 = inyectar_bce(wb, leer_bp(bp_actual)["rows"], hoja_act, unidad=unidad, mes=mes)
+    n2 = inyectar_bce(wb, leer_bp(bp_anio_anterior)["rows"], hoja_ant, unidad=unidad, mes=mes)
     actualizar_meta(wb, mes, anio, anio_comp)
     anexo = None
-    if bp_cc is not None:
+    if bp_cc is not None and cfg.get("anexo_cc", True):
         anexo = construir_anexo_cc(wb, leer_bp(bp_cc), mes, anio)
     forzar_recalculo(wb)
     buf = io.BytesIO(); wb.save(buf)
