@@ -1,82 +1,72 @@
-COSTO OASIS — Traslado del costo (Grupo de Lolita) — módulo para la repo
-==========================================================
+ESTADOS FINANCIEROS NIIF — informe recurrente mensual — módulo para la repo
+===========================================================================
 
 QUÉ HACE
-  Arma el TRASLADO DEL COSTO por centro de costo usando los SALDOS de inventario:
-     Inventario inicial + Compras − Inventario final = COSTO   (por cada CC)
-  y genera el ESTADO DEL COSTO (Excel) y el PLANO de Contai.
+  Genera el paquete de EE.FF NIIF de Grupo de Lolita RELLENANDO tu propia
+  plantilla (la que maneja todo por SUMIF desde la hoja DATOS). No reescribe tus
+  fórmulas: pega los balances y deja que Excel recalcule.
 
-  El plano deja el inventario FINAL en la cuenta 14 (crédito 143599) y lleva a la
-  cuenta 61 lo consumido en el mes (débito 613599). Comprobante 20, NIT 120,
-  DETALLE "TRASLADO DEL COSTO". Débitos = Créditos.
+  Cada mes:
+   · Pega el balance del mes (por NIT) en la hoja 'BCE 2026'.
+   · Pega el balance del mismo mes del año anterior en la hoja 'BCE 2025'.
+   · Actualiza las fechas del informe (mes, corte, fechas comparativas).
+   · Marca el libro para que RECALCULE al abrir (fullCalcOnLoad).
+  Con eso quedan al día: Estado de Resultados del MES y ACUMULADO (2026 vs 2025,
+  con análisis vertical y horizontal), Estado de Situación Financiera (Balance),
+  Flujo de Efectivo (EFE), Cambios en el Patrimonio (ECP), Indicadores y Notas.
 
-  CLAVE — MEMORIA: el inventario FINAL de cada mes se GUARDA en Supabase y el
-  mes siguiente se usa AUTOMÁTICAMENTE como inventario INICIAL. Así no hay
-  descuadres ni diferencias entre meses.
+  ANEXO: agrega la hoja 'RESULTADO POR CC' con el resultado del mes por centro de
+  costo, a NIVEL AMPLIO (clase → grupo → cuenta) con DESPLEGAR/CONTRAER (esquema
+  de Excel: las cuentas de 4 dígitos arrancan contraídas; se despliegan con los
+  botones +/− de la izquierda). Incluye la fila de UTILIDAD/(PÉRDIDA) del mes por
+  centro. Se construye del balance por NIT y CENTRO DE COSTO.
+
+  COMPARATIVO MES ANTERIOR: al generar, el resultado por CC del mes se memoriza;
+  el mes siguiente el informe muestra la columna de utilidad del mes anterior y
+  su variación por centro de costo.
 
 PASO 1 — Supabase -> SQL Editor -> ejecuta:
-   db/migrations/024_costo_inventario_final.sql
-   (crea la tabla costo_inventario_final que memoriza el inventario final por
-    empresa / periodo / versión / centro de costo, con RLS por empresa)
+   db/migrations/025_eeff_resultado_cc.sql
+   (tabla eeff_resultado_cc: memoriza el resultado por CC del mes, con RLS)
 
 PASO 2 — Copia en tu repo:
-   Home.py                                   (agrega la página al menú Asistente Contable)
-   core/costo/__init__.py                    (vacío, para que sea paquete)
-   core/costo/costo_oasis.py       (motor)
-   app_pages/33_Costo_Oasis.py     (página)
+   Home.py                                   (agrega la página; conserva Costo Oasis)
+   core/eeff/__init__.py                     (vacío)
+   core/eeff/eeff_niif.py                     (motor)
+   app_pages/34_Estados_Financieros.py       (página)
+   plantillas/EEFF_NIIF_GRUPO_DE_LOLITA.xlsx  (tu plantilla base del informe)
 
-USO (Asistente Contable -> «Costo Oasis»):
-  1. Periodo y archivos:
-     · Periodo del costo (YYYY-MM), p.ej. 2026-07.
-     · Documento y Comprobante (Contai). Comprobante por defecto 20.
-     · Versión de inventario: SIN IVA (SUBTOTAL + ICUI) por defecto, o Con IVA.
-     · Sube el INFORME DE INVENTARIOS (el archivo grande con la data cruda por
-       producto: columnas TOTAL PRECIO SIN IVA, ICUI, FECHA, OASIS).
-     · Sube el BALANCE de la CUENTA 14 por CC (Balance de Prueba). De ahí salen
-       las COMPRAS del mes = DÉBITOS − CRÉDITOS de la cuenta 14 por centro de
-       costo. Es decir, a las compras brutas se les RESTAN las DEVOLUCIONES o
-       notas crédito del mes (movimiento neto). El estado del costo muestra las
-       columnas COMPRAS BRUTAS, − DEVOLUCIONES y = COMPRAS NETAS para que puedas
-       verificar la resta. Solo cuenta las filas que traen centro de costo (no
-       duplica los subtotales de las cuentas padre).
-     · Fecha de corte del inventario final: se elige del propio informe (por
-       defecto el 1° del mes siguiente al periodo). El inventario final se toma
-       a esa fecha.
-     · Fecha del plano (MM/DD/AAAA): por defecto el último día del periodo.
+   Si tu repo no tiene carpeta 'plantillas/', créala en la raíz (junto a Home.py).
 
-  2. Inventario inicial (memoria):
-     · Si ya guardaste el inventario final del mes anterior, aparece cargado
-       automáticamente como inicial (no tienes que digitarlo).
-     · El PRIMER mes (o si no hay memoria) escribes el inicial a mano — la
-       semilla; p.ej. el inicial del libro de costo de ese mes.
+USO (Asistente Contable -> «Estados Financieros NIIF»):
+  1. Periodo: elige mes, año y año comparativo (por defecto el anterior).
+  2. Sube los balances del mes:
+       · BP por NIT del mes (año en curso)         -> alimenta los estados
+       · BP por NIT del mismo mes del año anterior  -> comparativo 2025
+       · BP por NIT y CC del mes                     -> anexo por centro de costo
+     Los balances pueden venir en PESOS o en MILES; se detecta solo (si el título
+     dice «Miles» se escala a pesos, porque la plantilla trabaja en pesos y
+     DATOS divide por 1000).
+  3. «Generar Estados Financieros»: descarga el Excel. ÁBRELO EN EXCEL: recalcula
+     solo al abrir (todas las hojas quedan con las cifras del mes). Debajo verás
+     el resultado por centro de costo y, si guardaste el mes anterior, la
+     variación. Usa «Guardar resultado por CC» para tener el comparativo el mes
+     siguiente.
 
-  3. Calcular:
-     · Botón «Calcular traslado del costo»: muestra el estado del costo por CC
-       (inicial + compras = disponible − final = costo) y el total. Verifica que
-       el plano CUADRE (débitos = créditos).
-     · Descargas: Estado del costo (Excel) y Plano Contai (.txt).
+NOTAS TÉCNICAS
+  · La plantilla se maneja por SUMIF contra 'BCE 2026'/'BCE 2025' (columna de
+    cuenta = código; columnas Débitos/Créditos = movimiento del mes; Nuevo Saldo
+    = acumulado del año). El módulo respeta esa estructura: código numérico en la
+    col A, movimientos en las cols F..I, y J = LEN(A).
+  · Si el balance viene por NIT y CC, el módulo lo COLAPSA por NIT para las hojas
+    BCE (los estados no cambian por centro de costo), y usa el detalle por CC solo
+    para el anexo.
+  · Puedes usar OTRA plantilla (menú «Plantilla del informe (opcional)») siempre
+    que tenga las hojas DATOS, BCE 2026 y BCE 2025 con la misma disposición.
 
-  4. Guardar el inventario final del mes (memoria):
-     · Botón «Guardar inventario final de <periodo>»: memoriza el final de ese
-       periodo. El próximo mes se usará como inicial. Guárdalo SOLO cuando el
-       costo del mes esté correcto.
-
-MAPEO DE PUNTOS (OASIS del informe -> centro de costo de Grupo de Lolita)
-   MONTERREY -> 100401 · TORRE MEDICA -> 100501 · PUNTO CLAVE -> 100601 ·
-   MAYORCA P4 -> 100901 · MAYORCA MEGA PLAZA -> 101201 · CLINICA PRADO -> 101301 ·
-   LIBERTAD -> 101801 · UNICENTRO -> 103001.
-   (En el motor, MAPA_OASIS_CC; ajústalo si cambian los nombres o los centros.)
-
-DEPENDENCIAS
-   openpyxl (ya está en requirements.txt de la repo). El motor usa solo openpyxl
-   y la librería estándar.
-
-PROBADO (julio 2026, Grupo de Lolita)
-   Inventario final sin IVA por CC (@ 01/08/2026): Monterrey 7.462.782 ·
-   Torre Médica 9.459.855 · Punto Clave 8.280.599 · Mayorca P4 12.032.220 ·
-   Mega Plaza 25.006.673 · Clínica Prado 11.322.072 · La Libertad 9.017.529 ·
-   Unicentro 9.031.170. Total final 91.612.900.
-   Costo del mes: 217.730.467 (16 líneas de plano, débitos = créditos). Coincide
-   exactamente con el traslado que hicimos a mano.
-   Ciclo de memoria verificado: guardado el final de julio, el inicial de agosto
-   se carga solo = 91.612.900.
+PROBADO (junio 2026, Grupo de Lolita)
+  Inyectando el balance real: el Estado de Resultados acumulado recalcula
+  Ingresos de Comercialización 3.045.764 (miles) y Costo de ventas -1.279.136;
+  el Balance recalcula Caja 462.620 — todo coincide con el balance de prueba.
+  El anexo por CC queda con clase/grupo/cuenta y desplegar-contraer (28 cuentas
+  contraídas por defecto).
