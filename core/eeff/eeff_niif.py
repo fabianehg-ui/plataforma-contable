@@ -1579,6 +1579,16 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
             return base - t("5260") - t("5265")
         if kind == "neta":
             return base + t("43") + t("53") + t("54")
+        if kind == "bruta":
+            return t("41") + t("6")
+        if kind == "otrgas":
+            return t("55")
+        if kind == "cosfin":
+            return t("53")
+        if kind == "operac":
+            return base
+        if kind == "antes":
+            return base + t("43") + t("53")
         return t(kind)
 
     # --- versiones POR CENTRO DE COSTO (resultado centro por centro) ---
@@ -1592,6 +1602,16 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
             return {cc: base[cc] - t("5260").get(cc, 0) - t("5265").get(cc, 0) for cc in cc_list}
         if kind == "neta":
             return {cc: base[cc] + t("43").get(cc, 0) + t("53").get(cc, 0) + t("54").get(cc, 0) for cc in cc_list}
+        if kind == "bruta":
+            return {cc: t("41").get(cc, 0) + t("6").get(cc, 0) for cc in cc_list}
+        if kind == "otrgas":                       # otros gastos: clase 55
+            return {cc: t("55").get(cc, 0) for cc in cc_list}
+        if kind == "cosfin":                       # costos financieros: clase 53
+            return {cc: t("53").get(cc, 0) for cc in cc_list}
+        if kind == "operac":                       # utilidad operacional (= base, incluye 55)
+            return base
+        if kind == "antes":                        # antes de impuestos
+            return {cc: base[cc] + t("43").get(cc, 0) + t("53").get(cc, 0) for cc in cc_list}
         return t(kind)
 
     def atot_cc(kind):
@@ -1604,6 +1624,16 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
             return {cc: base[cc] - ta("5260").get(cc, 0) - ta("5265").get(cc, 0) for cc in cc_list}
         if kind == "neta":
             return {cc: base[cc] + ta("43").get(cc, 0) + ta("53").get(cc, 0) + ta("54").get(cc, 0) for cc in cc_list}
+        if kind == "bruta":
+            return {cc: ta("41").get(cc, 0) + ta("6").get(cc, 0) for cc in cc_list}
+        if kind == "otrgas":
+            return {cc: ta("55").get(cc, 0) for cc in cc_list}
+        if kind == "cosfin":
+            return {cc: ta("53").get(cc, 0) for cc in cc_list}
+        if kind == "operac":
+            return base
+        if kind == "antes":
+            return {cc: base[cc] + ta("43").get(cc, 0) + ta("53").get(cc, 0) for cc in cc_list}
         return ta(kind)
 
     def fila_cc(rr, label, get_pcc, get_acc, fill=None, bold=True, ital=False,
@@ -1654,14 +1684,33 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
             return base - t("5260") - t("5265")
         if kind == "neta":
             return base + t("43") + t("53") + t("54")
+        if kind == "bruta":
+            return t("41") + t("6")
+        if kind == "otrgas":
+            return t("55")
+        if kind == "cosfin":
+            return t("53")
+        if kind == "operac":
+            return base
+        if kind == "antes":
+            return base + t("43") + t("53")
         return t(kind)
 
+    # ---- ESTADO DE RESULTADOS (cascada tipo fiscal) ----
     r += 1
-    rsum(r, "GANANCIA (PÉRDIDA) OPERACIONAL", "op", fill=grpf); r += 1
+    rsum(r, "INGRESOS OPERACIONALES", "41", fill=grpf); r += 1
+    rsum(r, "(−) Costo de ventas", "6"); r += 1
+    rsum(r, "GANANCIA BRUTA", "bruta", fill=grpf); r += 1
+    rsum(r, "(+) Otros ingresos (42)", "42"); r += 1
+    rsum(r, "(−) Gastos operacionales de ventas (52)", "52"); r += 1
+    rsum(r, "(−) Gastos operacionales de administración (51)", "51"); r += 1
+    rsum(r, "(−) Otros gastos", "otrgas"); r += 1
+    rsum(r, "GANANCIA (PÉRDIDA) OPERACIONAL", "operac", fill=grpf); r += 1
     rsum(r, "(+) Ingresos financieros (43)", "43"); r += 1
-    rsum(r, "(−) Gastos financieros (53)", "53"); r += 1
+    rsum(r, "(−) Costos financieros (53)", "cosfin"); r += 1
+    rsum(r, "GANANCIA (PÉRDIDA) ANTES DE IMPUESTOS", "antes", fill=grpf); r += 1
     rsum(r, "(−) Impuesto a las ganancias (54)", "54"); r += 1
-    r_neta = r; rsum(r, "GANANCIA (PÉRDIDA) NETA", "neta", fill=totf); r += 2
+    r_neta = r; rsum(r, "GANANCIA (PÉRDIDA) NETA — RESULTADO DEL EJERCICIO", "neta", fill=totf); r += 2
     # AJUSTES: meses previos reconstruidos del informe antiguo; mes en curso
     # AUTOMÁTICO según los comentarios del antiguo. RESULTADO REAL = neta + ajustes.
     from openpyxl.comments import Comment
