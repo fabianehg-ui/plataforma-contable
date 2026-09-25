@@ -44,7 +44,8 @@ tipo = st.radio("¿Qué informe generas?", list(E.PLANTILLAS.keys()),
                 format_func=lambda t: E.PLANTILLAS[t]["titulo"], horizontal=True)
 cfg = E.PLANTILLAS[tipo]
 st.caption(cfg["descripcion"])
-PLANTILLA_DEF = ROOT / "plantillas" / cfg["archivo"]
+# El informe nativo (administrativo) no usa plantilla; solo el fiscal la necesita.
+PLANTILLA_DEF = (ROOT / "plantillas" / cfg["archivo"]) if cfg.get("archivo") else None
 
 # ------------------------------------------------------------------ 1. periodo
 st.markdown("#### 2. Periodo")
@@ -74,6 +75,13 @@ if es_nativo:
                                     type=["xlsx", "xls"], key="cart_cli")
     cart_prov = cc3[1].file_uploader("Cartera de PROVEEDORES/ACREEDORES — opcional",
                                      type=["xlsx", "xls"], key="cart_prov")
+    inv_costo = st.file_uploader(
+        "Estado del Costo por punto de venta (traslado del costo) — opcional",
+        type=["xlsx", "xls"], key="inv_costo",
+        help="El inventario del balance viene casi todo global; con este archivo el "
+             "inventario inicial, compras e inventario final POR CENTRO DE COSTO del "
+             "juego de inventarios se toman reales (columnas CC | PUNTO DE VENTA | "
+             "INVENTARIO INICIAL | (+) COMPRAS | (−) INV. FINAL | (=) COSTO).")
     with st.expander("📚 Meses anteriores del año (informe antiguo) — opcional"):
         st.caption("Sube el INFORME ANTIGUO (el Excel del paquete administrativo con la "
                    "hoja «2.E.R.I. MES-ACUMULADO») para SEMBRAR los meses ya trabajados "
@@ -121,7 +129,8 @@ if st.button("📊 Generar informe", type="primary", disabled=not puede):
                 cxp=cart_prov.getvalue() if cart_prov is not None else None,
                 bp_ant=bp_ant.getvalue() if bp_ant is not None else None,
                 anio_comp=int(anio_comp), historia=historia,
-                informe_hist=informe_ant.getvalue() if informe_ant is not None else None)
+                informe_hist=informe_ant.getvalue() if informe_ant is not None else None,
+                inventario=inv_costo.getvalue() if inv_costo is not None else None)
             # SEMBRAR en memoria los meses extraídos (por CC) para no volver a subir el informe
             n_sembrados = 0
             if sembrar_mem:

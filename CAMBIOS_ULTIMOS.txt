@@ -46,6 +46,25 @@ más el vbaProject.bin y la página app_pages/34_Estados_Financieros.py):
      anterior), final (nuevo saldo) y compras = costo_acum + final − inicial
      (cuadra con el costo acumulado 2025).
 
+7) SOLO DOS TIPOS DE INFORME
+   - Se dejó únicamente: «Estado de Situación Financiera Fiscal» y «Balance
+     General y PyG Administrativo». El Administrativo AHORA ES el informe nativo
+     por centro de costo (con todos los cambios de arriba). Se eliminó la opción
+     duplicada «P&G por Centro de Costo (nativo)».
+   - Se arregló el error (KeyError cfg["archivo"]): el nativo no usa plantilla,
+     así que PLANTILLA_DEF solo se arma para el fiscal.
+
+8) INVENTARIO REAL POR CENTRO DE COSTO (opcional)
+   - En el balance el inventario (1435) viene casi todo GLOBAL (sin CC). Antes el
+     juego de inventarios por CC se repartía por participación del costo (aprox.).
+   - Ahora se puede subir el «Estado del Costo por punto de venta» (el mismo del
+     traslado del costo) y el inventario inicial, compras e inventario final POR
+     CENTRO DE COSTO se toman REALES de ahí. Mapea por código de CC (solo dígitos:
+     "10-04-01" del balance = "100401" del Estado del Costo). Si no se sube, se
+     mantiene el reparto por costo (el total siempre cuadra con el balance).
+   - Función nueva: leer_estado_costo(). Parámetro nuevo: generar_pyg_nativo(...,
+     inventario=<bytes del Estado del Costo>).
+
 NOTAS
 - El informe se arma 100% del Balance de Prueba por NIT y Centro de Costo (en
   pesos). Enero–junio se siembran del informe antiguo (hoja «2.E.R.I. MES-

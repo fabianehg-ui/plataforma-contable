@@ -283,29 +283,16 @@ PLANTILLAS = OrderedDict([
     }),
     ("administrativo", {
         "titulo": "Balance General y PyG Administrativo",
-        "archivo": "EF_ADMIN_BALANCE_PYG_GRUPO_DE_LOLITA.xlsx",
-        "hoja_2026": "6.BP2026", "hoja_2025": "7.BP2025",
-        "unidad": "miles",         # la hoja DATOS ya trabaja en miles
-        "anexo_cc": False,
-        "drill_cc": True,          # anexo por CC y NIT con drill-down (hipervínculos)
-        "muestra_cc": True,
-        # solo estas hojas quedan visibles (más DETALLE TERCERO para el drill).
-        "hojas_visibles": ["1. OBSERVACIONES", "2.E.R.I. MES-ACUMULADO",
-                           "3.2 IMPORENTA", "4.ESF=BALANCE", "DETALLE TERCERO"],
-        "hoja_activa": "4.ESF=BALANCE",
-        "descripcion": "Balance general y P&G administrativo por centro de costo y "
-                       "NIT, con drill-down: al hacer clic en el valor de una cuenta "
-                       "en un centro de costo, va al detalle por tercero. Trabaja en "
-                       "miles; el balance en pesos se convierte automáticamente.",
-    }),
-    ("pyg_nativo", {
-        "titulo": "P&G por Centro de Costo (nativo)",
         "nativo": True,             # se genera desde cero (no rellena plantilla)
         "muestra_cc": False,
-        "descripcion": "Informe propio, generado desde el balance: TODAS las cuentas "
-                       "de ingreso, costo y gasto por centro de costo, con mes y "
-                       "acumulado del año, desplegar/contraer y clic al detalle por "
-                       "tercero. Lo que no mueve centro de costo (p.ej. la 43 de "
+        "descripcion": "Balance general y P&G administrativo por centro de costo, "
+                       "generado desde el balance por NIT y centro de costo: TODAS las "
+                       "cuentas de ingreso, costo y gasto por CC, con mes y acumulado del "
+                       "año (más comparativo del año anterior con análisis vertical), "
+                       "EBITDA, juego de inventarios, ESF que cuadra, IMPORRENTA, "
+                       "indicadores, observaciones y detalle por tercero. Al hacer clic en "
+                       "el número de una cuenta, filtra su detalle (se descarga como libro "
+                       "con macros .xlsm). Lo que no mueve centro de costo (p.ej. la 43 de "
                        "intereses) se reparte entre los CC proporcional a las ventas.",
     }),
 ])
@@ -980,6 +967,63 @@ def _agrega_resultado(rows):
     return leaf_cc, leaf_nocc, terc, ccs, nombre
 
 
+def leer_estado_costo(fuente):
+    """Lee el 'Estado del Costo' por punto de venta (con el que se hace el traslado
+    del costo). Devuelve {codigo_cc_solo_dígitos: {'ini','comp','fin'}} en pesos.
+    Columnas esperadas: CC | PUNTO DE VENTA | INVENTARIO INICIAL | (+) COMPRAS |
+    (=) DISPONIBLE | (−) INV. FINAL | (=) COSTO."""
+    import openpyxl
+    data = fuente if isinstance(fuente, (bytes, bytearray)) else (
+        fuente.read() if hasattr(fuente, "read") else open(fuente, "rb").read())
+    ws = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True).active
+    rows = list(ws.iter_rows(values_only=True))
+    hdr_i = None
+    for i, r in enumerate(rows[:12]):
+        up = [str(c or "").strip().lower() for c in r]
+        # el encabezado real trae "punto de venta" e "inventario inicial" en CELDAS distintas
+        if any("punto de venta" in x for x in up) and any("inicial" in x for x in up):
+            hdr_i = i
+            break
+    if hdr_i is None:
+        for i, r in enumerate(rows[:12]):
+            up = [str(c or "").strip().lower() for c in r]
+            if sum(1 for x in up if ("inicial" in x or "compras" in x or "final" in x)) >= 2:
+                hdr_i = i
+                break
+    if hdr_i is None:
+        hdr_i = 3
+    up = [str(c or "").strip().lower() for c in rows[hdr_i]]
+
+    def col(*frag):
+        for f in frag:
+            for j, h in enumerate(up):
+                if f in h:
+                    return j
+        return None
+    cCC = col("cc") if col("cc") is not None else 0
+    cIni = col("inventario inicial")
+    cComp = col("compras")
+    cFin = col("inv. final", "inventario final", "inv final")
+
+    def num(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+    out = {}
+    for r in rows[hdr_i + 1:]:
+        raw = str(r[cCC] or "").strip()
+        if not raw or raw.upper().startswith("TOTAL"):
+            continue
+        code = "".join(ch for ch in raw if ch.isdigit())
+        if not code:
+            continue
+        out[code] = {"ini": num(r[cIni]) if cIni is not None else 0.0,
+                     "comp": num(r[cComp]) if cComp is not None else 0.0,
+                     "fin": num(r[cFin]) if cFin is not None else 0.0}
+    return out
+
+
 def _incrustar_macro(xlsx_bytes):
     """Envuelve el .xlsx en un .xlsm incrustando la macro (vbaProject.bin) que, al
     hacer clic en el número de una cuenta, filtra la hoja DETALLE TERCERO por esa
@@ -1012,9 +1056,13 @@ def _incrustar_macro(xlsx_bytes):
 
 def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
                        nit="900.307.969-5", cartera=None, cxp=None,
-                       bp_ant=None, anio_comp=None, historia=None, informe_hist=None):
+                       bp_ant=None, anio_comp=None, historia=None, informe_hist=None,
+                       inventario=None):
     """Construye el informe NATIVO (workbook nuevo) y devuelve sus bytes.
     cartera / cxp: informes de cartera del paquete administrativo.
+    inventario: bytes del 'Estado del Costo' por punto de venta (traslado del
+    costo); si se pasa, el inventario inicial/compras/final POR CENTRO DE COSTO
+    del juego de inventarios se toma REAL de ahí, en vez de repartir por costo.
     bp_ant: balance del año anterior (comparativo ESF y ERI).
     historia: {periodo: {(cuenta,cc): valor_mes}} de meses anteriores del año
     (memoria) para armar la hoja de resultados MES A MES.
@@ -1361,6 +1409,25 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
         _sh = (inv_costo_cc[cc] / inv_tot_costo) if inv_tot_costo else 1.0 / max(1, len(cc_list))
         inv_comp_full_cc[cc] = inv_comp_old_cc[cc] + _july_comp * _sh
         inv_fin_acc_cc[cc] = inv_ini_ene_cc[cc] + inv_comp_full_cc[cc] - inv_costo_cc[cc]
+
+    # INVENTARIO REAL POR CC: si se subió el Estado del Costo (traslado), se usa el
+    # inventario inicial/compras/final REAL por centro de costo (en vez del reparto
+    # por participación del costo). Mapea por código de CC (solo dígitos).
+    if inventario is not None:
+        est = inventario if isinstance(inventario, dict) else leer_estado_costo(inventario)
+        if est:
+            def _cod(cc):
+                return "".join(ch for ch in str(cc) if ch.isdigit())
+            for cc in cc_list:
+                e = est.get(_cod(cc))
+                if e:
+                    inv_ini_ene_cc[cc] = e["ini"]
+                    inv_comp_full_cc[cc] = e["comp"]
+                    inv_fin_acc_cc[cc] = e["fin"]
+                else:                                 # CC sin inventario en el traslado
+                    inv_ini_ene_cc[cc] = 0.0
+                    inv_comp_full_cc[cc] = 0.0
+                    inv_fin_acc_cc[cc] = 0.0
 
     def inv_pcc(p, cc, which):
         """valor del juego por CC en el mes p ('ini','comp','fin')."""
