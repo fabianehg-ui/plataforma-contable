@@ -12,12 +12,19 @@ QUÉ HACE
         Estado de Situación Financiera (Balance), Cambios en el Patrimonio (ECP),
         Flujo de Efectivo (EFE), Indicadores y Notas.
         · Hojas de balance: 'BCE 2026' y 'BCE 2025'.  Trabaja en PESOS.
-        · El módulo agrega el anexo 'RESULTADO POR CC' (nivel amplio, con
-          desplegar/contraer) porque esta plantilla no trae P&G por centro.
+        · NORMALITO: balance por terceros (NIT), SIN centros de costo ni anexo,
+          tal cual la plantilla inicial.
    2) «Balance General y PyG Administrativo»  (plantilla EF_ADMIN...):
-        Balance General y P&G administrativo (incluye su propio P&G por centro
-        de costo por mes).
+        Balance General y P&G administrativo POR CENTRO DE COSTO Y NIT.
         · Hojas de balance: '6.BP2026' y '7.BP2025'.  Trabaja en MILES.
+        · DRILL-DOWN EN LA MISMA HOJA del P&G por centro de costo
+          ('2.E.R.I. MES-ACUMULADO'): en las columnas del MES ACTUAL, las
+          cuentas clase 5, grupo 42, grupo 43 y la fila de COMPRAS (cuenta 14)
+          quedan como HIPERVÍNCULO. Al hacer clic vas a la hoja 'DETALLE TERCERO'
+          con el desglose por tercero (NIT) de esa cuenta en ese centro de costo
+          (con enlace «volver»). La cuenta 41 se deja igual.
+        · COMPRAS por tercero = DÉBITOS − CRÉDITOS de la cuenta 14, OMITIENDO el
+          traslado al costo (cuenta 143599); coincide con la fila «Compras».
 
   UNIDADES (tu pregunta): tú subes el balance en PESOS. El módulo pone la unidad
   correcta en cada plantilla: en la fiscal lo deja en pesos (su DATOS divide por
@@ -27,8 +34,54 @@ QUÉ HACE
   COMPARATIVO MES ANTERIOR: al generar, el resultado por CC del mes se memoriza;
   el mes siguiente se muestra la utilidad del mes anterior y su variación por CC.
 
+
+  INTERFAZ (administrativo): el informe queda con SOLO estas hojas visibles:
+  «1. OBSERVACIONES», «2.E.R.I. MES-ACUMULADO» (resultado acumulado por centro
+  de costo), «3.2 IMPORENTA» (provisión de renta), «4.ESF=BALANCE» (balance) y
+  «DETALLE TERCERO» (el detalle de los enlaces). Las demás (DATOS, BP, P&G del
+  mes, RESULTADOS GRUPO, prediales) quedan OCULTAS. La hoja de INDICADORES
+  también se oculta: la del archivo trae una referencia rota (#REF!), el margen
+  bruto vacío y valores fijos; si quieres indicadores, se rehacen verificados y
+  según reglas NIIF en una siguiente vuelta.
+
+
+  REPARTO SIN CENTRO DE COSTO (administrativo): las cuentas de ingreso/gasto de
+  clase 5, grupos 42 y 43, y la fila de COMPRAS (14) se CALCULAN por centro de
+  costo del mes desde el balance y se ESCRIBEN en la hoja del P&G (solo en las
+  filas de detalle; las filas de grupo que son fórmula SUM se respetan). El valor
+  que quede SIN centro de costo (cuentas de resultado con tercero pero sin CC) se
+  REPARTE entre los centros de costo PROPORCIONAL A LAS VENTAS (ingresos
+  operacionales por CC) del mes. En el detalle por tercero aparece la línea
+  «REPARTO SIN CC (prop. ventas)». La cuenta 41 se deja igual.
+
+
+  INFORME NATIVO — «P&G por Centro de Costo (nativo)» (tercera opción):
+  Se genera 100% desde el balance por NIT y CC (no rellena plantilla). Incluye
+  TODAS las cuentas de ingreso, costo y gasto (clases 4/5/6) por centro de costo,
+  con columna del MES y del ACUMULADO del año, árbol clase→grupo→cuenta→hoja con
+  desplegar/contraer, fila de UTILIDAD por CC, y clic en la cuenta que lleva al
+  detalle por tercero. Lo que NO mueve centro de costo (p.ej. la 43 de intereses)
+  se REPARTE entre los CC proporcional a las ventas. La suma de las columnas por
+  CC reconcilia EXACTO con el consolidado (probado jun-2026: Ingresos 490.823 mes
+  / 3.100.503 año; Gastos −291.645 / −1.781.604; Costo −199.860 / −1.279.136;
+  Utilidad −682 mes / 39.763 año). El informe nativo guarda cada mes en memoria (Supabase) y arma la hoja de resultados MES A MES: bloques por mes que se acumulan al generar, columnas MES actual (con CC desplegables) y ACUMULADO del año, VAR MES (mes vs mes anterior), MES y ACUMULADO del año anterior (con su balance) y VAR ACUM.
+  Debajo del P&G trae el resumen: GANANCIA OPERACIONAL, ingresos/gastos
+  financieros, impuesto, GANANCIA NETA, depreciación y amortización, EBITDA
+  (= operacional + depreciación + amortización), y los AJUSTES del otro informe
+  (FT serv admón, FE socios intereses, arriendo Plaza Fabricato) como filas
+  editables, con RESULTADO REAL = neta + ajustes por fórmula (se actualiza al
+  digitar). Probado jun-2026: operacional 129.122 (año), EBITDA 134.526, neta
+  39.763.
+  Además incluye dos hojas: PROVISION RENTA (proyección del impuesto: utilidad
+  contable + no deducibles derivables −deducciones/retenciones digitables− →
+  renta líquida × 35%, saldo por fórmula) e INDICADORES financieros NIIF
+  (cifras base en celdas y ratios como fórmulas auditables: márgenes, ROA/ROE,
+  razón corriente, prueba ácida, capital de trabajo, endeudamiento; activo y
+  pasivo corriente ajustables si la clasificación NIIF difiere).
+
 PASO 1 — Supabase -> SQL Editor -> ejecuta:
    db/migrations/025_eeff_resultado_cc.sql
+   db/migrations/026_eeff_eri_mensual.sql   (memoria MES A MES del ERI por CC)
    (tabla eeff_resultado_cc: memoriza el resultado por CC del mes, con RLS)
 
 PASO 2 — Copia en tu repo:

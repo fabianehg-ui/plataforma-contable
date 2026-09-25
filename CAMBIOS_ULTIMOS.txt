@@ -1,0 +1,56 @@
+========================================================================
+ESTADOS FINANCIEROS NIIF — ÚLTIMOS AJUSTES (informe nativo por CC)
+GRUPO DE LOLITA S.A.S
+========================================================================
+
+Qué se agregó/arregló en esta entrega (todo dentro de core/eeff/eeff_niif.py,
+más el vbaProject.bin y la página app_pages/34_Estados_Financieros.py):
+
+1) EBITDA AL FINAL DEL ERI
+   - Se movió el EBITDA al fondo del resumen, después del RESULTADO REAL.
+   - EBITDA = utilidad después de ajustes (RESULTADO REAL) + depreciación y
+     amortización (cuentas 5260 + 5265). Se agregó la fila "(+) Depreciación y
+     amortización" justo antes.
+
+2) ESF — TOTALES DE GRUPO EN NEGRILLA
+   - Las filas de agrupación (Efectivo y Equivalentes, Cuentas Por Pagar,
+     Obligaciones Financieras, etc.) muestran el valor y sus % en negrilla; el
+     detalle (Caja, Bancos, Proveedores…) queda en normal.
+
+3) ESF — CUADRE EXACTO (control = 0)
+   - Antes el control marcaba ±2-3 por el redondeo a miles de cada línea.
+   - Ahora la "Utilidad del Ejercicio" absorbe ese redondeo, de modo que
+     Total Activos = Total Pasivo + Patrimonio SIEMPRE (control = 0), en ambos
+     años. No cambia la utilidad real (ajuste < 1 mil).
+
+4) DETALLE POR TERCERO — TABLA FILTRABLE
+   - La hoja DETALLE TERCERO es UNA sola tabla con AutoFiltro, con columnas:
+     Cuenta | Centro de costo | NIT | Tercero | Valor movimiento del mes.
+   - Se filtra por cuenta, centro de costo o tercero.
+
+5) NÚMERO CLICABLE EN NEGRO + MACRO (.xlsm)
+   - El número del mes de cada cuenta es clicable y se queda en NEGRO (ya no
+     azul). Al hacer clic lleva/filtra el detalle de esa cuenta.
+   - El informe se genera como LIBRO HABILITADO PARA MACROS (.xlsm): incrusta
+     el vbaProject.bin (core/eeff/vbaProject.bin). Con las macros habilitadas,
+     al hacer clic en el número de una cuenta, la macro filtra automáticamente
+     la hoja DETALLE TERCERO por esa cuenta (evento Workbook_SheetFollowHyperlink).
+   - Si el vbaProject.bin no está junto al módulo, el informe sale como .xlsx
+     normal (sin romperse) y el clic solo navega.
+
+6) COMPARATIVO 2025 COMPLETO
+   - Se agregó ANÁLISIS VERTICAL (A.V) para las columnas MES 2025 y ACUM 2025.
+   - Se completó el JUEGO DE INVENTARIOS 2025 (inventario inicial, compras,
+     inventario final) mes y acumulado, calculado del balance del año anterior
+     (cuenta 1435): mes = movimiento del mes; acumulado = inicial (saldo
+     anterior), final (nuevo saldo) y compras = costo_acum + final − inicial
+     (cuadra con el costo acumulado 2025).
+
+NOTAS
+- El informe se arma 100% del Balance de Prueba por NIT y Centro de Costo (en
+  pesos). Enero–junio se siembran del informe antiguo (hoja «2.E.R.I. MES-
+  ACUMULADO») la primera vez y quedan en memoria (tabla eeff_eri_mensual).
+- Nombres de hoja fijos que usa la macro: "2.E.R.I. MES-ACUMULADO" y
+  "DETALLE TERCERO". Si se renombran, actualizar el VBA.
+- Para quitar el filtro del detalle: Datos → Borrar filtro, o Alt+F8 →
+  MostrarTodo.
