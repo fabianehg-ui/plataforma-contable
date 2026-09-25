@@ -977,19 +977,14 @@ def leer_estado_costo(fuente):
         fuente.read() if hasattr(fuente, "read") else open(fuente, "rb").read())
     ws = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True).active
     rows = list(ws.iter_rows(values_only=True))
+    # el encabezado es la fila que trae al menos 2 de: inicial / compras / final
+    # (tolera "INV. INICIAL", "INVENTARIO INICIAL", "+ COMPRAS", "− INV. FINAL", etc.)
     hdr_i = None
-    for i, r in enumerate(rows[:12]):
+    for i, r in enumerate(rows[:15]):
         up = [str(c or "").strip().lower() for c in r]
-        # el encabezado real trae "punto de venta" e "inventario inicial" en CELDAS distintas
-        if any("punto de venta" in x for x in up) and any("inicial" in x for x in up):
+        if sum(1 for x in up if ("inicial" in x or "compras" in x or "final" in x)) >= 2:
             hdr_i = i
             break
-    if hdr_i is None:
-        for i, r in enumerate(rows[:12]):
-            up = [str(c or "").strip().lower() for c in r]
-            if sum(1 for x in up if ("inicial" in x or "compras" in x or "final" in x)) >= 2:
-                hdr_i = i
-                break
     if hdr_i is None:
         hdr_i = 3
     up = [str(c or "").strip().lower() for c in rows[hdr_i]]
@@ -1000,10 +995,12 @@ def leer_estado_costo(fuente):
                 if f in h:
                     return j
         return None
-    cCC = col("cc") if col("cc") is not None else 0
-    cIni = col("inventario inicial")
+    cCC = col("centro de costo", "cc")
+    if cCC is None:
+        cCC = 0
+    cIni = col("inicial")                         # "INV. INICIAL" / "INVENTARIO INICIAL"
     cComp = col("compras")
-    cFin = col("inv. final", "inventario final", "inv final")
+    cFin = col("inv. final", "inventario final", "inv final", "final")
 
     def num(x):
         try:
@@ -1094,6 +1091,18 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
     hojas = _hojas_set(rows)
     cc_list = sorted(ccs.keys())
     leafcodes = sorted({c for (c, cc) in leaf_cc} | set(leaf_nocc))
+    # Plaza Fabricato: es figura fiscal (ajena a la operación). No recibe reparto de
+    # gastos/ingresos globales; su resultado real y su EBITDA se dejan en cero.
+    cc_plaza = next((cc for cc in cc_list if "FABRICATO" in _norm_cc(ccs.get(cc, ""))), None)
+
+    def _sin_plaza(w):
+        """Anula el peso de reparto de Plaza y renormaliza el resto."""
+        if cc_plaza and cc_plaza in w:
+            w = dict(w); w[cc_plaza] = 0.0
+            s = sum(w.values())
+            if s:
+                w = {cc: w[cc] / s for cc in w}
+        return w
 
     # pesos de reparto por ventas (clase 41): mes y acumulado
     vt_mes = defaultdict(float); vt_acum = defaultdict(float)
@@ -1101,8 +1110,8 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
         if c.startswith("41"):
             vt_mes[cc] += m; vt_acum[cc] += a
     tot_m = sum(vt_mes.values()); tot_a = sum(vt_acum.values())
-    wm = {cc: (vt_mes[cc] / tot_m if tot_m else 1.0 / len(cc_list)) for cc in cc_list}
-    wa = {cc: (vt_acum[cc] / tot_a if tot_a else 1.0 / len(cc_list)) for cc in cc_list}
+    wm = _sin_plaza({cc: (vt_mes[cc] / tot_m if tot_m else 1.0 / len(cc_list)) for cc in cc_list})
+    wa = _sin_plaza({cc: (vt_acum[cc] / tot_a if tot_a else 1.0 / len(cc_list)) for cc in cc_list})
 
     def sum_filter(pred):
         """(mes_cc{cc:v}, acum_cc{cc:v}) con reparto de lo sin-CC prop. ventas,
@@ -1149,7 +1158,7 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
             if cc != NOCC and str(cta).startswith("41"):
                 vt[cc] += v
         tv = sum(vt.values())
-        w = {cc: (vt[cc] / tv if tv else 1.0 / ncc) for cc in cc_list}
+        w = _sin_plaza({cc: (vt[cc] / tv if tv else 1.0 / ncc) for cc in cc_list})
         pdata[p] = (md, w)
 
     def sPf(p, pred):
@@ -1674,26 +1683,43 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
     ft_cur_tot = _bal_t("52359503", "mes")                    # servicio admón socios
     fe_cur_tot = _bal_t("52104501", "mes", nombre="SERVICIOS EMPRESARIALES")  # honorarios
 
+    def _solo_op(d):
+        """FT/FE se reparten solo entre CC OPERATIVOS (Plaza Fabricato queda en 0);
+        el total del ajuste se divide igual entre ellos."""
+        if not cc_plaza:
+            return d
+        tot = sum(d.values())
+        return {cc: (0.0 if cc == cc_plaza else tot / _ncc_op) for cc in cc_list}
+
     def _aj_pcc(key, cur_map, p):
         if p != periodo:                                       # meses previos: del antiguo
-            return {cc: historia.get(p, {}).get((key, cc), 0.0) for cc in cc_list}
-        return cur_map()
+            return _solo_op({cc: historia.get(p, {}).get((key, cc), 0.0) for cc in cc_list})
+        return _solo_op(cur_map())
 
     def _aj_acc(key, cur_map):
-        prev = {cc: sum(historia.get(p, {}).get((key, cc), 0.0) for p in per_hist) for cc in cc_list}
-        cur = cur_map()
+        prev = _solo_op({cc: sum(historia.get(p, {}).get((key, cc), 0.0) for p in per_hist)
+                         for cc in cc_list})
+        cur = _solo_op(cur_map())
         return {cc: prev[cc] + cur.get(cc, 0.0) for cc in cc_list}
 
-    def ft_cur():                                              # dividido igual por CC
-        return {cc: ft_cur_tot / ncc0 for cc in cc_list}
+    _ncc_op = max(1, len([cc for cc in cc_list if cc != cc_plaza]))   # CC operativos (sin Plaza)
+
+    def ft_cur():                                    # dividido igual entre CC operativos (sin Plaza)
+        return {cc: (0.0 if cc == cc_plaza else ft_cur_tot / _ncc_op) for cc in cc_list}
 
     def fe_cur():
-        return {cc: fe_cur_tot / ncc0 for cc in cc_list}
+        return {cc: (0.0 if cc == cc_plaza else fe_cur_tot / _ncc_op) for cc in cc_list}
 
-    def ar_cur():                                              # utilidad de Plaza Fabricato
+    def ar_pcc(p):     # AJUSTE que ANULA el resultado de Plaza Fabricato (figura fiscal)
         d = {cc: 0.0 for cc in cc_list}
         if cc_plaza:
-            d[cc_plaza] = mtot_cc(periodo, "neta").get(cc_plaza, 0.0)
+            d[cc_plaza] = -mtot_cc(p, "neta").get(cc_plaza, 0.0)
+        return d
+
+    def ar_acc():
+        d = {cc: 0.0 for cc in cc_list}
+        if cc_plaza:
+            d[cc_plaza] = -atot_cc("neta").get(cc_plaza, 0.0)
         return d
 
     def _ajrow(label, key, cur_map, comment):
@@ -1712,19 +1738,25 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
     r_fe = _ajrow("(+) FE SOCIOS (INTERESES)", "__AJ_FE__", fe_cur,
                   "Se SUMA a la utilidad (gasto que no va al resultado de la empresa). "
                   "Cuenta 52104501 — honorarios a Servicios Empresariales CYA, dividido igual por centro de costo.")
-    r_ar = _ajrow("(±) UTILIDAD / PÉRDIDA PLAZA FABRICATO", "__AJ_AR__", ar_cur,
-                  "Se SUMA o RESTA según sea utilidad o pérdida del punto Plaza Fabricato "
-                  "(ingresos menos costo del arriendo — resultado neto del CC).")
+    # Ajuste de Plaza Fabricato: ANULA su resultado (no se toma de la historia; se
+    # calcula como −neta del CC en cada periodo, para dejar su RESULTADO REAL en 0).
+    r_ar = r_hold[0]
+    fila_cc(r_ar, "(±) UTILIDAD / PÉRDIDA PLAZA FABRICATO", ar_pcc, ar_acc, ital=True)
+    ws.cell(r_ar, 2).comment = Comment(
+        "Plaza Fabricato es figura fiscal, ajena a la operación: su resultado se ANULA "
+        "(−neta del CC), por eso su RESULTADO REAL y su EBITDA quedan en cero y no recibe "
+        "reparto de gastos/ingresos globales.", "Composición")
+    r_hold[0] += 1
     r = r_hold[0]
 
     def res_pcc(p):
         n = mtot_cc(p, "neta"); ft = _aj_pcc("__AJ_FT__", ft_cur, p)
-        fe = _aj_pcc("__AJ_FE__", fe_cur, p); ar = _aj_pcc("__AJ_AR__", ar_cur, p)
+        fe = _aj_pcc("__AJ_FE__", fe_cur, p); ar = ar_pcc(p)
         return {cc: n.get(cc, 0) + ft.get(cc, 0) + fe.get(cc, 0) + ar.get(cc, 0) for cc in cc_list}
 
     def res_acc():
         n = atot_cc("neta"); ft = _aj_acc("__AJ_FT__", ft_cur)
-        fe = _aj_acc("__AJ_FE__", fe_cur); ar = _aj_acc("__AJ_AR__", ar_cur)
+        fe = _aj_acc("__AJ_FE__", fe_cur); ar = ar_acc()
         return {cc: n.get(cc, 0) + ft.get(cc, 0) + fe.get(cc, 0) + ar.get(cc, 0) for cc in cc_list}
     r_res = r; fila_cc(r, "RESULTADO REAL", res_pcc, res_acc, fill=totf, bold=True); r += 1
 
@@ -1733,11 +1765,11 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
     # implican salida de efectivo.
     def dep_pcc(p):
         d1 = sP(p, "5260"); d2 = sP(p, "5265")
-        return {cc: -d1.get(cc, 0.0) - d2.get(cc, 0.0) for cc in cc_list}
+        return {cc: (0.0 if cc == cc_plaza else -d1.get(cc, 0.0) - d2.get(cc, 0.0)) for cc in cc_list}
 
     def dep_acc():
         a1 = sum_prefix("5260")[1]; a2 = sum_prefix("5265")[1]
-        return {cc: -a1.get(cc, 0.0) - a2.get(cc, 0.0) for cc in cc_list}
+        return {cc: (0.0 if cc == cc_plaza else -a1.get(cc, 0.0) - a2.get(cc, 0.0)) for cc in cc_list}
 
     def ebi_pcc(p):
         res = res_pcc(p); dep = dep_pcc(p)
@@ -1914,11 +1946,25 @@ def generar_pyg_nativo(bp_cc, mes, anio, empresa="GRUPO DE LOLITA S.A.S",
              "DETALLE TERCERO"]
     wb._sheets.sort(key=lambda s: orden.index(s.title) if s.title in orden else 99)
 
+    # MEMORIA del mes en curso: además del resultado por cuenta×CC, guardar los datos
+    # ESPECIALES del mes (juego de inventarios y ajustes FT/FE) para que el próximo mes
+    # reconstruya bien la columna de ESTE mes sin volver a subir nada.
+    leafdata_mem = dict(cur_md)
+    for cc in cc_list:
+        vi = inv_pcc(periodo, cc, "ini"); vco = inv_pcc(periodo, cc, "comp"); vf = inv_pcc(periodo, cc, "fin")
+        if abs(vi) > 0:  leafdata_mem[("__INVINI__", cc)] = vi
+        if abs(vco) > 0: leafdata_mem[("__COMPRAS__", cc)] = vco
+        if abs(vf) > 0:  leafdata_mem[("__INVFIN__", cc)] = vf
+    _ftm = ft_cur(); _fem = fe_cur()
+    for cc in cc_list:
+        if abs(_ftm.get(cc, 0.0)) > 0: leafdata_mem[("__AJ_FT__", cc)] = _ftm[cc]
+        if abs(_fem.get(cc, 0.0)) > 0: leafdata_mem[("__AJ_FE__", cc)] = _fem[cc]
+
     forzar_recalculo(wb)
     buf = _io.BytesIO(); wb.save(buf)
     final_bytes, con_macro = _incrustar_macro(buf.getvalue())
     return {"bytes": final_bytes, "es_xlsm": con_macro, "ccs": ccs, "n_cuentas": len(leafcodes),
-            "n_detalles": len(destino), "periodo": periodo, "leafdata": cur_md,
+            "n_detalles": len(destino), "periodo": periodo, "leafdata": leafdata_mem,
             "meses": per_hist + [periodo], "historia_seed": historia_seed,
             "reparto_mes": round(sum(leaf_nocc[c][0] for c in leaf_nocc) * esc, 0),
             "reparto_acum": round(sum(leaf_nocc[c][1] for c in leaf_nocc) * esc, 0)}

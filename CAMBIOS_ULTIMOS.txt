@@ -65,6 +65,28 @@ más el vbaProject.bin y la página app_pages/34_Estados_Financieros.py):
    - Función nueva: leer_estado_costo(). Parámetro nuevo: generar_pyg_nativo(...,
      inventario=<bytes del Estado del Costo>).
 
+9) PLAZA FABRICATO — FIGURA FISCAL (fuera de la operación)
+   - Plaza Fabricato NO recibe reparto de gastos/ingresos globales ni de los
+     ajustes FT/FE (esos se dividen solo entre los centros de costo operativos).
+     En su columna queda únicamente lo contable directo del punto.
+   - Su RESULTADO REAL (después de ajustes) queda en CERO: el ajuste "(±) UTILIDAD
+     / PÉRDIDA PLAZA FABRICATO" anula su neta (−neta del CC) en cada periodo.
+   - Su EBITDA también queda en CERO (se excluye su depreciación).
+   - Motivo: sus ingresos y gastos son ajenos a la operación de la empresa (solo
+     figura fiscal), así que no deben afectar el resultado ni el EBITDA operativos.
+
+10) MEMORIA COMPLETA MES A MES (sin volver a subir meses anteriores)
+   - Al generar un mes, ahora la memoria (tabla eeff_eri_mensual) guarda NO SOLO el
+     resultado por cuenta×CC, sino también los datos ESPECIALES del mes: juego de
+     inventarios (__INVINI__/__COMPRAS__/__INVFIN__) y ajustes FT/FE
+     (__AJ_FT__/__AJ_FE__) por centro de costo.
+   - Así, el mes siguiente reconstruye la columna del mes recién generado (inventario,
+     ajustes, RESULTADO REAL y EBITDA) SIN volver a subir nada.
+   - Flujo: se sube el informe antiguo (ene–jun) UNA sola vez al generar julio; de ahí
+     en adelante solo se sube el balance del mes (y, opcionales, el balance del año
+     anterior para el comparativo, el Estado del Costo y las carteras). El comparativo
+     mes contra mes sale de la memoria.
+
 NOTAS
 - El informe se arma 100% del Balance de Prueba por NIT y Centro de Costo (en
   pesos). Enero–junio se siembran del informe antiguo (hoja «2.E.R.I. MES-
